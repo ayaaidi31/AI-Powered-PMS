@@ -1,0 +1,310 @@
+{
+  "takenAt": "2026-06-06T16:36:52.960Z",
+  "tables": {
+    "condition": {
+      "exists": true,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "gen_random_uuid()"
+        },
+        {
+          "column_name": "patient_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "encounter_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "icd10_code",
+          "data_type": "character varying",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "fhir_resource",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "column_default": null
+        }
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    "encounter": {
+      "exists": true,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "gen_random_uuid()"
+        },
+        {
+          "column_name": "patient_id",
+          "data_type": "uuid",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "visit_date",
+          "data_type": "timestamp with time zone",
+          "is_nullable": "YES",
+          "column_default": "CURRENT_TIMESTAMP"
+        },
+        {
+          "column_name": "doctor_notes",
+          "data_type": "text",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "fhir_resource",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "column_default": null
+        }
+      ],
+      "rowCount": 0,
+      "rows": []
+    },
+    "patient": {
+      "exists": true,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "gen_random_uuid()"
+        },
+        {
+          "column_name": "versicherten_id",
+          "data_type": "character varying",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "first_name",
+          "data_type": "character varying",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "last_name",
+          "data_type": "character varying",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "birth_date",
+          "data_type": "date",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "fhir_resource",
+          "data_type": "jsonb",
+          "is_nullable": "NO",
+          "column_default": null
+        }
+      ],
+      "rowCount": 4,
+      "rows": [
+        {
+          "id": "4d98a6b2-deb8-491a-bd04-81adc043d41b",
+          "versicherten_id": "M847362910",
+          "first_name": "Hans",
+          "last_name": "Becker",
+          "birth_date": "1954-11-11T23:00:00.000Z",
+          "fhir_resource": {
+            "meta": {
+              "profile": [
+                "https://fhir.kbv.de/StructureDefinition/KBV_PR_Base_Patient"
+              ]
+            },
+            "name": [
+              {
+                "use": "official",
+                "given": [
+                  "Hans"
+                ],
+                "family": "Becker"
+              }
+            ],
+            "text": {
+              "div": "<div><strong>Active Conditions:</strong> Coronary Heart Disease (KHK), Arterial Hypertension.<br/><strong>Current Medication:</strong> Aspirin 100mg, Ramipril 5mg.<br/><strong>Notes:</strong> Patient reports occasional chest tightness when walking up stairs. Blood pressure is 145/90 mmHg.</div>",
+              "status": "generated"
+            },
+            "gender": "male",
+            "birthDate": "1954-11-12",
+            "identifier": [
+              {
+                "value": "M847362910",
+                "system": "http://fhir.de/NamingSystem/kvi/iknr"
+              }
+            ],
+            "resourceType": "Patient"
+          }
+        },
+        {
+          "id": "076b25b2-516c-4f18-89ae-ccf741d61a3f",
+          "versicherten_id": "F938475612",
+          "first_name": "Maria",
+          "last_name": "Keller",
+          "birth_date": "1961-03-24T23:00:00.000Z",
+          "fhir_resource": {
+            "meta": {
+              "profile": [
+                "https://fhir.kbv.de/StructureDefinition/KBV_PR_Base_Patient"
+              ]
+            },
+            "name": [
+              {
+                "use": "official",
+                "given": [
+                  "Maria"
+                ],
+                "family": "Keller"
+              }
+            ],
+            "text": {
+              "div": "<div><strong>Active Conditions:</strong> Knee Osteoarthritis (Gonarthrose) right knee, Non-specific Lower Back Pain (Kreuzschmerz).<br/><strong>Current Medication:</strong> Ibuprofen 400mg as needed.<br/><strong>Notes:</strong> Patient asks if she should get an MRI for her back pain and wants to know about exercise therapy for her knee.</div>",
+              "status": "generated"
+            },
+            "gender": "female",
+            "birthDate": "1961-03-25",
+            "identifier": [
+              {
+                "value": "F938475612",
+                "system": "http://fhir.de/NamingSystem/kvi/iknr"
+              }
+            ],
+            "resourceType": "Patient"
+          }
+        },
+        {
+          "id": "5e8d5704-4c27-4e2b-8086-c894aa07908a",
+          "versicherten_id": "R102938475",
+          "first_name": "Dieter",
+          "last_name": "Fuchs",
+          "birth_date": "1959-07-07T23:00:00.000Z",
+          "fhir_resource": {
+            "meta": {
+              "profile": [
+                "https://fhir.kbv.de/StructureDefinition/KBV_PR_Base_Patient"
+              ]
+            },
+            "name": [
+              {
+                "use": "official",
+                "given": [
+                  "Dieter"
+                ],
+                "family": "Fuchs"
+              }
+            ],
+            "text": {
+              "div": "<div><strong>Active Conditions:</strong> COPD (GOLD Stage II), history of Asthma.<br/><strong>Current Medication:</strong> Salbutamol (SABA) as needed.<br/><strong>Notes:</strong> Patient continues to smoke. Reports increasing shortness of breath and uses his reliever inhaler 4 times a week.</div>",
+              "status": "generated"
+            },
+            "gender": "male",
+            "birthDate": "1959-07-08",
+            "identifier": [
+              {
+                "value": "R102938475",
+                "system": "http://fhir.de/NamingSystem/kvi/iknr"
+              }
+            ],
+            "resourceType": "Patient"
+          }
+        },
+        {
+          "id": "f6705f28-e36d-4055-957b-f436aaddca75",
+          "versicherten_id": "K564738291",
+          "first_name": "Sabine",
+          "last_name": "Richter",
+          "birth_date": "1975-09-29T23:00:00.000Z",
+          "fhir_resource": {
+            "meta": {
+              "profile": [
+                "https://fhir.kbv.de/StructureDefinition/KBV_PR_Base_Patient"
+              ]
+            },
+            "name": [
+              {
+                "use": "official",
+                "given": [
+                  "Sabine"
+                ],
+                "family": "Richter"
+              }
+            ],
+            "text": {
+              "div": "<div><strong>Active Conditions:</strong> Type 2 Diabetes, Moderate Unipolar Depression.<br/><strong>Current Medication:</strong> Metformin 1000mg.<br/><strong>Notes:</strong> HbA1c is stable at 6.8%. Patient feels constantly fatigued, unmotivated, and asks about starting antidepressant medication or psychotherapy.</div>",
+              "status": "generated"
+            },
+            "gender": "female",
+            "birthDate": "1975-09-30",
+            "identifier": [
+              {
+                "value": "K564738291",
+                "system": "http://fhir.de/NamingSystem/kvi/iknr"
+              }
+            ],
+            "resourceType": "Patient"
+          }
+        }
+      ]
+    },
+    "awmf_guideline_chunks": {
+      "exists": true,
+      "columns": [
+        {
+          "column_name": "id",
+          "data_type": "uuid",
+          "is_nullable": "NO",
+          "column_default": "gen_random_uuid()"
+        },
+        {
+          "column_name": "awmf_register_number",
+          "data_type": "character varying",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "guideline_name",
+          "data_type": "character varying",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "heading",
+          "data_type": "character varying",
+          "is_nullable": "YES",
+          "column_default": null
+        },
+        {
+          "column_name": "chunk_text",
+          "data_type": "text",
+          "is_nullable": "NO",
+          "column_default": null
+        },
+        {
+          "column_name": "embedding",
+          "data_type": "USER-DEFINED",
+          "is_nullable": "YES",
+          "column_default": null
+        }
+      ],
+      "rowCount": 0,
+      "rows": []
+    }
+  }
+}

@@ -23,7 +23,7 @@
  *    delete. (Left out of these sample rows for brevity.)
  *
  * The app's UI still uses lib/mock-data.ts; this file is purely for seeding
- * your real database.
+ *  real database.
  */
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -325,6 +325,8 @@ export const appointments: AppointmentRow[] = [
  *  version          int
  *  created_at       timestamptz
  */
+export interface PrescriptionItem { medication: string; dosage: string; frequency: string }
+
 export interface MedicalReportRow {
   id: string
   appointment_id: string
@@ -334,6 +336,7 @@ export interface MedicalReportRow {
   raw_notes: string | null
   formatted_report: string | null
   internal_notes: string | null
+  prescriptions?: PrescriptionItem[] | null
   status: "draft" | "pending_approval" | "approved"
   approved_at: string | null
   version: number

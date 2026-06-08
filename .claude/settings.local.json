@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "mcp__claude_ai_Google_Drive__read_file_content"
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "mcp__claude_ai_Google_Drive__list_recent_files",
+      "Bash(pnpm add *)",
+      "Bash(pnpm approve-builds *)",
+      "Bash(pnpm db:migrate)",
+      "Bash(pnpm db:seed)",
+      "Bash(grep -vE \"SSL modes|next major|To prepare|If you want|libpq compat|See https|trace-warnings|^$\")",
+      "Bash(pnpm exec *)",
+      "Bash(pnpm build *)",
+      "Bash(grep -vE \"^\\\\s*$\")",
+      "Bash(grep -vE \"^\\\\s*$|SSL modes|next major|To prepare|If you want|libpq compat|See https|trace-warnings|Warning:\")"
     ]
   }
 }

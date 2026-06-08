@@ -1,0 +1,338 @@
+"use client"
+
+/**
+ * Interactive weekly schedule (Features 4/7/9).
+ *
+ * Reads the appointment list supplied by the Server Component and drives:
+ *  - booking (UC-PAT-02 logic reused for staff) via `bookAppointment`, which
+ *    enforces the double-booking guard server-side (REQ-SCHED-03);
+ *  - manual check-in (UC-REC-02) via `checkInAppointment`;
+ *  - staff cancellation (UC-REC-04) via `cancelAppointment`.
+ *
+ * Each mutation refreshes the parent Server Component so the grid reflects the
+ * authoritative database state.
+ */
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import {
+  ChevronLeft, ChevronRight, Plus, Filter,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
+import type { DoctorRow, PatientRow } from "@/lib/seed-data"
+import { patientName, doctorName, statusColor } from "@/lib/display"
+import type { AppointmentWithNames } from "@/lib/queries"
+import { bookAppointment, checkInAppointment, cancelAppointment } from "@/lib/actions/appointments"
+
+const TIME_SLOTS = [
+  "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30",
+  "16:00", "16:30", "17:00",
+]
+
+interface Props {
+  appointments: AppointmentWithNames[]
+  doctors: DoctorRow[]
+  patients: PatientRow[]
+}
+
+export function ScheduleClient({ appointments, doctors, patients }: Props) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedDoctor, setSelectedDoctor] = useState<string>("all")
+  const [isBookingOpen, setIsBookingOpen] = useState(false)
+  const [form, setForm] = useState({ patientId: "", doctorId: "", date: "", time: "", reason: "" })
+  const [cancelTarget, setCancelTarget] = useState<AppointmentWithNames | null>(null)
+
+  function getWeekDates() {
+    const dates: Date[] = []
+    const start = new Date(currentDate)
+    start.setDate(currentDate.getDate() - currentDate.getDay() + 1) // Monday
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(start)
+      d.setDate(start.getDate() + i)
+      dates.push(d)
+    }
+    return dates
+  }
+  const weekDates = getWeekDates()
+
+  function appointmentsForSlot(date: Date, time: string) {
+    return appointments.filter((apt) => {
+      const d = new Date(apt.starts_at)
+      const sameDay = d.toDateString() === date.toDateString()
+      const sameTime = d.toTimeString().slice(0, 5) === time
+      const matchesDoctor = selectedDoctor === "all" || apt.doctor_id === selectedDoctor
+      return sameDay && sameTime && matchesDoctor && apt.status !== "cancelled"
+    })
+  }
+
+  const shiftWeek = (days: number) => {
+    const d = new Date(currentDate)
+    d.setDate(currentDate.getDate() + days)
+    setCurrentDate(d)
+  }
+  const isToday = (date: Date) => date.toDateString() === new Date().toDateString()
+
+  function handleBook() {
+    if (!form.patientId || !form.doctorId || !form.date || !form.time) {
+      toast.error("Please select a patient, doctor, date and time.")
+      return
+    }
+    // Combine the date and time into an absolute instant for the server.
+    const startsAt = new Date(`${form.date}T${form.time}:00`).toISOString()
+    startTransition(async () => {
+      const result = await bookAppointment({
+        patient_id: form.patientId, doctor_id: form.doctorId,
+        starts_at: startsAt, duration_min: 30, reason: form.reason,
+      })
+      if (result.status === "ok") {
+        toast.success("Appointment booked.")
+        setIsBookingOpen(false)
+        setForm({ patientId: "", doctorId: "", date: "", time: "", reason: "" })
+        router.refresh()
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
+  function handleCheckIn(id: string) {
+    startTransition(async () => {
+      const result = await checkInAppointment(id)
+      if (result.status === "ok") {
+        toast.success("Patient checked in.")
+        router.refresh()
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
+  function confirmCancel() {
+    if (!cancelTarget) return
+    startTransition(async () => {
+      const result = await cancelAppointment(cancelTarget.id, { reasonForChange: "Cancelled by reception" })
+      if (result.status === "ok") {
+        toast.success("Appointment cancelled.")
+        router.refresh()
+      } else {
+        toast.error(result.message)
+      }
+      setCancelTarget(null)
+    })
+  }
+
+  return (
+    <div className="p-6 lg:p-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Schedule</h1>
+          <p className="text-muted-foreground">Manage appointments and schedules</p>
+        </div>
+        <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus className="w-4 h-4" />
+              Book Appointment
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Book New Appointment</DialogTitle>
+              <DialogDescription>Schedule a new appointment for a patient</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label>Patient</Label>
+                <Select value={form.patientId} onValueChange={(v) => setForm({ ...form, patientId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
+                  <SelectContent>
+                    {patients.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{patientName(p)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Doctor</Label>
+                <Select value={form.doctorId} onValueChange={(v) => setForm({ ...form, doctorId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select doctor" /></SelectTrigger>
+                  <SelectContent>
+                    {doctors.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>{doctorName(d)} — {d.department}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Date</Label>
+                  <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Time</Label>
+                  <Select value={form.time} onValueChange={(v) => setForm({ ...form, time: v })}>
+                    <SelectTrigger><SelectValue placeholder="Time" /></SelectTrigger>
+                    <SelectContent>
+                      {TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Reason for Visit</Label>
+                <Textarea
+                  placeholder="Brief description of the visit reason..."
+                  value={form.reason}
+                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                />
+              </div>
+              <Button className="w-full" onClick={handleBook} disabled={isPending}>
+                {isPending ? "Booking…" : "Book Appointment"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Controls */}
+      <Card className="mb-6">
+        <CardContent className="pt-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={() => shiftWeek(-7)}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" onClick={() => setCurrentDate(new Date())}>Today</Button>
+              <Button variant="outline" size="icon" onClick={() => shiftWeek(7)}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <span className="ml-2 font-medium text-foreground">
+                {weekDates[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {weekDates[4].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
+                <SelectTrigger className="w-[200px]"><SelectValue placeholder="Filter by doctor" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Doctors</SelectItem>
+                  {doctors.map((d) => <SelectItem key={d.id} value={d.id}>{doctorName(d)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Schedule Grid */}
+      <Card>
+        <CardContent className="pt-4 overflow-x-auto">
+          <div className="min-w-[800px]">
+            <div className="grid grid-cols-6 gap-2 mb-4">
+              <div className="w-16" />
+              {weekDates.map((date, idx) => (
+                <div key={idx} className={`text-center p-3 rounded-lg ${isToday(date) ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                  <p className="text-sm font-medium">{date.toLocaleDateString("en-US", { weekday: "short" })}</p>
+                  <p className="text-lg font-bold">{date.getDate()}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-1">
+              {TIME_SLOTS.filter((_, i) => i % 2 === 0).map((time) => (
+                <div key={time} className="grid grid-cols-6 gap-2">
+                  <div className="w-16 text-sm text-muted-foreground text-right pr-2 py-3">{time}</div>
+                  {weekDates.map((date, dayIdx) => {
+                    const slotAppointments = appointmentsForSlot(date, time)
+                    return (
+                      <div key={dayIdx} className="min-h-[60px] border border-border rounded-lg p-1 bg-card hover:bg-accent/30 transition-colors">
+                        {slotAppointments.map((apt) => (
+                          <DropdownMenu key={apt.id}>
+                            <DropdownMenuTrigger asChild>
+                              <button className={`w-full text-left p-2 rounded text-xs text-white ${statusColor(apt.status)} hover:opacity-90`}>
+                                <p className="font-medium truncate">{apt.patient_name}</p>
+                                <p className="opacity-80 truncate">{apt.doctor_name}</p>
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                              <DropdownMenuItem onClick={() => handleCheckIn(apt.id)} disabled={isPending}>
+                                Check In Patient
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setCancelTarget(apt)}
+                                disabled={isPending}
+                              >
+                                Cancel
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Legend */}
+      <div className="mt-4 flex flex-wrap gap-4">
+        {[
+          ["bg-primary", "Scheduled"], ["bg-yellow-500", "Waiting"], ["bg-blue-500", "In Progress"],
+          ["bg-green-500", "Completed"], ["bg-red-500", "Cancelled"],
+        ].map(([color, label]) => (
+          <div key={label} className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${color}`} />
+            <span className="text-sm text-muted-foreground">{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Cancellation confirmation — cancelling cannot be undone. */}
+      <AlertDialog open={cancelTarget !== null} onOpenChange={(o) => !o && setCancelTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel this appointment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {cancelTarget && `${cancelTarget.patient_name}'s appointment with ${cancelTarget.doctor_name} will be cancelled and the time slot freed. `}
+              This cannot be undone. (Only appointments before check-in can be cancelled.)
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Keep Appointment</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmCancel}
+              disabled={isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Cancel Appointment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}

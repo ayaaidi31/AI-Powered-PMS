@@ -2,17 +2,19 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { HeartPulse, LayoutDashboard, Calendar, Users, LogOut, Menu, Clock, Search } from "lucide-react"
+import { HeartPulse, LayoutDashboard, Calendar, Users, LogOut, Menu, Clock, Search, Receipt } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
+import { logout } from "@/lib/actions/auth"
 
 const navItems = [
   { label: "Dashboard", href: "/receptionist/dashboard", icon: LayoutDashboard },
   { label: "Schedule", href: "/receptionist/schedule", icon: Calendar },
   { label: "Patients", href: "/receptionist/patients", icon: Users },
   { label: "Waiting Room", href: "/receptionist/waiting", icon: Clock },
+  { label: "Billing", href: "/receptionist/billing", icon: Receipt },
 ]
 
 export default function ReceptionistLayout({ children }: { children: React.ReactNode }) {
@@ -20,10 +22,10 @@ export default function ReceptionistLayout({ children }: { children: React.React
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("userRole")
-    sessionStorage.removeItem("isAuthenticated")
+  const handleLogout = async () => {
+    await logout()
     router.push("/")
+    router.refresh()
   }
 
   return (

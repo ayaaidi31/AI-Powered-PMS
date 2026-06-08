@@ -1,0 +1,7 @@
+code;description;base_cents;default_multiplier
+1;Beratung, auch mittels Fernsprecher;466;2.3
+3;Eingehende Beratung (Dauer mindestens 10 Minuten);874;2.3
+5;Symptombezogene Untersuchung;466;2.3
+7;Vollständige körperliche Untersuchung mindestens eines Organsystems;933;2.3
+250;Blutentnahme mittels Spritze, Kanüle oder Katheter aus der Vene;233;1.8
+651;Elektrokardiographische Untersuchung in Ruhe (mindestens 12 Ableitungen);1428;1.8
