@@ -172,7 +172,7 @@ export default async function DoctorDashboard() {
             <CardHeader className="pb-2"><CardTitle className="text-lg">Quick Actions</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               <Link href="/doctor/workspace"><Button variant="outline" className="w-full justify-start gap-3 h-12"><div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center"><Stethoscope className="w-4 h-4 text-primary" /></div>Open Workspace</Button></Link>
-              <Link href="/doctor/dashboard"><Button variant="outline" className="w-full justify-start gap-3 h-12"><div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center"><FileText className="w-4 h-4 text-primary" /></div>Medical Reports</Button></Link>
+              <Link href="/doctor/reports"><Button variant="outline" className="w-full justify-start gap-3 h-12"><div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center"><FileText className="w-4 h-4 text-primary" /></div>Medical Reports</Button></Link>
             </CardContent>
           </Card>
         </div>

@@ -172,7 +172,7 @@ export function DoctorReportsClient({
 
       {/* Report detail — editable for draft/pending, formal document when approved */}
       <Dialog open={viewing !== null} onOpenChange={(o) => !o && setViewing(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className={`${editable ? "sm:max-w-2xl" : "sm:max-w-4xl"} max-h-[90vh] overflow-y-auto overflow-x-hidden`}>
           {viewing && (
             <>
               <DialogHeader className="no-print">

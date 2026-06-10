@@ -1,14 +1,7 @@
 import React from "react"
 import type { PrescriptionItem } from "@/lib/seed-data"
+import { CLINIC } from "@/lib/clinic"
 import { ReportContent } from "./report-content"
-
-/** Clinic letterhead details (shared with the §12 GOÄ invoice). */
-const CLINIC = {
-  name: "AI-PMS Clinic",
-  line1: "Musterstraße 1 · 10115 Berlin",
-  line2: "Tel. 030 123 456 · info@ai-pms.example",
-  city: "Berlin",
-}
 
 interface Props {
   doctorName: string
@@ -34,7 +27,7 @@ export const ReportDocument = React.forwardRef<HTMLDivElement, Props>(function R
   doctorName, doctorSpecialization, patientName, patientDob, date, diagnosis, body, rawNotes, prescriptions,
 }, ref) {
   return (
-    <div ref={ref} className="report-print bg-white text-neutral-900 font-serif rounded-lg border border-neutral-200 shadow-sm p-8 sm:p-10 leading-relaxed">
+    <div ref={ref} className="report-print bg-white text-neutral-900 font-serif rounded-lg border border-neutral-200 shadow-sm p-5 sm:p-8 lg:p-10 leading-relaxed">
       {/* Letterhead */}
       <div className="flex items-start justify-between gap-4 border-b-2 border-neutral-800 pb-4">
         <div>

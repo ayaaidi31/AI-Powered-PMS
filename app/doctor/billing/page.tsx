@@ -30,7 +30,7 @@ export default async function DoctorBillingPage() {
         w.insurance_type === "gkv"
           ? Math.round(items.reduce((s, i) => s + (i.points ?? 0) * EBM_ORIENTIERUNGSWERT_CENTS, 0))
           : items.reduce((s, i) => s + (i.amount_cents ?? 0), 0)
-      return { ...w, value_cents }
+      return { ...w, value_cents, items }
     }),
   )
 

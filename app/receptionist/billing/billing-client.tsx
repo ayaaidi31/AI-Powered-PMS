@@ -16,10 +16,10 @@
  *     requires confirmation because invoices, once issued, are never deleted
  *     (BR-03-03 / §14 UStG).
  */
-import { useState, useTransition } from "react"
+import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
 import {
-  Receipt, FileText, AlertCircle, CheckCircle2, Send, Ban, Landmark, Euro, Clock,
+  Receipt, AlertCircle, CheckCircle2, Send, Ban, Landmark, Euro, Printer,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -41,22 +41,20 @@ import { insuranceLabel, insuranceVariant, formatCents } from "@/lib/display"
 import {
   generateInvoice, markInvoiceSent, markInvoicePaid, stornoInvoice,
 } from "@/lib/actions/invoices"
+import { InvoiceDocument } from "@/components/invoice-document"
+import { printReport } from "@/lib/print-element"
 
 export interface BillingRow extends BillingWorklistRow {
   items: BillingItem[]
   total_cents: number | null
 }
 
-// GOÄ Schwellenwert for personal services — above it a written justification
-// (Begründung) is legally required (§12 Abs. 3 GOÄ).
-const GOAE_THRESHOLD = 2.3
-
 const INVOICE_STATUS: Record<InvoiceRow["status"], { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   ready_for_kv: { label: "Ready for KV", variant: "secondary" },
   pending_payment: { label: "Pending Payment", variant: "default" },
   sent: { label: "Sent", variant: "outline" },
   paid: { label: "Paid", variant: "default" },
-  storno: { label: "Storno (cancelled)", variant: "destructive" },
+  storno: { label: "Voided", variant: "destructive" },
 }
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE")
@@ -67,6 +65,7 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
   const [processing, setProcessing] = useState<BillingRow | null>(null)
   const [stornoTarget, setStornoTarget] = useState<InvoiceListRow | null>(null)
   const [viewing, setViewing] = useState<InvoiceListRow | null>(null)
+  const invoiceRef = useRef<HTMLDivElement>(null)
 
   const pending = rows.filter((r) => !r.invoice_id)
   const done = rows.filter((r) => r.invoice_id)
@@ -167,7 +166,7 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
                     <TableCell><Badge variant={INVOICE_STATUS[inv.status].variant}>{INVOICE_STATUS[inv.status].label}</Badge></TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {inv.insurance_type !== "gkv" && inv.status !== "storno" && (
+                        {inv.status !== "storno" && (
                           <Button size="sm" variant="ghost" onClick={() => setViewing(inv)}>View</Button>
                         )}
                         {inv.status === "pending_payment" && (
@@ -185,7 +184,7 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
                         {inv.status !== "storno" && (
                           <Button size="sm" variant="ghost" className="text-destructive gap-1" disabled={isPending}
                             onClick={() => setStornoTarget(inv)}>
-                            <Ban className="w-3.5 h-3.5" /> Storno
+                            <Ban className="w-3.5 h-3.5" /> Void
                           </Button>
                         )}
                       </div>
@@ -198,15 +197,29 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
         </CardContent>
       </Card>
 
-      {/* Process dialog (GKV statement OR §12 GOÄ invoice preview) */}
+      {/* Process dialog — preview the billing document before confirming. */}
       <Dialog open={processing !== null} onOpenChange={(o) => !o && setProcessing(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
           {processing && (
-            processing.insurance_type === "gkv" ? (
-              <GkvView row={processing} />
-            ) : (
-              <Goae12View row={processing} draft />
-            )
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {processing.insurance_type === "gkv" ? "Approve for KV — preview" : "Invoice preview (§12 GOÄ)"}
+                </DialogTitle>
+                <DialogDescription>
+                  {processing.patient_name} · {fmtDate(processing.starts_at)} · draft preview
+                </DialogDescription>
+              </DialogHeader>
+              <InvoiceDocument
+                insuranceType={processing.insurance_type}
+                patientName={processing.patient_name}
+                invoiceNumber={null}
+                invoiceDate={processing.starts_at}
+                serviceDate={processing.starts_at}
+                items={processing.items}
+                totalCents={processing.total_cents}
+              />
+            </>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setProcessing(null)} disabled={isPending}>Cancel</Button>
@@ -226,11 +239,34 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
         </DialogContent>
       </Dialog>
 
-      {/* View an issued GOÄ invoice */}
+      {/* View an issued billing document — preview and print after confirmation. */}
       <Dialog open={viewing !== null} onOpenChange={(o) => !o && setViewing(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
           {viewing && (
-            <Goae12ViewIssued invoice={viewing} rows={rows} />
+            <>
+              <DialogHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <DialogTitle>
+                    {viewing.insurance_type === "gkv" ? "Leistungsnachweis (GKV)" : `Invoice ${viewing.invoice_number}`}
+                  </DialogTitle>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => printReport(invoiceRef.current)}>
+                    <Printer className="w-4 h-4" /> Print / PDF
+                  </Button>
+                </div>
+                <DialogDescription>{viewing.patient_name} · {fmtDate(viewing.starts_at)}</DialogDescription>
+              </DialogHeader>
+              <InvoiceDocument
+                ref={invoiceRef}
+                insuranceType={viewing.insurance_type}
+                patientName={viewing.patient_name}
+                invoiceNumber={viewing.invoice_number}
+                invoiceDate={viewing.created_at}
+                serviceDate={viewing.starts_at}
+                dueDate={viewing.due_date}
+                items={rows.find((r) => r.appointment_id === viewing.appointment_id)?.items ?? []}
+                totalCents={viewing.total_cents}
+              />
+            </>
           )}
         </DialogContent>
       </Dialog>
@@ -239,10 +275,10 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
       <AlertDialog open={stornoTarget !== null} onOpenChange={(o) => !o && setStornoTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel this invoice (Storno)?</AlertDialogTitle>
+            <AlertDialogTitle>Void this invoice?</AlertDialogTitle>
             <AlertDialogDescription>
               {stornoTarget && `Invoice ${stornoTarget.invoice_number} for ${stornoTarget.patient_name} will be reversed. `}
-              The original is never deleted — a separate storno invoice is issued for the audit trail
+              The original is never deleted — a separate reversal invoice is issued for the audit trail
               (§14 UStG / GoBD). This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -251,171 +287,13 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isPending}
-              onClick={() => stornoTarget && run(stornoInvoice(stornoTarget.id), "Storno invoice issued.", () => setStornoTarget(null))}
+              onClick={() => stornoTarget && run(stornoInvoice(stornoTarget.id), "Reversal invoice issued.", () => setStornoTarget(null))}
             >
-              Issue Storno
+              Void Invoice
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  )
-}
-
-/** GKV (statutory) processing view — codes only, no € to the patient. */
-function GkvView({ row }: { row: BillingRow }) {
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2"><Landmark className="w-5 h-5" /> Statutory billing (GKV)</DialogTitle>
-        <DialogDescription>
-          {row.patient_name} · {fmtDate(row.starts_at)}
-        </DialogDescription>
-      </DialogHeader>
-      <div className="space-y-3">
-        <div className="rounded-lg border border-border p-3 bg-muted/40 text-sm">
-          No invoice is issued to the patient. The validated EBM services are queued for the
-          <strong> quarterly KV submission (Quartalsabrechnung)</strong> and settled by the
-          Kassenärztliche Vereinigung.
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow><TableHead>EBM-Ziffer</TableHead><TableHead>Leistung</TableHead><TableHead className="text-right">Punkte</TableHead></TableRow>
-          </TableHeader>
-          <TableBody>
-            {row.items.map((it, i) => (
-              <TableRow key={i}>
-                <TableCell className="font-mono">{it.code}</TableCell>
-                <TableCell>{it.description}</TableCell>
-                <TableCell className="text-right">{it.points ?? "—"}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </>
-  )
-}
-
-/** §12 GOÄ invoice preview for a draft (worklist) entry. */
-function Goae12View({ row, draft }: { row: BillingRow; draft?: boolean }) {
-  const needsJustification = row.items.some((i) => (i.multiplier ?? 0) > GOAE_THRESHOLD)
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Invoice (§12 GOÄ)</DialogTitle>
-        <DialogDescription>
-          {insuranceLabel(row.insurance_type)} · {row.patient_name} · service date {fmtDate(row.starts_at)}
-          {draft && " · draft preview"}
-        </DialogDescription>
-      </DialogHeader>
-      <Goae12Body
-        patientName={row.patient_name}
-        serviceDate={row.starts_at}
-        items={row.items}
-        total={row.total_cents ?? 0}
-        invoiceNumber={null}
-        needsJustification={needsJustification}
-      />
-    </>
-  )
-}
-
-/** §12 GOÄ view for an already-issued invoice (looks up its items from rows). */
-function Goae12ViewIssued({ invoice, rows }: { invoice: InvoiceListRow; rows: BillingRow[] }) {
-  const row = rows.find((r) => r.appointment_id === invoice.appointment_id)
-  const items = row?.items ?? []
-  const needsJustification = items.some((i) => (i.multiplier ?? 0) > GOAE_THRESHOLD)
-  return (
-    <>
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Invoice {invoice.invoice_number}</DialogTitle>
-        <DialogDescription>{invoice.patient_name} · {fmtDate(invoice.starts_at)}</DialogDescription>
-      </DialogHeader>
-      <Goae12Body
-        patientName={invoice.patient_name}
-        serviceDate={invoice.starts_at}
-        items={items}
-        total={invoice.total_cents ?? 0}
-        invoiceNumber={invoice.invoice_number}
-        dueDate={invoice.due_date}
-        needsJustification={needsJustification}
-      />
-    </>
-  )
-}
-
-/** The shared §12-compliant invoice body (mandatory fields per §12 GOÄ). */
-function Goae12Body({
-  patientName, serviceDate, items, total, invoiceNumber, dueDate, needsJustification,
-}: {
-  patientName: string
-  serviceDate: string
-  items: BillingItem[]
-  total: number
-  invoiceNumber: string | null
-  dueDate?: string | null
-  needsJustification: boolean
-}) {
-  return (
-    <div className="space-y-4 text-sm">
-      <div className="flex justify-between border-b border-border pb-3">
-        <div>
-          <p className="font-semibold text-foreground">AI-PMS Clinic</p>
-          <p className="text-muted-foreground text-xs">Musterstraße 1 · 10115 Berlin</p>
-        </div>
-        <div className="text-right">
-          <p className="text-muted-foreground text-xs">Rechnung-Nr.</p>
-          <p className="font-mono">{invoiceNumber ?? "(allocated on issue)"}</p>
-          <p className="text-muted-foreground text-xs mt-1">Datum: {fmtDate(serviceDate)}</p>
-        </div>
-      </div>
-
-      <div>
-        <p className="text-muted-foreground text-xs">Rechnungsempfänger</p>
-        <p className="font-medium">{patientName}</p>
-      </div>
-
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Datum</TableHead>
-            <TableHead>Nr.</TableHead>
-            <TableHead>Leistung</TableHead>
-            <TableHead className="text-right">Punkte</TableHead>
-            <TableHead className="text-right">Faktor</TableHead>
-            <TableHead className="text-right">Betrag</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {items.map((it, i) => (
-            <TableRow key={i}>
-              <TableCell>{fmtDate(serviceDate)}</TableCell>
-              <TableCell className="font-mono">{it.code}</TableCell>
-              <TableCell>{it.description}{(it.multiplier ?? 0) > GOAE_THRESHOLD && <span className="text-amber-600"> *</span>}</TableCell>
-              <TableCell className="text-right">{it.points ?? "—"}</TableCell>
-              <TableCell className="text-right">{it.multiplier?.toFixed(1) ?? "—"}</TableCell>
-              <TableCell className="text-right">{formatCents(it.amount_cents)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-
-      <div className="flex justify-end">
-        <div className="text-right">
-          <span className="text-muted-foreground mr-4">Gesamtbetrag</span>
-          <span className="text-lg font-bold">{formatCents(total)}</span>
-        </div>
-      </div>
-
-      <div className="text-xs text-muted-foreground space-y-1 border-t border-border pt-3">
-        {dueDate && <p><Clock className="w-3 h-3 inline mr-1" />Zahlbar bis {fmtDate(dueDate)}.</p>}
-        {needsJustification && (
-          <p className="text-amber-600">* Steigerungssatz über {GOAE_THRESHOLD.toFixed(1)} — schriftliche Begründung gemäß §12 Abs. 3 GOÄ erforderlich.</p>
-        )}
-        <p>Heilbehandlungen sind gemäß §4 Nr. 14 UStG umsatzsteuerfrei.</p>
-        <p>Rechnung gemäß §12 GOÄ (Gebührenordnung für Ärzte).</p>
-      </div>
     </div>
   )
 }

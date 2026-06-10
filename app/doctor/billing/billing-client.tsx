@@ -6,18 +6,26 @@
  * (GKV) values are the KV settlement estimate; private values are the GOÄ
  * invoice amount. Reception performs the actual invoicing.
  */
-import { Receipt, Landmark, Euro, ClipboardCheck } from "lucide-react"
+import { useState, useRef } from "react"
+import { Receipt, Landmark, Euro, ClipboardCheck, Printer } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
-import type { BillingWorklistRow } from "@/lib/queries"
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
+import type { BillingWorklistRow, BillingItem } from "@/lib/queries"
 import type { InvoiceRow } from "@/lib/seed-data"
 import { insuranceLabel, insuranceVariant, formatCents } from "@/lib/display"
+import { InvoiceDocument } from "@/components/invoice-document"
+import { printReport } from "@/lib/print-element"
 
 export interface DoctorBillingRow extends BillingWorklistRow {
   value_cents: number
+  items: BillingItem[]
 }
 
 const INVOICE_STATUS: Record<InvoiceRow["status"], string> = {
@@ -25,12 +33,14 @@ const INVOICE_STATUS: Record<InvoiceRow["status"], string> = {
   pending_payment: "Pending Payment",
   sent: "Sent",
   paid: "Paid",
-  storno: "Storno",
+  storno: "Voided",
 }
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE")
 
 export function DoctorBillingClient({ rows }: { rows: DoctorBillingRow[] }) {
+  const [viewing, setViewing] = useState<DoctorBillingRow | null>(null)
+  const invoiceRef = useRef<HTMLDivElement>(null)
   const gkvValue = rows.filter((r) => r.insurance_type === "gkv").reduce((s, r) => s + r.value_cents, 0)
   const privateValue = rows.filter((r) => r.insurance_type !== "gkv").reduce((s, r) => s + r.value_cents, 0)
 
@@ -53,7 +63,7 @@ export function DoctorBillingClient({ rows }: { rows: DoctorBillingRow[] }) {
       <Card>
         <CardHeader>
           <CardTitle>Consultations</CardTitle>
-          <CardDescription>{rows.length} completed</CardDescription>
+          <CardDescription>{rows.length} completed · click a row to view its billing document</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {rows.length === 0 ? (
@@ -75,7 +85,11 @@ export function DoctorBillingClient({ rows }: { rows: DoctorBillingRow[] }) {
               </TableHeader>
               <TableBody>
                 {rows.map((r) => (
-                  <TableRow key={r.appointment_id}>
+                  <TableRow
+                    key={r.appointment_id}
+                    onClick={() => r.code_count > 0 && setViewing(r)}
+                    className={r.code_count > 0 ? "cursor-pointer hover:bg-accent/50" : ""}
+                  >
                     <TableCell>{fmtDate(r.starts_at)}</TableCell>
                     <TableCell className="font-medium">{r.patient_name}</TableCell>
                     <TableCell><Badge variant={insuranceVariant(r.insurance_type)}>{insuranceLabel(r.insurance_type)}</Badge></TableCell>
@@ -102,6 +116,37 @@ export function DoctorBillingClient({ rows }: { rows: DoctorBillingRow[] }) {
         GKV values are the estimated KV settlement (EBM points × Orientierungswert); statutory patients are not
         invoiced directly. Private/self-pay values are the GOÄ invoice amount. Reception issues the invoices.
       </p>
+
+      {/* Billing document preview (read-only) */}
+      <Dialog open={viewing !== null} onOpenChange={(o) => !o && setViewing(null)}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
+          {viewing && (
+            <>
+              <DialogHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <DialogTitle>
+                    {viewing.insurance_type === "gkv" ? "Leistungsnachweis (GKV)" : "Billing document (§12 GOÄ)"}
+                  </DialogTitle>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => printReport(invoiceRef.current)}>
+                    <Printer className="w-4 h-4" /> Print / PDF
+                  </Button>
+                </div>
+                <DialogDescription>{viewing.patient_name} · {fmtDate(viewing.starts_at)}</DialogDescription>
+              </DialogHeader>
+              <InvoiceDocument
+                ref={invoiceRef}
+                insuranceType={viewing.insurance_type}
+                patientName={viewing.patient_name}
+                invoiceNumber={null}
+                invoiceDate={viewing.starts_at}
+                serviceDate={viewing.starts_at}
+                items={viewing.items}
+                totalCents={viewing.insurance_type === "gkv" ? null : viewing.value_cents}
+              />
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

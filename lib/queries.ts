@@ -275,7 +275,8 @@ export async function getAppointmentBillingItems(appointmentId: string): Promise
 
   return rows.map((r) => {
     if (r.catalog === "GOAE") {
-      const factor = r.multiplier ?? r.default_multiplier ?? 1
+      // pg returns numeric columns as strings — coerce so the factor is a number.
+      const factor = Number(r.multiplier ?? r.default_multiplier ?? 1)
       return {
         catalog: "GOAE" as const,
         code: r.code,

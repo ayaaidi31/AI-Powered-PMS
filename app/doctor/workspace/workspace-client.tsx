@@ -693,7 +693,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                           <DialogHeader>
                             <DialogTitle>AI Documentation Assistant</DialogTitle>
                             <DialogDescription>
-                              The decision-support module (Feature 11) is not yet connected. This panel is a placeholder.
+                              The decision-support module is not yet connected. This panel is a placeholder.
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4 pt-4">
