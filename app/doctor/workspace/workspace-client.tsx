@@ -21,7 +21,7 @@ import {
   ArrowRight, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight,
   Stethoscope, Save, Pill, ClipboardList, Plus, Trash2,
   Mic, MicOff, Sparkles, MessageSquare, History, User,
-  Heart, Thermometer, Activity, FileText,
+  Heart, Thermometer, Activity, FileText, Eye, Pencil,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,6 +42,7 @@ import { setAppointmentStatus } from "@/lib/actions/appointments"
 import { searchBillingCodes, type CodeSuggestion } from "@/lib/actions/codes"
 import { generateConsultationReport, suggestBillingCodes, extractPrescriptions, extractVitals } from "@/lib/actions/ai"
 import { saveAppointmentVitals } from "@/lib/actions/vitals"
+import { ReportContent } from "@/components/report-content"
 
 interface VitalsForm {
   systolic: string; diastolic: string; heart_rate: string
@@ -136,6 +137,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
   const [generatingReport, setGeneratingReport] = useState(false)
   const [suggestingCodes, setSuggestingCodes] = useState(false)
+  const [reportPreview, setReportPreview] = useState(false)
   const [detailCode, setDetailCode] = useState<SelectedCode | null>(null)
 
   const current = queue[currentIndex]
@@ -736,21 +738,35 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
                     <TabsContent value="report" className="flex-1 mt-4">
                       <div className="space-y-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
                           <Label>AI-generated report</Label>
-                          <Button variant="outline" size="sm" className="gap-2" onClick={handleGenerateReport} disabled={generatingReport}>
-                            <Sparkles className="w-4 h-4" />
-                            {generatingReport ? "Generating…" : "Generate from notes"}
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            {formattedReport && (
+                              <Button variant="ghost" size="sm" className="gap-1" onClick={() => setReportPreview(!reportPreview)}>
+                                {reportPreview ? <Pencil className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                {reportPreview ? "Edit" : "Preview"}
+                              </Button>
+                            )}
+                            <Button variant="outline" size="sm" className="gap-2" onClick={handleGenerateReport} disabled={generatingReport}>
+                              <Sparkles className="w-4 h-4" />
+                              {generatingReport ? "Generating…" : "Generate from notes"}
+                            </Button>
+                          </div>
                         </div>
-                        <Textarea
-                          placeholder="Click 'Generate from notes' to draft a structured report from your notes, then edit it here…"
-                          className="min-h-[200px] lg:min-h-[280px] text-sm"
-                          value={formattedReport}
-                          onChange={(e) => setFormattedReport(e.target.value)}
-                        />
+                        {reportPreview && formattedReport ? (
+                          <div className="min-h-[200px] lg:min-h-[280px] rounded-md border border-border p-4 overflow-auto bg-card">
+                            <ReportContent text={formattedReport} />
+                          </div>
+                        ) : (
+                          <Textarea
+                            placeholder="Click 'Generate from notes' to draft a structured report from your notes, then edit it here…"
+                            className="min-h-[200px] lg:min-h-[280px] text-sm"
+                            value={formattedReport}
+                            onChange={(e) => setFormattedReport(e.target.value)}
+                          />
+                        )}
                         <p className="text-xs text-muted-foreground">
-                          AI-generated draft — review and edit before completing. It is saved as the formal report.
+                          AI-generated draft — review and edit before completing. Use <strong>Preview</strong> to see the formatted report. It is saved as the formal report.
                         </p>
                       </div>
                     </TabsContent>

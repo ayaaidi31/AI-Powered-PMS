@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
+import { ReportContent } from "@/components/report-content"
 
 interface ReportDetail {
   id: string
@@ -105,7 +106,7 @@ export function RecordDetailClient({ report }: { report: ReportDetail | null }) 
           </CardHeader>
           <CardContent>
             {officialText ? (
-              <div className="prose prose-sm max-w-none whitespace-pre-wrap text-foreground">{officialText}</div>
+              <ReportContent text={officialText} />
             ) : (
               <div className="space-y-6">
                 <div>

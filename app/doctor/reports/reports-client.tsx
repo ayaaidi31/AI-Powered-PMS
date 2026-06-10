@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import type { ReportListRow } from "@/lib/queries"
 import type { MedicalReportRow } from "@/lib/seed-data"
+import { ReportContent } from "@/components/report-content"
 
 const STATUS: Record<MedicalReportRow["status"], { label: string; variant: "default" | "secondary" | "outline" }> = {
   draft: { label: "Draft", variant: "outline" },
@@ -126,7 +127,7 @@ export function DoctorReportsClient({ reports }: { reports: ReportListRow[] }) {
                   <Section title="Diagnosis"><p>{viewing.diagnosis}</p></Section>
                 )}
                 {viewing.formatted_report && (
-                  <Section title="Report"><p className="whitespace-pre-wrap leading-relaxed">{viewing.formatted_report}</p></Section>
+                  <Section title="Report"><ReportContent text={viewing.formatted_report} /></Section>
                 )}
                 {viewing.raw_notes && (
                   <Section title="Consultation Notes"><p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">{viewing.raw_notes}</p></Section>
