@@ -5,8 +5,8 @@
  * then renders the official report. The on-demand AI simplification (Feature 14)
  * is not yet connected; its control is presented as a placeholder.
  */
-import { getReportById, getDoctorById } from "@/lib/queries"
-import { doctorName } from "@/lib/display"
+import { getReportById, getDoctorById, getPatientById } from "@/lib/queries"
+import { doctorName, patientName } from "@/lib/display"
 import { RecordDetailClient } from "./record-detail-client"
 
 export const dynamic = "force-dynamic"
@@ -17,7 +17,10 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
   if (!report) {
     return <RecordDetailClient report={null} />
   }
-  const doctor = await getDoctorById(report.doctor_id)
+  const [doctor, patient] = await Promise.all([
+    getDoctorById(report.doctor_id),
+    getPatientById(report.patient_id),
+  ])
   return (
     <RecordDetailClient
       report={{
@@ -25,9 +28,13 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
         diagnosis: report.diagnosis,
         formatted_report: report.formatted_report,
         raw_notes: report.raw_notes,
+        prescriptions: report.prescriptions ?? [],
         status: report.status,
-        date: report.created_at,
+        date: report.approved_at ?? report.created_at,
         doctorName: doctor ? doctorName(doctor) : "Treating physician",
+        doctorSpecialization: doctor?.specialization ?? null,
+        patientName: patient ? patientName(patient) : "Patient",
+        patientDob: patient?.birth_date ?? null,
       }}
     />
   )

@@ -6,25 +6,33 @@
  * module (REQ-SIMP-01), which is not yet wired to a model — selecting it shows
  * a notice rather than fabricating a simplified text.
  */
+import { useRef } from "react"
 import Link from "next/link"
 import { FileText, Calendar, User, Sparkles, ArrowLeft, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
-import { ReportContent } from "@/components/report-content"
+import { ReportDocument } from "@/components/report-document"
+import { printReport } from "@/lib/print-element"
+import type { PrescriptionItem } from "@/lib/seed-data"
 
 interface ReportDetail {
   id: string
   diagnosis: string | null
   formatted_report: string | null
   raw_notes: string | null
+  prescriptions: PrescriptionItem[]
   status: string
   date: string
   doctorName: string
+  doctorSpecialization: string | null
+  patientName: string
+  patientDob: string | null
 }
 
 export function RecordDetailClient({ report }: { report: ReportDetail | null }) {
+  const reportRef = useRef<HTMLDivElement>(null)
   if (!report) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -40,8 +48,6 @@ export function RecordDetailClient({ report }: { report: ReportDetail | null }) 
     )
   }
 
-  const officialText = report.formatted_report ?? report.raw_notes
-
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b border-border bg-muted">
@@ -56,9 +62,9 @@ export function RecordDetailClient({ report }: { report: ReportDetail | null }) 
                 {new Date(report.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
               </p>
             </div>
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => toast.info("PDF export is not yet available.")}>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => printReport(reportRef.current)}>
               <Download className="w-4 h-4" />
-              Download PDF
+              Print / PDF
             </Button>
           </div>
         </div>
@@ -99,24 +105,18 @@ export function RecordDetailClient({ report }: { report: ReportDetail | null }) 
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Official Medical Report</CardTitle>
-            <CardDescription>The complete medical report as documented by your healthcare provider</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {officialText ? (
-              <ReportContent text={officialText} />
-            ) : (
-              <div className="space-y-6">
-                <div>
-                  <h4 className="font-semibold text-foreground mb-2">Diagnosis</h4>
-                  <p className="text-muted-foreground">{report.diagnosis ?? "—"}</p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <ReportDocument
+          ref={reportRef}
+          doctorName={report.doctorName}
+          doctorSpecialization={report.doctorSpecialization}
+          patientName={report.patientName}
+          patientDob={report.patientDob}
+          date={report.date}
+          diagnosis={report.diagnosis}
+          body={report.formatted_report}
+          rawNotes={report.raw_notes}
+          prescriptions={report.prescriptions}
+        />
       </div>
     </div>
   )

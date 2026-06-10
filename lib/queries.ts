@@ -326,6 +326,7 @@ export function getDoctorPatients(doctorId: string) {
 /** A medical report joined with the patient name and appointment date. */
 export interface ReportListRow extends MedicalReportRow {
   patient_name: string
+  patient_dob: string
   starts_at: string
 }
 
@@ -334,6 +335,7 @@ export function getReportsByDoctor(doctorId: string) {
   return sql<ReportListRow>`
     SELECT mr.*,
            p.first_name || ' ' || p.last_name AS patient_name,
+           p.birth_date AS patient_dob,
            a.starts_at
     FROM medical_reports mr
     JOIN patients p     ON p.id = mr.patient_id

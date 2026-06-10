@@ -23,13 +23,17 @@ export default async function DoctorWorkspace() {
   }
 
   const appointments = await getAppointmentsByDoctor(doctor.id)
+  // The workspace shows only CHECKED-IN patients: those waiting and those
+  // already called in ("with doctor"). A patient who is merely scheduled has not
+  // arrived and cannot be consulted; calling a patient must not remove them.
   const todayStr = new Date().toDateString()
   const queueAppointments = appointments
     .filter((a) => new Date(a.starts_at).toDateString() === todayStr)
-    .filter((a) => a.status === "waiting" || a.status === "scheduled")
+    .filter((a) => a.status === "waiting" || a.status === "in_progress")
     .sort((a, b) => {
-      if (a.status === "waiting" && b.status !== "waiting") return -1
-      if (a.status !== "waiting" && b.status === "waiting") return 1
+      // Patients already called to the office (in_progress) come first.
+      const rank = (s: string) => (s === "in_progress" ? 0 : 1)
+      if (rank(a.status) !== rank(b.status)) return rank(a.status) - rank(b.status)
       return +new Date(a.starts_at) - +new Date(b.starts_at)
     })
 

@@ -82,7 +82,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
   function openEdit(p: PatientRow) {
     setEditingId(p.id)
     setForm({
-      first_name: p.first_name, last_name: p.last_name, birth_date: p.birth_date,
+      first_name: p.first_name, last_name: p.last_name, birth_date: String(p.birth_date).slice(0, 10),
       insurance_type: p.insurance_type, email: p.email ?? "", phone: p.phone ?? "",
       versicherten_id: p.versicherten_id ?? "", guardian_contact: p.guardian_contact ?? "",
       street: p.street ?? "", city: p.city ?? "", postal_code: p.postal_code ?? "",

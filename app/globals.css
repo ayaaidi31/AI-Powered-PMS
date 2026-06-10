@@ -253,3 +253,6 @@
   }
   .hover-lift:hover { transform: none; }
 }
+
+/* Reports are printed via a dedicated iframe (lib/print-element.ts), which
+   injects its own @page A4 rules — so no global print stylesheet is needed. */

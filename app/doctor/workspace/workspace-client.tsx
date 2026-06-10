@@ -301,13 +301,21 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     toast.success(toAdd.length ? `${toAdd.length} code(s) suggested.` : "No new valid codes found.")
   }
 
-  async function runCodeSearch() {
+  // Live search: as the doctor types, fetch matching catalog codes (debounced,
+  // with a guard so a slow earlier request can't overwrite a newer one).
+  useEffect(() => {
+    const q = codeQuery.trim()
+    if (q.length < 2) { setCodeResults([]); setSearchingCodes(false); return }
+    let active = true
     setSearchingCodes(true)
-    const result = await searchBillingCodes(billingCatalog, codeQuery)
-    setSearchingCodes(false)
-    if (result.status === "ok") setCodeResults(result.data)
-    else toast.error(result.message)
-  }
+    const timer = setTimeout(async () => {
+      const result = await searchBillingCodes(billingCatalog, q)
+      if (!active) return
+      setSearchingCodes(false)
+      if (result.status === "ok") setCodeResults(result.data)
+    }, 250)
+    return () => { active = false; clearTimeout(timer) }
+  }, [codeQuery, billingCatalog])
 
   /** Add a code by its exact number (manual entry), validated against the catalog. */
   async function addExactCode() {
@@ -454,7 +462,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
           </div>
           <h1 className="text-2xl font-bold text-foreground mb-2">No Patients in Queue</h1>
           <p className="text-muted-foreground mb-6">
-            There are no waiting or scheduled patients at the moment. Check back later or view your full schedule.
+            No checked-in patients right now. Patients appear here once reception checks them in.
           </p>
           <Link href="/doctor/dashboard">
             <Button className="gap-2">View Dashboard <ArrowRight className="w-4 h-4" /></Button>
@@ -501,9 +509,9 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                         <span className={`text-xs ${isActive ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
                           {formatTime(entry.startsAt)}
                         </span>
-                        {entry.status === "waiting" && (
-                          <Badge variant="secondary" className={`text-xs h-5 ${isActive ? "bg-primary-foreground/20 text-primary-foreground" : "bg-amber-100 text-amber-700"}`}>
-                            Waiting
+                        {(entry.status === "waiting" || entry.status === "in_progress") && (
+                          <Badge variant="secondary" className={`text-xs h-5 ${isActive ? "bg-primary-foreground/20 text-primary-foreground" : entry.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
+                            {entry.status === "in_progress" ? "With Doctor" : "Waiting"}
                           </Badge>
                         )}
                         {entry.existingReport?.status === "draft" && (
@@ -539,7 +547,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-bold text-foreground">{current.patientName}</h1>
                   <Badge variant="outline" className="text-xs">
-                    {current.status === "waiting" ? "Waiting" : "Scheduled"}
+                    {current.status === "in_progress" ? "With Doctor" : "Waiting"}
                   </Badge>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
@@ -838,18 +846,15 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                           {suggestingCodes ? "Suggesting…" : "Suggest codes with AI"}
                         </Button>
 
-                        {/* Or add codes manually — search and click a result,
-                            or type an exact code and press Add. */}
+                        {/* Add codes manually — results appear as you type;
+                            click a result, or type an exact code and press Add. */}
                         <div className="flex gap-2">
                           <Input
-                            placeholder={`Search or type a ${billingCatalog} code…`}
+                            placeholder={`Search a ${billingCatalog} code or description…`}
                             value={codeQuery}
                             onChange={(e) => setCodeQuery(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); runCodeSearch() } }}
+                            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExactCode() } }}
                           />
-                          <Button variant="outline" onClick={runCodeSearch} disabled={searchingCodes || codeQuery.trim().length < 2}>
-                            {searchingCodes ? "…" : "Search"}
-                          </Button>
                           <Button variant="outline" className="gap-1" onClick={addExactCode} disabled={searchingCodes || codeQuery.trim().length < 2}>
                             <Plus className="w-4 h-4" /> Add
                           </Button>
@@ -857,7 +862,9 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
                         {codeResults.length > 0 && (
                           <div className="border border-border rounded-lg max-h-44 overflow-auto divide-y divide-border">
-                            <p className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/40">Click a result to add it</p>
+                            <p className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/40">
+                              {searchingCodes ? "Searching…" : "Click a result to add it"}
+                            </p>
                             {codeResults.map((r) => (
                               <button
                                 key={r.code}

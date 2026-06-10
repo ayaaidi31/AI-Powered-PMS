@@ -9,7 +9,13 @@
  *   import { sql, pool } from "@/lib/db"
  *   const rows = await sql<DoctorRow>`SELECT * FROM doctors WHERE id = ${id}`
  */
-import { Pool, type PoolClient, type QueryResultRow } from "pg"
+import { Pool, types, type PoolClient, type QueryResultRow } from "pg"
+
+// Return DATE columns (OID 1082) as plain 'YYYY-MM-DD' strings instead of JS
+// Date objects. The application types these as strings (e.g. patient.birth_date)
+// and binds them to <input type="date">, so the raw string is what we want;
+// keeping the default Date object breaks date inputs and string validation.
+types.setTypeParser(1082, (value) => value)
 
 const connectionString = process.env.DATABASE_URL
 

@@ -6,7 +6,8 @@
  * Search is performed client-side over the already-loaded list.
  */
 import { useState } from "react"
-import { Search, Users, AlertCircle, Calendar, Activity, ClipboardList } from "lucide-react"
+import Link from "next/link"
+import { Search, Users, AlertCircle, Calendar, Activity, ClipboardList, ChevronRight } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -66,7 +67,7 @@ export function DoctorPatientsClient({ patients }: { patients: DoctorPatientRow[
           ) : (
             <div className="space-y-3">
               {filtered.map((p) => (
-                <div key={p.id} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg border border-border hover:bg-accent/40 transition-colors">
+                <Link key={p.id} href={`/doctor/patients/${p.id}`} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-lg border border-border hover:bg-accent/40 transition-colors">
                   <Avatar className="w-12 h-12 shrink-0">
                     <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                       {initials(p.first_name, p.last_name)}
@@ -106,7 +107,8 @@ export function DoctorPatientsClient({ patients }: { patients: DoctorPatientRow[
                       {p.last_visit ? new Date(p.last_visit).toLocaleDateString("de-DE") : "—"}
                     </p>
                   </div>
-                </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0 hidden sm:block" />
+                </Link>
               ))}
             </div>
           )}
