@@ -19,7 +19,7 @@ export default async function DoctorReportsPage() {
   return (
     <DoctorReportsClient
       reports={reports}
-      doctor={{ name: doctorName(doctor), specialization: doctor.specialization }}
+      doctor={{ name: doctorName(doctor), specialization: doctor.specialization, lanr: doctor.lanr }}
     />
   )
 }

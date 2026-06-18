@@ -58,7 +58,9 @@ CREATE TABLE IF NOT EXISTS doctors (
   lanr               text,             -- Lebenslange Arztnummer
   department         text,
   max_daily_capacity integer NOT NULL DEFAULT 20 CHECK (max_daily_capacity > 0),
-  is_available       boolean NOT NULL DEFAULT true
+  is_available       boolean NOT NULL DEFAULT true,
+  unavailable_from   date,             -- absence window start (sick leave); NULL when on duty
+  unavailable_until  date              -- absence window end; NULL = open-ended
 );
 
 CREATE TABLE IF NOT EXISTS receptionists (

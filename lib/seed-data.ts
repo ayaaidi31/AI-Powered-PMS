@@ -95,6 +95,8 @@ export interface DoctorRow {
   department: string
   max_daily_capacity: number
   is_available: boolean
+  unavailable_from?: string | null
+  unavailable_until?: string | null
 }
 export const doctors: DoctorRow[] = [
   { id: "doc-1", first_name: "Sarah", last_name: "Smith", email: "dr.smith@clinic.com", phone: "+49 152 1234567", specialization: "General Practice", lanr: "123456789", department: "General Medicine", max_daily_capacity: 20, is_available: true },

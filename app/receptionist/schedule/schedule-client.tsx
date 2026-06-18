@@ -37,7 +37,7 @@ import { toast } from "sonner"
 import type { DoctorRow, PatientRow } from "@/lib/seed-data"
 import { patientName, doctorName, statusColor } from "@/lib/display"
 import type { AppointmentWithNames } from "@/lib/queries"
-import { bookAppointment, checkInAppointment, cancelAppointment, rescheduleAppointment, revertCheckIn } from "@/lib/actions/appointments"
+import { bookAppointment, checkInAppointment, cancelAppointment, rescheduleAppointment, revertCheckIn, reassignAppointment } from "@/lib/actions/appointments"
 
 const TIME_SLOTS = [
   "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
@@ -63,6 +63,8 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
   const [checkInTarget, setCheckInTarget] = useState<AppointmentWithNames | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<AppointmentWithNames | null>(null)
   const [rescheduleForm, setRescheduleForm] = useState({ date: "", time: "" })
+  const [reassignTarget, setReassignTarget] = useState<AppointmentWithNames | null>(null)
+  const [reassignDoctorId, setReassignDoctorId] = useState("")
 
   function getWeekDates() {
     const dates: Date[] = []
@@ -138,6 +140,27 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
       if (result.status === "ok") {
         toast.success("Check-in undone — appointment back to scheduled.")
         router.refresh()
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
+  function openReassign(apt: AppointmentWithNames) {
+    setReassignDoctorId(apt.doctor_id)
+    setReassignTarget(apt)
+  }
+
+  function confirmReassign() {
+    if (!reassignTarget) return
+    if (!reassignDoctorId) { toast.error("Pick a doctor."); return }
+    if (reassignDoctorId === reassignTarget.doctor_id) { setReassignTarget(null); return }
+    startTransition(async () => {
+      const result = await reassignAppointment(reassignTarget.id, reassignDoctorId, { reasonForChange: "Reassigned by reception" })
+      if (result.status === "ok") {
+        toast.success("Appointment reassigned.")
+        router.refresh()
+        setReassignTarget(null)
       } else {
         toast.error(result.message)
       }
@@ -354,6 +377,11 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                                   Reschedule
                                 </DropdownMenuItem>
                               )}
+                              {(apt.status === "scheduled" || apt.status === "waiting") && (
+                                <DropdownMenuItem onClick={() => openReassign(apt)} disabled={isPending}>
+                                  Reassign doctor
+                                </DropdownMenuItem>
+                              )}
                               {apt.status === "scheduled" && (
                                 <DropdownMenuItem
                                   className="text-destructive"
@@ -456,6 +484,40 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                 </div>
                 <Button className="w-full" onClick={confirmReschedule} disabled={isPending}>
                   {isPending ? "Saving…" : "Save new time"}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reassign — move an appointment to a different doctor. */}
+      <Dialog open={reassignTarget !== null} onOpenChange={(o) => !o && setReassignTarget(null)}>
+        <DialogContent className="max-w-md">
+          {reassignTarget && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Reassign to another doctor</DialogTitle>
+                <DialogDescription>
+                  {reassignTarget.patient_name} · {new Date(reassignTarget.starts_at).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="space-y-2">
+                  <Label>Doctor</Label>
+                  <Select value={reassignDoctorId} onValueChange={setReassignDoctorId}>
+                    <SelectTrigger><SelectValue placeholder="Select doctor" /></SelectTrigger>
+                    <SelectContent>
+                      {doctors.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {doctorName(d)}{d.is_available ? "" : " (off duty)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button className="w-full" onClick={confirmReassign} disabled={isPending}>
+                  {isPending ? "Saving…" : "Reassign"}
                 </Button>
               </div>
             </>

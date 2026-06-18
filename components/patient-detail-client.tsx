@@ -40,6 +40,7 @@ interface ReportItem {
   approved_at: string | null
   doctorName: string
   doctorSpecialization: string | null
+  doctorLanr: string | null
 }
 interface AppointmentItem {
   id: string
@@ -334,6 +335,7 @@ export function PatientDetailClient({
                 ref={reportRef}
                 doctorName={viewing.doctorName}
                 doctorSpecialization={viewing.doctorSpecialization}
+                doctorLanr={viewing.doctorLanr}
                 patientName={patientName(patient)}
                 patientDob={patient.birth_date}
                 date={viewing.approved_at ?? viewing.created_at}

@@ -38,7 +38,7 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE")
 
 export function DoctorReportsClient({
   reports, doctor,
-}: { reports: ReportListRow[]; doctor: { name: string; specialization: string | null } }) {
+}: { reports: ReportListRow[]; doctor: { name: string; specialization: string | null; lanr: string | null } }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [query, setQuery] = useState("")
@@ -210,6 +210,7 @@ export function DoctorReportsClient({
                   ref={reportRef}
                   doctorName={doctor.name}
                   doctorSpecialization={doctor.specialization}
+                  doctorLanr={doctor.lanr}
                   patientName={viewing.patient_name}
                   patientDob={viewing.patient_dob}
                   date={viewing.approved_at ?? viewing.created_at}

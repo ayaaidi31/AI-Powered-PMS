@@ -13,13 +13,15 @@ export default async function DoctorLayout({ children }: { children: React.React
   const doctor = await getCurrentDoctor()
   const profile = doctor
     ? {
+        id: doctor.id,
         name: doctorName(doctor),
         firstName: doctor.first_name,
         specialization: doctor.specialization ?? "",
         email: doctor.email,
         initials: initials(doctor.first_name, doctor.last_name),
+        isAvailable: doctor.is_available,
       }
-    : { name: "Doctor", firstName: "Doctor", specialization: "", email: "", initials: "DR" }
+    : { id: "", name: "Doctor", firstName: "Doctor", specialization: "", email: "", initials: "DR", isAvailable: true }
 
   return <DoctorShell profile={profile}>{children}</DoctorShell>
 }

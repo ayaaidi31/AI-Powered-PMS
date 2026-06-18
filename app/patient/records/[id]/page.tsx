@@ -33,6 +33,7 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
         date: report.approved_at ?? report.created_at,
         doctorName: doctor ? doctorName(doctor) : "Treating physician",
         doctorSpecialization: doctor?.specialization ?? null,
+        doctorLanr: doctor?.lanr ?? null,
         patientName: patient ? patientName(patient) : "Patient",
         patientDob: patient?.birth_date ?? null,
       }}

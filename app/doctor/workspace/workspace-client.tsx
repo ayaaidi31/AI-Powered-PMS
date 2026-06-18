@@ -21,7 +21,7 @@ import {
   ArrowRight, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight,
   Stethoscope, Save, Pill, ClipboardList, Plus, Trash2,
   Mic, MicOff, Sparkles, History, User,
-  Heart, Thermometer, Activity, FileText, Eye, Pencil, AlertTriangle, X, Check,
+  Heart, Thermometer, Activity, FileText, Eye, Pencil, AlertTriangle, X, Check, FileSearch,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -45,6 +45,7 @@ import { createProfileProposals } from "@/lib/actions/profile-proposals"
 import { saveAppointmentVitals } from "@/lib/actions/vitals"
 import { ReportContent } from "@/components/report-content"
 import { DecisionSupport, type DsMessage } from "@/components/decision-support"
+import { RecordsQA, type RecordsQAMessage } from "@/components/records-qa"
 
 interface VitalsForm {
   systolic: string; diastolic: string; heart_rate: string
@@ -129,6 +130,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
   const [isRecording, setIsRecording] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
+  const [recordsOpen, setRecordsOpen] = useState(false)
 
   // The consultation fields map 1:1 to the stored report.
   const [reportId, setReportId] = useState<string | null>(null)
@@ -162,6 +164,8 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
   // Decision-support conversations kept per appointment so they survive closing
   // the dialog and remain available for the whole consultation.
   const [dsConversations, setDsConversations] = useState<Record<string, DsMessage[]>>({})
+  // Doctor records-Q&A conversations, kept per appointment (Feature 17).
+  const [recordsConversations, setRecordsConversations] = useState<Record<string, RecordsQAMessage[]>>({})
 
   // Profile-update proposals scanned from the just-confirmed consultation.
   const [profileSuggestions, setProfileSuggestions] = useState<ProfileUpdateSuggestion[]>([])
@@ -198,12 +202,22 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     if (!current) return
     setDsConversations((prev) => ({ ...prev, [current.appointmentId]: updater(prev[current.appointmentId] ?? []) }))
   }
+  const recordsMessages = current ? recordsConversations[current.appointmentId] ?? [] : []
+  const setRecordsMessages = (updater: (prev: RecordsQAMessage[]) => RecordsQAMessage[]) => {
+    if (!current) return
+    setRecordsConversations((prev) => ({ ...prev, [current.appointmentId]: updater(prev[current.appointmentId] ?? []) }))
+  }
 
-  // Load the displayed appointment's consultation. Re-runs on patient switch and
-  // whenever the server data refreshes (so a just-saved draft reloads cleanly).
+  // Load the displayed appointment's consultation. Loads ONLY when the shown
+  // appointment changes (patient switch / first mount) — a server refresh
+  // (router.refresh) must not clobber the doctor's in-progress edits, e.g. a
+  // freshly regenerated report.
+  const loadedApptId = useRef<string | null>(null)
   useEffect(() => {
     const e = queue[currentIndex]
     if (!e) return
+    if (loadedApptId.current === e.appointmentId) return
+    loadedApptId.current = e.appointmentId
     setReportId(e.existingReport?.id ?? null)
     setNotes(e.existingReport?.rawNotes ?? "")
     setDiagnosis(e.existingReport?.diagnosis ?? "")
@@ -225,6 +239,33 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     setSafetyAlerts([])
     setDismissedAlerts(new Set())
   }, [queue, currentIndex])
+
+  // Persist the AI conversations (decision support + records Q&A) per appointment
+  // so they survive leaving/refreshing the workspace — until the consultation is
+  // completed (which clears that appointment's threads).
+  const DS_KEY = "pms.workspace.ds"
+  const RECORDS_KEY = "pms.workspace.records"
+  const convHydrated = useRef(false)
+  useEffect(() => {
+    try {
+      const ds = localStorage.getItem(DS_KEY)
+      if (ds) setDsConversations(JSON.parse(ds))
+      const rec = localStorage.getItem(RECORDS_KEY)
+      if (rec) setRecordsConversations(JSON.parse(rec))
+    } catch { /* ignore corrupt/unavailable storage */ }
+    // Enable saving only AFTER this mount's effects settle, so the save effects
+    // (which run with stale empty state) can't overwrite the just-loaded data.
+    const id = setTimeout(() => { convHydrated.current = true }, 0)
+    return () => clearTimeout(id)
+  }, [])
+  useEffect(() => {
+    if (!convHydrated.current) return
+    try { localStorage.setItem(DS_KEY, JSON.stringify(dsConversations)) } catch { /* ignore */ }
+  }, [dsConversations])
+  useEffect(() => {
+    if (!convHydrated.current) return
+    try { localStorage.setItem(RECORDS_KEY, JSON.stringify(recordsConversations)) } catch { /* ignore */ }
+  }, [recordsConversations])
 
   // Real-time safety check: when the prescriptions or working diagnosis change,
   // review them against the patient's allergies/conditions/medication (debounced).
@@ -267,6 +308,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       conditions: current.conditions,
       allergies: current.allergies,
       medications: current.medications.map((m) => `${m.name} ${m.dosage}`.trim()),
+      vitals: vitalsFormSummary(vitalsForm) ?? formatVitalsSummary(current.vitals),
       visits: current.history.map((h) => ({ date: h.date, reason: h.reason, status: h.status, diagnosis: h.diagnosis })),
     })
     setSummarizingHistory(false)
@@ -361,6 +403,11 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       delete next[finishedId]
       return next
     })
+    setRecordsConversations((prev) => {
+      const next = { ...prev }
+      delete next[finishedId]
+      return next
+    })
 
     // Feature 15: scan the confirmed consultation for profile data that should
     // be updated, and let the doctor confirm what to send to the patient.
@@ -436,6 +483,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
         conditions: current.conditions,
         allergies: current.allergies,
         medications: current.medications.map((m) => `${m.name} ${m.dosage}`),
+        vitals: vitalsFormSummary(vitalsForm),
       },
     })
     if (result.status !== "ok") {
@@ -882,6 +930,31 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                           />
                         </DialogContent>
                       </Dialog>
+                      <Dialog open={recordsOpen} onOpenChange={setRecordsOpen}>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <FileSearch className="w-4 h-4" />
+                            Ask Records
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <FileSearch className="w-5 h-5 text-primary" /> Ask the Patient&apos;s Records
+                            </DialogTitle>
+                            <DialogDescription>
+                              Conversational Q&amp;A over {current.patientName}&apos;s own past reports, with cited sources.
+                              Limited to this patient&apos;s records.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <RecordsQA
+                            patientId={current.patientId}
+                            patientName={current.patientName}
+                            messages={recordsMessages}
+                            setMessages={setRecordsMessages}
+                          />
+                        </DialogContent>
+                      </Dialog>
                     </div>
                   </div>
                 </CardHeader>
@@ -1313,6 +1386,17 @@ function ageFromDob(dob: string): number {
   let a = now.getFullYear() - b.getFullYear()
   if (now.getMonth() < b.getMonth() || (now.getMonth() === b.getMonth() && now.getDate() < b.getDate())) a--
   return a
+}
+
+/** Compact string from the consultation's editable vitals form (for AI context). */
+function vitalsFormSummary(v: VitalsForm): string | null {
+  const p: string[] = []
+  if (v.systolic && v.diastolic) p.push(`RR ${v.systolic}/${v.diastolic} mmHg`)
+  if (v.heart_rate) p.push(`HF ${v.heart_rate}/min`)
+  if (v.temperature_c) p.push(`Temp ${v.temperature_c} °C`)
+  if (v.weight_kg) p.push(`${v.weight_kg} kg`)
+  if (v.height_cm) p.push(`${v.height_cm} cm`)
+  return p.length ? p.join(", ") : null
 }
 
 function formatVitalsSummary(v: QueueEntry["vitals"]): string | null {

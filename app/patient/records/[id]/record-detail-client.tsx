@@ -29,6 +29,7 @@ interface ReportDetail {
   date: string
   doctorName: string
   doctorSpecialization: string | null
+  doctorLanr: string | null
   patientName: string
   patientDob: string | null
 }
@@ -137,6 +138,7 @@ export function RecordDetailClient({ report }: { report: ReportDetail | null }) 
           ref={reportRef}
           doctorName={report.doctorName}
           doctorSpecialization={report.doctorSpecialization}
+          doctorLanr={report.doctorLanr}
           patientName={report.patientName}
           patientDob={report.patientDob}
           date={report.date}

@@ -43,6 +43,11 @@ export function getReceptionists() {
   return sql<ReceptionistRow>`SELECT * FROM receptionists ORDER BY last_name`
 }
 
+export async function getReceptionistById(id: string) {
+  const rows = await sql<ReceptionistRow>`SELECT * FROM receptionists WHERE id = ${id}`
+  return rows[0] ?? null
+}
+
 // ───────────────────────────── Patients ────────────────────────────
 /** Active (non-soft-deleted) patients. */
 export function getPatients() {
@@ -175,6 +180,13 @@ export async function getVitalsByAppointment(appointmentId: string) {
     SELECT * FROM vitals WHERE appointment_id = ${appointmentId}
     ORDER BY recorded_at DESC LIMIT 1`
   return rows[0] ?? null
+}
+
+/** A patient's recorded vitals over time (newest first) — for AI context. */
+export function getVitalsByPatient(patientId: string) {
+  return sql<VitalsRow>`
+    SELECT * FROM vitals WHERE patient_id = ${patientId}
+    ORDER BY recorded_at DESC`
 }
 
 /** Billing codes attached to a report (joined with catalog descriptions). */
@@ -409,6 +421,12 @@ export async function getCurrentDoctor() {
   const session = await getSession()
   if (!session || session.role !== "doctor" || !session.profileId) return null
   return getDoctorById(session.profileId)
+}
+
+export async function getCurrentReceptionist() {
+  const session = await getSession()
+  if (!session || session.role !== "receptionist" || !session.profileId) return null
+  return getReceptionistById(session.profileId)
 }
 
 /** Patient ids that have at least one recorded allergy (for at-a-glance flags). */

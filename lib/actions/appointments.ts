@@ -150,6 +150,52 @@ export async function rescheduleAppointment(
 }
 
 /**
+ * Reassign an appointment to a different doctor (Feature 18 — sick-leave
+ * recovery / manual reassignment). Keeps the time; verifies the target doctor
+ * is free in that window before moving it.
+ */
+export async function reassignAppointment(
+  appointmentId: string,
+  newDoctorId: string,
+  options: { reasonForChange?: string } = {},
+): Promise<ActionResult<AppointmentRow>> {
+  const result = await withTransaction(async (client) => {
+    const current = await client.query<AppointmentRow>(`SELECT * FROM appointments WHERE id = $1`, [appointmentId])
+    if (current.rowCount === 0) return "not_found" as const
+    const appt = current.rows[0]
+    if (appt.doctor_id === newDoctorId) return appt // no-op
+
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [newDoctorId])
+
+    const clash = await client.query(
+      `SELECT id FROM appointments
+       WHERE doctor_id = $1
+         AND id <> $2
+         AND status = ANY($3)
+         AND tstzrange(starts_at, starts_at + (duration_min || ' minutes')::interval)
+             && tstzrange($4::timestamptz, $4::timestamptz + ($5 || ' minutes')::interval)
+       LIMIT 1`,
+      [newDoctorId, appointmentId, ACTIVE_STATES, appt.starts_at, appt.duration_min],
+    )
+    if (clash.rowCount && clash.rowCount > 0) return "conflict" as const
+
+    const updated = await client.query<AppointmentRow>(
+      `UPDATE appointments
+       SET doctor_id = $2, reason_for_change = COALESCE($3, reason_for_change)
+       WHERE id = $1
+       RETURNING *`,
+      [appointmentId, newDoctorId, options.reasonForChange ?? null],
+    )
+    return updated.rows[0]
+  })
+
+  if (result === "not_found") return fail("Appointment not found.")
+  if (result === "conflict") return conflict("The selected doctor is already booked at that time.")
+  revalidateSchedules()
+  return ok(result)
+}
+
+/**
  * Cancel an appointment. Sets the status to `cancelled`, which immediately
  * frees the slot for re-booking (it is excluded from the availability check).
  *

@@ -24,14 +24,27 @@ import { mistralChat, isLlmConfigured } from "@/lib/llm/mistral"
 import { getEbmCode, searchEbmCodes } from "@/lib/codes/ebm"
 import { CLINIC, CLINIC_FAQ } from "@/lib/clinic"
 import { retrieveChunks } from "@/lib/rag/retrieve"
+import { getReportsByPatient, getVitalsByPatient } from "@/lib/queries"
+import type { VitalsRow } from "@/lib/seed-data"
 import { ok, fail, type ActionResult } from "./types"
 import type { CodeSuggestion } from "./codes"
+
+/** Format a vitals row into a compact clinical string (German units). */
+function fmtVitals(v: VitalsRow): string {
+  const p: string[] = []
+  if (v.systolic != null && v.diastolic != null) p.push(`RR ${v.systolic}/${v.diastolic} mmHg`)
+  if (v.heart_rate != null) p.push(`HF ${v.heart_rate}/min`)
+  if (v.temperature_c != null) p.push(`Temp ${v.temperature_c} °C`)
+  if (v.weight_kg != null) p.push(`${v.weight_kg} kg`)
+  if (v.height_cm != null) p.push(`${v.height_cm} cm`)
+  return p.join(", ")
+}
 
 interface ReportInput {
   rawNotes: string
   diagnosis?: string
   treatment?: string
-  context?: { conditions: string[]; allergies: string[]; medications: string[] }
+  context?: { conditions: string[]; allergies: string[]; medications: string[]; vitals?: string | null }
 }
 
 /** Turn the doctor's rough notes into a structured, formal German report. */
@@ -51,6 +64,7 @@ export async function generateConsultationReport(
         ctx.conditions.length ? `Vorerkrankungen: ${ctx.conditions.join(", ")}` : "",
         ctx.allergies.length ? `Allergien: ${ctx.allergies.join(", ")}` : "",
         ctx.medications.length ? `Aktuelle Medikation: ${ctx.medications.join(", ")}` : "",
+        ctx.vitals ? `Vitalwerte (diese Konsultation): ${ctx.vitals}` : "",
       ].filter(Boolean).join("\n")
     : ""
 
@@ -62,7 +76,8 @@ export async function generateConsultationReport(
           content:
             "Du bist ein medizinischer Dokumentationsassistent. Wandle die stichwortartigen Konsultationsnotizen in einen formellen, strukturierten deutschen Arztbericht um. " +
             "Gliederung: Anamnese, Befund, Diagnose, Therapie/Procedere. " +
-            "Erfinde keine Befunde, Werte oder Diagnosen, die nicht in den Notizen stehen. Nenne keine personenbezogenen Identifikatoren.",
+            "Falls Vitalwerte angegeben sind, nimm sie in den Befund auf. " +
+            "Erfinde keine Befunde, Werte oder Diagnosen, die nicht in den Notizen oder Vitalwerten stehen. Nenne keine personenbezogenen Identifikatoren.",
         },
         {
           role: "user",
@@ -274,6 +289,47 @@ export async function simplifyReport(reportText: string): Promise<ActionResult<{
 }
 
 /**
+ * Triage classification for sick-leave recovery (Feature 18). Classifies each
+ * appointment's urgency from its visit reason so the recovery optimizer can
+ * prioritize urgent patients for scarce slots. The receptionist can override.
+ * Falls back to "medium" without the model. Pure classification — the actual
+ * reassignment stays deterministic.
+ */
+export type UrgencyLevel = "high" | "medium" | "routine"
+export async function classifyUrgency(
+  items: { id: string; reason: string | null }[],
+): Promise<Record<string, UrgencyLevel>> {
+  const result: Record<string, UrgencyLevel> = {}
+  for (const it of items) result[it.id] = "medium"
+  if (!isLlmConfigured() || items.length === 0) return result
+  try {
+    const list = items.map((it) => `(${it.id}) ${it.reason?.trim() || "—"}`).join("\n")
+    const raw = await mistralChat(
+      [
+        {
+          role: "system",
+          content:
+            "Du bist eine medizinische Triage-Hilfe. Stufe jeden Termin allein anhand des Besuchsgrundes nach " +
+            "Dringlichkeit ein: \"high\" (akut/dringend, z. B. starke Schmerzen, Verdacht auf ernste Erkrankung, " +
+            "wichtige Verlaufskontrolle), \"medium\" (übliche Beschwerden/Kontrolle), \"routine\" " +
+            "(Vorsorge/Routine/Bagatelle). Erfinde nichts. " +
+            'Antworte ausschließlich als JSON: {"levels":[{"id":"...","urgency":"high|medium|routine"}]}.',
+        },
+        { role: "user", content: `Termine:\n${list}` },
+      ],
+      { json: true, temperature: 0 },
+    )
+    const parsed = JSON.parse(raw) as { levels?: { id?: string; urgency?: string }[] }
+    for (const l of parsed.levels ?? []) {
+      if (l.id && (l.urgency === "high" || l.urgency === "medium" || l.urgency === "routine")) {
+        result[l.id] = l.urgency
+      }
+    }
+  } catch { /* keep defaults */ }
+  return result
+}
+
+/**
  * Doctor-facing pre-consultation briefing (Feature 10): summarize the patient's
  * history and the course of previous appointments before the doctor sees them.
  * Strictly grounded in the supplied data — recurring problems, the last visit's
@@ -283,6 +339,7 @@ export async function summarizePatientHistory(input: {
   conditions: string[]
   allergies: string[]
   medications: string[]
+  vitals?: string | null
   visits: { date: string; reason: string | null; status: string; diagnosis: string | null }[]
 }): Promise<ActionResult<{ summary: string }>> {
   if (!isLlmConfigured()) {
@@ -302,6 +359,7 @@ export async function summarizePatientHistory(input: {
       input.conditions.length ? `Vorerkrankungen: ${input.conditions.join(", ")}` : "",
       input.allergies.length ? `Allergien: ${input.allergies.join(", ")}` : "",
       input.medications.length ? `Dauermedikation: ${input.medications.join(", ")}` : "",
+      input.vitals ? `Letzte Vitalwerte: ${input.vitals}` : "",
     ].filter(Boolean).join("\n")
     const summary = await mistralChat(
       [
@@ -429,7 +487,7 @@ export async function suggestProfileUpdates(input: {
  * definitive diagnosis/therapy and defers to the doctor's judgement. Kept behind
  * lib/rag/retrieve.ts so the real RAG retrieval/embedder drops in unchanged.
  */
-export interface DecisionSource { title: string | null; page: number | null; source: string | null }
+export interface DecisionSource { title: string | null; page: number | null; source: string | null; snippet: string }
 export interface PatientContext {
   ageYears?: number | null
   allergies?: string[]
@@ -481,7 +539,8 @@ export async function askDecisionSupport(input: {
           content:
             "Du bist ein klinisches Entscheidungsunterstützungssystem für Hausärztinnen und Hausärzte. " +
             "Beantworte die Frage AUSSCHLIESSLICH auf Basis der bereitgestellten Leitlinien-Auszüge (KONTEXT). " +
-            "Zitiere die genutzten Auszüge im Text mit [1], [2] usw. " +
+            "Zitiere die genutzten Auszüge im Text mit [1], [2] usw. (passend zur Nummerierung im KONTEXT). " +
+            "Wenn der KONTEXT keine Auszüge enthält, verwende KEINE Quellenangaben [n]. " +
             "Berücksichtige den PATIENTENKONTEXT (Alter, Allergien, Vorerkrankungen, Dauermedikation, Vitalwerte, " +
             "frühere Besuche und Verlauf) und gib fallbezogene, konkrete Empfehlungen. Beziehe relevante Vorbefunde " +
             "und den bisherigen Verlauf in deine Einschätzung ein. Weise aktiv auf mögliche Sicherheitsprobleme hin " +
@@ -506,16 +565,19 @@ export async function askDecisionSupport(input: {
       { temperature: 0.2 },
     )
 
-    // De-duplicate the cited sources for display.
-    const seen = new Set<string>()
-    const sources: DecisionSource[] = []
-    for (const c of chunks) {
-      const key = `${c.title}|${c.page}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      sources.push({ title: c.title, page: c.page, source: c.source })
-    }
-    return ok({ answer: answer.trim(), sources, via: retrieval.via, grounded: chunks.length > 0 })
+    // Keep sources 1:1 (in order) with the [1], [2]… numbering the model was
+    // given, so each citation in the answer maps to the matching entry below.
+    // Each carries a short snippet of the cited paragraph.
+    const sources: DecisionSource[] = chunks.map((c) => ({
+      title: c.title,
+      page: c.page,
+      source: c.source,
+      snippet: c.document.replace(/\s+/g, " ").trim().slice(0, 200),
+    }))
+    // If nothing was retrieved, the model may invent [n] markers with no source
+    // behind them — strip them so the answer doesn't show dangling numbers.
+    const finalAnswer = chunks.length === 0 ? answer.trim().replace(/\s*\[\d+\]/g, "") : answer.trim()
+    return ok({ answer: finalAnswer, sources, via: retrieval.via, grounded: chunks.length > 0 })
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Decision support is unavailable right now.")
   }
@@ -613,6 +675,83 @@ export async function checkPrescriptionSafety(input: {
   } catch {
     // If the model call fails, still return the guaranteed allergy catches.
     return ok({ alerts: deterministic })
+  }
+}
+
+/**
+ * Doctor on-demand Q&A over the patient's OWN records (Feature 17). A
+ * conversational RAG, STRICTLY sandboxed to the active patient (REQ-DQ-02): it
+ * answers only from that patient's past consultation reports, cites the source
+ * report for every assertion (REQ-DQ-04), keeps session context (REQ-DQ-01), and
+ * says so when the answer isn't in the records (REQ-DQ-05). Low temperature to
+ * minimise hallucination (REQ-DQ-03). Retrieval is a simple recency fetch for
+ * now; the real RAG plugs in here later, returning the same shape.
+ */
+export interface RecordSource { id: string; label: string }
+export async function askPatientRecordsQA(input: {
+  patientId: string
+  question: string
+  history?: { role: "user" | "assistant"; content: string }[]
+}): Promise<ActionResult<{ answer: string; sources: RecordSource[]; grounded: boolean }>> {
+  if (!isLlmConfigured()) {
+    return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
+  }
+  if (!input.patientId) return fail("Missing patient.")
+  if (!input.question.trim()) return fail("Please type a question.")
+  try {
+    // Sandboxed to this patient only (REQ-DQ-02).
+    const [reports, vitalsRows] = await Promise.all([
+      getReportsByPatient(input.patientId),
+      getVitalsByPatient(input.patientId),
+    ])
+    if (reports.length === 0 && vitalsRows.length === 0) {
+      return ok({ answer: "There are no records on file for this patient yet.", sources: [], grounded: false })
+    }
+
+    const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE")
+    const used = reports.slice(0, 12)
+    const sources: RecordSource[] = used.map((r, i) => ({
+      id: r.id,
+      label: `[${i + 1}] Bericht vom ${fmtDate(r.created_at)}${r.diagnosis ? ` — ${r.diagnosis}` : ""}`,
+    }))
+    const reportContext = used
+      .map((r, i) => {
+        const body = (r.formatted_report || r.raw_notes || "").slice(0, 1000)
+        const rx = (r.prescriptions ?? []).map((p) => `${p.medication} ${p.dosage ?? ""} ${p.frequency ?? ""}`.trim()).join("; ")
+        return `[${i + 1}] Bericht vom ${fmtDate(r.created_at)}${r.diagnosis ? ` — Diagnose: ${r.diagnosis}` : ""}\n${body}${rx ? `\nVerordnungen: ${rx}` : ""}`
+      })
+      .join("\n\n")
+
+    // Vitals history (most recent first) so the doctor can ask e.g. "last blood pressure?".
+    const vitalsBlock = vitalsRows
+      .slice(0, 10)
+      .map((v) => `${fmtDate(v.recorded_at)}: ${fmtVitals(v) || "—"}`)
+      .join("\n")
+    const context =
+      (reportContext ? `BERICHTE:\n${reportContext}` : "") +
+      (vitalsBlock ? `${reportContext ? "\n\n" : ""}VITALWERTE (Verlauf, neueste zuerst):\n${vitalsBlock}` : "")
+
+    const recent = (input.history ?? []).slice(-6).map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }))
+    const answer = await mistralChat(
+      [
+        {
+          role: "system",
+          content:
+            "Du bist ein klinischer Recherche-Assistent für die behandelnde Ärztin oder den behandelnden Arzt. " +
+            "Beantworte die Frage AUSSCHLIESSLICH auf Basis der bereitgestellten AKTEN dieses einen Patienten (KONTEXT). " +
+            "Zitiere für jede Aussage die Quelle mit [1], [2] usw. (entsprechend den Berichten im KONTEXT). " +
+            "Wenn die Information NICHT in den Akten steht, sage ausdrücklich: dass du dazu nichts in den " +
+            "Akten dieses Patienten findest — rate oder erfinde nichts. Bleibe sachlich und knapp. " +
+            "Antworte in der Sprache der Frage (Deutsch oder Englisch).",
+        },
+        ...recent,
+        { role: "user", content: `Frage: ${input.question}\n\nKONTEXT (Akten dieses Patienten, neueste zuerst):\n${context}` },
+      ],
+      { temperature: 0.1 },
+    )
+    return ok({ answer: answer.trim(), sources, grounded: true })
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Records assistant is unavailable right now.")
   }
 }
 

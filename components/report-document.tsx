@@ -6,6 +6,7 @@ import { ReportContent } from "./report-content"
 interface Props {
   doctorName: string
   doctorSpecialization?: string | null
+  doctorLanr?: string | null
   patientName: string
   patientDob?: string | null
   date: string
@@ -24,7 +25,7 @@ const fmtDate = (iso: string) =>
  * block, in a print-friendly serif document.
  */
 export const ReportDocument = React.forwardRef<HTMLDivElement, Props>(function ReportDocument({
-  doctorName, doctorSpecialization, patientName, patientDob, date, diagnosis, body, rawNotes, prescriptions,
+  doctorName, doctorSpecialization, doctorLanr, patientName, patientDob, date, diagnosis, body, rawNotes, prescriptions,
 }, ref) {
   return (
     <div ref={ref} className="report-print bg-white text-neutral-900 font-serif rounded-lg border border-neutral-200 shadow-sm p-5 sm:p-8 lg:p-10 leading-relaxed">
@@ -38,6 +39,7 @@ export const ReportDocument = React.forwardRef<HTMLDivElement, Props>(function R
         <div className="text-right shrink-0">
           <p className="text-sm font-semibold">{doctorName}</p>
           {doctorSpecialization && <p className="text-xs text-neutral-600">{doctorSpecialization}</p>}
+          {doctorLanr && <p className="text-xs text-neutral-600">LANR: {doctorLanr}</p>}
         </div>
       </div>
 
@@ -86,6 +88,7 @@ export const ReportDocument = React.forwardRef<HTMLDivElement, Props>(function R
           <div className="w-56 border-t border-neutral-700 pt-1" />
           <p className="text-sm font-semibold">{doctorName}</p>
           {doctorSpecialization && <p className="text-xs text-neutral-600">{doctorSpecialization}</p>}
+          {doctorLanr && <p className="text-xs text-neutral-600">LANR: {doctorLanr}</p>}
         </div>
       </div>
     </div>

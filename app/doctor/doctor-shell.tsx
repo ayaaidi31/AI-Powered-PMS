@@ -11,7 +11,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { logout } from "@/lib/actions/auth"
 import {
   LayoutDashboard, Users, Calendar, FileText, Settings, LogOut, Menu, X,
-  Stethoscope, Receipt, Bell, ChevronDown,
+  Stethoscope, Receipt, ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -20,14 +20,19 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { NotificationBell } from "@/components/notification-bell"
+import { getDoctorNotifications, setDoctorAvailability } from "@/lib/actions/doctors"
+import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 export interface DoctorProfile {
+  id: string
   name: string
   firstName: string
   specialization: string
   email: string
   initials: string
+  isAvailable: boolean
 }
 
 const navigation = [
@@ -43,6 +48,21 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [dutyPending, setDutyPending] = useState(false)
+
+  async function toggleDuty() {
+    setDutyPending(true)
+    const r = await setDoctorAvailability(profile.id, !profile.isAvailable)
+    setDutyPending(false)
+    if (r.status === "ok") {
+      toast.success(profile.isAvailable
+        ? "You are now off duty. Reception can reassign your appointments."
+        : "You are back on duty.")
+      router.refresh()
+    } else {
+      toast.error(r.message)
+    }
+  }
 
   async function handleSignOut() {
     await logout()
@@ -86,7 +106,12 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <Badge variant="secondary" className="text-xs">On Duty</Badge>
+                <button onClick={toggleDuty} disabled={dutyPending} title="Click to change your availability">
+                  <Badge variant={profile.isAvailable ? "secondary" : "outline"} className="text-xs cursor-pointer hover:opacity-80 gap-1.5">
+                    <span className={cn("w-1.5 h-1.5 rounded-full", profile.isAvailable ? "bg-green-500" : "bg-muted-foreground")} />
+                    {dutyPending ? "…" : profile.isAvailable ? "On Duty" : "Off Duty"}
+                  </Badge>
+                </button>
               </div>
             </div>
           </div>
@@ -112,9 +137,11 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
           </nav>
 
           <div className="p-4 border-t border-border space-y-2">
-            <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground">
-              <Settings className="w-5 h-5" />
-              Settings
+            <Button asChild variant="ghost" className="w-full justify-start gap-3 text-muted-foreground hover:text-foreground">
+              <Link href="/doctor/settings" onClick={() => setSidebarOpen(false)}>
+                <Settings className="w-5 h-5" />
+                Settings
+              </Link>
             </Button>
             <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive" onClick={handleSignOut}>
               <LogOut className="w-5 h-5" />
@@ -140,10 +167,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
-              </Button>
+              <NotificationBell loader={getDoctorNotifications} />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -162,7 +186,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push("/doctor/settings")}>
                     <Settings className="w-4 h-4 mr-2" />
                     Settings
                   </DropdownMenuItem>

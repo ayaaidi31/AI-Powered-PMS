@@ -26,6 +26,7 @@ export async function loadPatientDetail(id: string): Promise<PatientDetailData |
   const docMap = new Map(doctorRows.filter(Boolean).map((d) => [d!.id, d!]))
   const docName = (docId: string) => { const d = docMap.get(docId); return d ? doctorName(d) : "Treating physician" }
   const docSpec = (docId: string) => docMap.get(docId)?.specialization ?? null
+  const docLanr = (docId: string) => docMap.get(docId)?.lanr ?? null
 
   const patientInvoices = (await getInvoicesDetailed()).filter((i) => i.patient_id === id && i.status !== "storno")
   const billing = await Promise.all(
@@ -61,6 +62,7 @@ export async function loadPatientDetail(id: string): Promise<PatientDetailData |
       approved_at: r.approved_at,
       doctorName: docName(r.doctor_id),
       doctorSpecialization: docSpec(r.doctor_id),
+      doctorLanr: docLanr(r.doctor_id),
     })),
     appointments: appointments.map((a) => ({
       id: a.id,
