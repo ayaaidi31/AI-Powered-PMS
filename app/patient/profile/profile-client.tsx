@@ -5,8 +5,9 @@
  * `updatePatient` Server Action; insurance details are read-only and changed by
  * reception. Clinical alerts are shown read-only for the patient's awareness.
  */
-import { useState } from "react"
-import { User, Mail, Phone, MapPin, Shield, AlertTriangle, Save, Edit, Activity, Heart, Thermometer } from "lucide-react"
+import { useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { User, Mail, Phone, MapPin, Shield, AlertTriangle, Save, Edit, Activity, Heart, Thermometer, Sparkles, Check, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,6 +18,7 @@ import { toast } from "sonner"
 import type { PatientRow, VitalsRow } from "@/lib/seed-data"
 import { patientName } from "@/lib/display"
 import { updatePatient } from "@/lib/actions/patients"
+import { respondToProposal, type ProfileProposalRow } from "@/lib/actions/profile-proposals"
 
 interface Alerts {
   allergies: string[]
@@ -30,9 +32,33 @@ const INSURANCE_LABEL: Record<PatientRow["insurance_type"], string> = {
   selbstzahler: "Self-Pay",
 }
 
-export function ProfileClient({ patient, vitals, alerts }: { patient: PatientRow; vitals: VitalsRow | null; alerts: Alerts }) {
+export function ProfileClient({
+  patient, vitals, alerts, proposals,
+}: {
+  patient: PatientRow
+  vitals: VitalsRow | null
+  alerts: Alerts
+  proposals: ProfileProposalRow[]
+}) {
+  const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [respondingId, setRespondingId] = useState<string | null>(null)
+  const [isResponding, startRespond] = useTransition()
+
+  function respond(id: string, accept: boolean) {
+    setRespondingId(id)
+    startRespond(async () => {
+      const r = await respondToProposal(id, accept)
+      setRespondingId(null)
+      if (r.status === "ok") {
+        toast.success(accept ? "Change applied to your profile." : "Change declined.")
+        router.refresh()
+      } else {
+        toast.error(r.message)
+      }
+    })
+  }
   const [form, setForm] = useState({
     email: patient.email ?? "",
     phone: patient.phone ?? "",
@@ -78,6 +104,45 @@ export function ProfileClient({ patient, vitals, alerts }: { patient: PatientRow
         </div>
 
         <div className="grid gap-6">
+          {/* Pending profile-update proposals from a recent consultation. */}
+          {proposals.length > 0 && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  Suggested updates to your profile
+                </CardTitle>
+                <CardDescription>
+                  Your doctor suggested these changes after your consultation. Review and choose whether to apply
+                  each one to your profile.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {proposals.map((p) => (
+                  <div key={p.id} className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-border bg-background p-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">
+                        {p.label}: <span className="text-primary">{p.proposed_value}</span>
+                      </p>
+                      {p.current_value && <p className="text-xs text-muted-foreground">Current: {p.current_value}</p>}
+                      {p.reason && <p className="text-xs text-muted-foreground italic">{p.reason}</p>}
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <Button size="sm" className="gap-1" onClick={() => respond(p.id, true)} disabled={isResponding}>
+                        <Check className="w-4 h-4" />
+                        {isResponding && respondingId === p.id ? "…" : "Accept"}
+                      </Button>
+                      <Button size="sm" variant="outline" className="gap-1" onClick={() => respond(p.id, false)} disabled={isResponding}>
+                        <X className="w-4 h-4" />
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Personal Information */}
           <Card>
             <CardHeader>

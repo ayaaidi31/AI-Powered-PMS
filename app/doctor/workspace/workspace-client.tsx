@@ -14,14 +14,14 @@
  * The fields map 1:1 to the stored report (notes → raw_notes, diagnosis →
  * diagnosis, AI report → formatted_report), so nothing is lost on reload.
  */
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   ArrowRight, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight,
   Stethoscope, Save, Pill, ClipboardList, Plus, Trash2,
-  Mic, MicOff, Sparkles, MessageSquare, History, User,
-  Heart, Thermometer, Activity, FileText, Eye, Pencil,
+  Mic, MicOff, Sparkles, History, User,
+  Heart, Thermometer, Activity, FileText, Eye, Pencil, AlertTriangle, X, Check,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -36,13 +36,15 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { initials, insuranceLabel, formatCents, type InsuranceType } from "@/lib/display"
+import { initials, insuranceLabel, formatCents, statusLabel, type InsuranceType, type AppointmentStatusDb } from "@/lib/display"
 import { createReport, updateReport, approveReport, setReportBillingCodes } from "@/lib/actions/reports"
 import { setAppointmentStatus } from "@/lib/actions/appointments"
 import { searchBillingCodes, type CodeSuggestion } from "@/lib/actions/codes"
-import { generateConsultationReport, suggestBillingCodes, extractPrescriptions, extractVitals } from "@/lib/actions/ai"
+import { generateConsultationReport, suggestBillingCodes, extractPrescriptions, extractVitals, summarizePatientHistory, checkPrescriptionSafety, suggestProfileUpdates, type SafetyAlert, type ProfileUpdateSuggestion } from "@/lib/actions/ai"
+import { createProfileProposals } from "@/lib/actions/profile-proposals"
 import { saveAppointmentVitals } from "@/lib/actions/vitals"
 import { ReportContent } from "@/components/report-content"
+import { DecisionSupport, type DsMessage } from "@/components/decision-support"
 
 interface VitalsForm {
   systolic: string; diastolic: string; heart_rate: string
@@ -85,6 +87,13 @@ export interface QueueEntry {
   reason: string | null
   insuranceType: InsuranceType
   birthDate: string | null
+  // Contact/address on file — compared against the report for profile updates.
+  email: string | null
+  phone: string | null
+  street: string | null
+  city: string | null
+  postalCode: string | null
+  country: string | null
   allergies: string[]
   conditions: string[]
   medications: { name: string; dosage: string }[]
@@ -96,6 +105,8 @@ export interface QueueEntry {
     weight_kg: number | null
   } | null
   recentReports: { id: string; diagnosis: string | null }[]
+  // Previous appointments (most recent first) with their status and outcome.
+  history: { id: string; date: string; reason: string | null; status: string; diagnosis: string | null }[]
   // This appointment's own consultation (so a draft reloads when reopened).
   existingReport: {
     id: string
@@ -137,11 +148,56 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
   const [generatingReport, setGeneratingReport] = useState(false)
   const [suggestingCodes, setSuggestingCodes] = useState(false)
+  const [historySummary, setHistorySummary] = useState<string | null>(null)
+  const [summarizingHistory, setSummarizingHistory] = useState(false)
+  // On wide screens, cap the consultation pane to the sidebar's height so long
+  // tabs scroll inside it instead of growing the card and pushing cards below.
+  const sidebarRef = useRef<HTMLDivElement>(null)
+  const [paneH, setPaneH] = useState<number | undefined>(undefined)
+
+  // Real-time safety alerts (allergies / contraindications / interactions).
+  const [safetyAlerts, setSafetyAlerts] = useState<SafetyAlert[]>([])
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set())
+
+  // Decision-support conversations kept per appointment so they survive closing
+  // the dialog and remain available for the whole consultation.
+  const [dsConversations, setDsConversations] = useState<Record<string, DsMessage[]>>({})
+
+  // Profile-update proposals scanned from the just-confirmed consultation.
+  const [profileSuggestions, setProfileSuggestions] = useState<ProfileUpdateSuggestion[]>([])
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set())
+  const [proposalDialogOpen, setProposalDialogOpen] = useState(false)
+  const [proposalPatientId, setProposalPatientId] = useState<string | null>(null)
+  const [proposalApptId, setProposalApptId] = useState<string | null>(null)
+  const [scanningProfile, setScanningProfile] = useState(false)
   const [reportPreview, setReportPreview] = useState(false)
   const [detailCode, setDetailCode] = useState<SelectedCode | null>(null)
 
   const current = queue[currentIndex]
   const billingCatalog: "EBM" | "GOAE" = current?.insuranceType === "gkv" ? "EBM" : "GOAE"
+
+  // Patient context handed to decision support, and the alerts not yet dismissed.
+  const patientContext = {
+    ageYears: current?.birthDate ? ageFromDob(current.birthDate) : null,
+    allergies: current?.allergies ?? [],
+    conditions: current?.conditions ?? [],
+    medications: (current?.medications ?? []).map((m) => `${m.name} ${m.dosage}`.trim()),
+    vitals: current?.vitals ? formatVitalsSummary(current.vitals) : null,
+    history: current?.history?.length
+      ? current.history
+          .slice(0, 6)
+          .map((h) => `${new Date(h.date).toLocaleDateString("de-DE")} (${h.status}): ${h.diagnosis || h.reason || "—"}`)
+          .join("; ")
+      : null,
+  }
+  const visibleAlerts = safetyAlerts.filter((a) => !dismissedAlerts.has(a.message))
+
+  // The current appointment's decision-support conversation (controlled state).
+  const dsMessages = current ? dsConversations[current.appointmentId] ?? [] : []
+  const setDsMessages = (updater: (prev: DsMessage[]) => DsMessage[]) => {
+    if (!current) return
+    setDsConversations((prev) => ({ ...prev, [current.appointmentId]: updater(prev[current.appointmentId] ?? []) }))
+  }
 
   // Load the displayed appointment's consultation. Re-runs on patient switch and
   // whenever the server data refreshes (so a just-saved draft reloads cleanly).
@@ -165,7 +221,58 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     setBillingCodes(e.existingCodes ?? [])
     setCodeQuery("")
     setCodeResults([])
+    setHistorySummary(null)
+    setSafetyAlerts([])
+    setDismissedAlerts(new Set())
   }, [queue, currentIndex])
+
+  // Real-time safety check: when the prescriptions or working diagnosis change,
+  // review them against the patient's allergies/conditions/medication (debounced).
+  useEffect(() => {
+    const e = queue[currentIndex]
+    if (!e) return
+    const rx = prescriptions.filter((p) => p.medication.trim())
+    if (rx.length === 0 && !diagnosis.trim()) { setSafetyAlerts([]); return }
+    const t = setTimeout(async () => {
+      const r = await checkPrescriptionSafety({
+        allergies: e.allergies,
+        conditions: e.conditions,
+        currentMedications: e.medications.map((m) => `${m.name} ${m.dosage}`.trim()),
+        prescriptions: rx,
+        diagnosis,
+      })
+      if (r.status === "ok") setSafetyAlerts(r.data.alerts)
+    }, 1200)
+    return () => clearTimeout(t)
+  }, [prescriptions, diagnosis, queue, currentIndex])
+
+  // Measure the sidebar (Vitals + Medical History) and mirror its height onto
+  // the consultation pane on ≥2xl. Re-measures on content/viewport changes.
+  useEffect(() => {
+    const inner = sidebarRef.current
+    if (!inner) return
+    const mq = window.matchMedia("(min-width: 1536px)")
+    const update = () => setPaneH(mq.matches ? inner.offsetHeight : undefined)
+    const ro = new ResizeObserver(update)
+    ro.observe(inner)
+    mq.addEventListener("change", update)
+    update()
+    return () => { ro.disconnect(); mq.removeEventListener("change", update) }
+  }, [queue, currentIndex])
+
+  async function handleSummarizeHistory() {
+    if (!current) return
+    setSummarizingHistory(true)
+    const result = await summarizePatientHistory({
+      conditions: current.conditions,
+      allergies: current.allergies,
+      medications: current.medications.map((m) => `${m.name} ${m.dosage}`.trim()),
+      visits: current.history.map((h) => ({ date: h.date, reason: h.reason, status: h.status, diagnosis: h.diagnosis })),
+    })
+    setSummarizingHistory(false)
+    if (result.status === "ok") setHistorySummary(result.data.summary)
+    else toast.error(result.message)
+  }
 
   /**
    * Create or update this appointment's single report; returns its id.
@@ -247,10 +354,75 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     await saveCodes(rid)
     await saveVitals()
     await setAppointmentStatus(current.appointmentId, "completed")
+    // The consultation is confirmed — discard its decision-support conversation.
+    const finishedId = current.appointmentId
+    setDsConversations((prev) => {
+      const next = { ...prev }
+      delete next[finishedId]
+      return next
+    })
+
+    // Feature 15: scan the confirmed consultation for profile data that should
+    // be updated, and let the doctor confirm what to send to the patient.
+    const scan = await suggestProfileUpdates({
+      reportText: formattedReport || undefined,
+      notes: notes || undefined,
+      current: {
+        phone: current.phone, email: current.email,
+        street: current.street, city: current.city, postal_code: current.postalCode, country: current.country,
+        allergies: current.allergies, conditions: current.conditions,
+      },
+    })
     setIsSaving(false)
+    if (scan.status === "ok" && scan.data.suggestions.length > 0) {
+      setProfileSuggestions(scan.data.suggestions)
+      setSelectedSuggestions(new Set(scan.data.suggestions.map((_, i) => i)))
+      setProposalPatientId(current.patientId)
+      setProposalApptId(finishedId)
+      setProposalDialogOpen(true)
+    }
     toast.success("Consultation completed and report approved.")
     setCurrentIndex(0)
     router.refresh()
+  }
+
+  /** Manually scan the current notes/report for profile updates (on demand). */
+  async function handleScanProfile() {
+    if (!current) return
+    setScanningProfile(true)
+    const scan = await suggestProfileUpdates({
+      reportText: formattedReport || undefined,
+      notes: notes || undefined,
+      current: {
+        phone: current.phone, email: current.email,
+        street: current.street, city: current.city, postal_code: current.postalCode, country: current.country,
+        allergies: current.allergies, conditions: current.conditions,
+      },
+    })
+    setScanningProfile(false)
+    if (scan.status !== "ok") { toast.error(scan.message); return }
+    if (scan.data.suggestions.length === 0) {
+      toast.info("No profile updates detected in the notes/report.")
+      return
+    }
+    setProfileSuggestions(scan.data.suggestions)
+    setSelectedSuggestions(new Set(scan.data.suggestions.map((_, i) => i)))
+    setProposalPatientId(current.patientId)
+    setProposalApptId(current.appointmentId)
+    setProposalDialogOpen(true)
+  }
+
+  async function confirmProfileProposals() {
+    if (!proposalPatientId) return
+    const chosen = profileSuggestions.filter((_, i) => selectedSuggestions.has(i))
+    if (chosen.length === 0) { setProposalDialogOpen(false); return }
+    const r = await createProfileProposals(proposalPatientId, proposalApptId, chosen)
+    if (r.status === "ok") {
+      toast.success(`${r.data.count} change(s) sent to the patient for approval.`)
+    } else {
+      toast.error(r.message)
+    }
+    setProposalDialogOpen(false)
   }
 
   /** Generate a structured report from the notes (Feature 2, AI). */
@@ -583,7 +755,8 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
         <div className="flex-1 p-4 sm:p-6">
           <div className="flex flex-col 2xl:flex-row gap-6">
             {/* Patient Info & History */}
-            <div className="w-full 2xl:w-96 2xl:flex-shrink-0 space-y-4">
+            <div className="w-full 2xl:w-96 2xl:flex-shrink-0">
+              <div ref={sidebarRef} className="space-y-4">
               <Card>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -665,11 +838,12 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                   )}
                 </CardContent>
               </Card>
+              </div>
             </div>
 
             {/* Right - Consultation */}
-            <div className="flex-1 min-w-0">
-              <Card className="flex flex-col">
+            <div className="flex-1 min-w-0 flex flex-col min-h-0">
+              <Card className="flex flex-col flex-1 min-h-0" style={paneH ? { maxHeight: paneH } : undefined}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <CardTitle className="flex items-center gap-2">
@@ -689,32 +863,61 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                             AI Assist
                           </Button>
                         </DialogTrigger>
-                        <DialogContent>
+                        <DialogContent className="sm:max-w-2xl">
                           <DialogHeader>
-                            <DialogTitle>AI Documentation Assistant</DialogTitle>
+                            <DialogTitle className="flex items-center gap-2">
+                              <Sparkles className="w-5 h-5 text-primary" /> Clinical Decision Support
+                            </DialogTitle>
                             <DialogDescription>
-                              The decision-support module is not yet connected. This panel is a placeholder.
+                              Guideline-grounded answers (AWMF knowledge base) for this case, with cited sources.
+                              Support only — the clinical decision remains yours.
                             </DialogDescription>
                           </DialogHeader>
-                          <div className="space-y-4 pt-4">
-                            <div className="p-4 rounded-lg bg-muted">
-                              <p className="text-sm text-muted-foreground">
-                                Use the AI Report tab to generate a structured report, and the Billing tab to suggest codes.
-                              </p>
-                            </div>
-                            <Button className="w-full gap-2" disabled>
-                              <MessageSquare className="w-4 h-4" />
-                              Ask AI a Question
-                            </Button>
-                          </div>
+                          <DecisionSupport
+                            notes={notes}
+                            diagnosis={diagnosis}
+                            patient={patientContext}
+                            messages={dsMessages}
+                            setMessages={setDsMessages}
+                          />
                         </DialogContent>
                       </Dialog>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="flex-1">
-                  <Tabs defaultValue="notes" className="h-full flex flex-col">
-                    <TabsList className="grid w-full grid-cols-5">
+                {visibleAlerts.length > 0 && (
+                  <div className="px-6 pb-2 space-y-2 shrink-0">
+                    {visibleAlerts.map((a, i) => {
+                      const tone =
+                        a.severity === "high"
+                          ? "border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                          : a.severity === "medium"
+                          ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                          : "border-border bg-muted text-foreground"
+                      return (
+                        <div key={i} className={`flex items-start gap-2 rounded-lg border p-2.5 text-sm ${tone}`}>
+                          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium capitalize">
+                              {a.category} alert{a.medication ? ` · ${a.medication}` : ""}
+                            </p>
+                            <p className="opacity-90">{a.message}</p>
+                          </div>
+                          <button
+                            onClick={() => setDismissedAlerts((s) => new Set(s).add(a.message))}
+                            className="shrink-0 opacity-70 hover:opacity-100"
+                            title="Dismiss (I am overriding this)"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+                <CardContent className="flex-1 min-h-0 flex flex-col">
+                  <Tabs defaultValue="notes" className="flex-1 min-h-0 flex flex-col">
+                    <TabsList className="grid w-full grid-cols-5 shrink-0">
                       <TabsTrigger value="notes">Notes</TabsTrigger>
                       <TabsTrigger value="diagnosis">Diagnosis</TabsTrigger>
                       <TabsTrigger value="report">AI Report</TabsTrigger>
@@ -722,30 +925,33 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                       <TabsTrigger value="billing">Billing</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="notes" className="flex-1 mt-4">
+                    {/* Single bounded scroll viewport: long content in any tab
+                        scrolls here instead of growing the card. */}
+                    <div className="flex-1 min-h-0 overflow-y-auto mt-4 pr-1">
+                    <TabsContent value="notes" className="mt-0 h-full flex flex-col">
                       <Label htmlFor="notes">Consultation Notes</Label>
                       <Textarea
                         id="notes"
                         placeholder="Enter the consultation notes — symptoms, examination findings, treatment plan…"
-                        className="mt-1.5 min-h-[200px] lg:min-h-[300px]"
+                        className="mt-1.5 flex-1 min-h-[200px] resize-none field-sizing-fixed"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                       />
                     </TabsContent>
 
-                    <TabsContent value="diagnosis" className="flex-1 mt-4">
+                    <TabsContent value="diagnosis" className="mt-0 h-full flex flex-col">
                       <Label htmlFor="diagnosis">Diagnosis</Label>
                       <Textarea
                         id="diagnosis"
                         placeholder="Enter the diagnosis…"
-                        className="mt-1.5 min-h-[200px] lg:min-h-[300px]"
+                        className="mt-1.5 flex-1 min-h-[200px] resize-none field-sizing-fixed"
                         value={diagnosis}
                         onChange={(e) => setDiagnosis(e.target.value)}
                       />
                     </TabsContent>
 
-                    <TabsContent value="report" className="flex-1 mt-4">
-                      <div className="space-y-3">
+                    <TabsContent value="report" className="mt-0 h-full flex flex-col">
+                      <div className="flex-1 min-h-0 flex flex-col gap-3">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <Label>AI-generated report</Label>
                           <div className="flex items-center gap-2">
@@ -762,13 +968,13 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                           </div>
                         </div>
                         {reportPreview && formattedReport ? (
-                          <div className="min-h-[200px] lg:min-h-[280px] rounded-md border border-border p-4 overflow-auto bg-card">
+                          <div className="flex-1 min-h-0 rounded-md border border-border p-4 overflow-auto bg-card">
                             <ReportContent text={formattedReport} />
                           </div>
                         ) : (
                           <Textarea
                             placeholder="Click 'Generate from notes' to draft a structured report from your notes, then edit it here…"
-                            className="min-h-[200px] lg:min-h-[280px] text-sm"
+                            className="flex-1 min-h-[200px] text-sm resize-none field-sizing-fixed"
                             value={formattedReport}
                             onChange={(e) => setFormattedReport(e.target.value)}
                           />
@@ -779,7 +985,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="prescription" className="flex-1 mt-4">
+                    <TabsContent value="prescription" className="mt-0">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <Label>Prescriptions</Label>
@@ -829,7 +1035,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="billing" className="flex-1 mt-4">
+                    <TabsContent value="billing" className="mt-0">
                       <div className="space-y-4">
                         <div className="p-3 rounded-lg bg-muted/50 flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -959,6 +1165,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                         </Dialog>
                       </div>
                     </TabsContent>
+                    </div>
                   </Tabs>
                 </CardContent>
 
@@ -969,6 +1176,10 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                     Save Draft
                   </Button>
                   <div className="flex gap-2">
+                    <Button variant="outline" className="gap-2" onClick={handleScanProfile} disabled={isSaving || scanningProfile}>
+                      <Sparkles className="w-4 h-4" />
+                      {scanningProfile ? "Scanning…" : "Profile updates"}
+                    </Button>
                     <Button className="gap-2" onClick={handleComplete} disabled={isSaving}>
                       <CheckCircle2 className="w-4 h-4" />
                       {isSaving ? "Saving…" : "Complete Consultation"}
@@ -978,10 +1189,140 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
               </Card>
             </div>
           </div>
+
+          {/* Previous visits & AI briefing — full width below the workspace */}
+          <Card className="mt-6">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-primary" />
+                  Previous Visits &amp; History
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={handleSummarizeHistory}
+                  disabled={summarizingHistory || (current.history.length === 0 && current.conditions.length === 0 && current.medications.length === 0)}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {summarizingHistory ? "Summarizing…" : historySummary ? "Regenerate briefing" : "AI Briefing"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid lg:grid-cols-2 gap-5">
+                {/* Visit timeline */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Timeline</p>
+                  {current.history.length > 0 ? (
+                    <div className="space-y-2">
+                      {current.history.map((h) => (
+                        <div key={h.id} className="flex items-center gap-3 rounded-lg border border-border p-2.5">
+                          <span className="text-xs font-medium text-foreground w-20 shrink-0">{new Date(h.date).toLocaleDateString("de-DE")}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{statusLabel(h.status as AppointmentStatusDb)}</Badge>
+                          <span className="text-sm text-muted-foreground truncate flex-1">{h.diagnosis || h.reason || "—"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No previous appointments.</p>
+                  )}
+                </div>
+
+                {/* AI briefing */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-primary" /> AI Briefing
+                  </p>
+                  {historySummary ? (
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm leading-relaxed [&_p]:my-1.5 [&_ul]:my-1.5 [&_li]:my-0.5 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2">
+                      <ReportContent text={historySummary} />
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border p-6 h-full min-h-[8rem] flex flex-col items-center justify-center text-center gap-2">
+                      <Sparkles className="w-5 h-5 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Generate a quick AI summary of this patient&apos;s history and previous visits.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
+
+      {/* Feature 15 — doctor confirms which AI-detected profile changes to send. */}
+      <Dialog open={proposalDialogOpen} onOpenChange={setProposalDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" /> Suggested profile updates
+            </DialogTitle>
+            <DialogDescription>
+              Detected in this consultation. Confirm what to send to the patient — they decide whether to
+              apply it to their profile.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+            {profileSuggestions.map((s, i) => {
+              const on = selectedSuggestions.has(i)
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() =>
+                    setSelectedSuggestions((prev) => {
+                      const n = new Set(prev)
+                      if (n.has(i)) n.delete(i)
+                      else n.add(i)
+                      return n
+                    })
+                  }
+                  className={`w-full text-left flex items-start gap-3 rounded-lg border p-3 transition-colors ${on ? "border-primary bg-primary/5" : "border-border hover:bg-accent/40"}`}
+                >
+                  <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground"}`}>
+                    {on && <Check className="w-3 h-3" />}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">
+                      {s.label}: <span className="text-primary">{s.proposedValue}</span>
+                    </p>
+                    {s.currentValue && <p className="text-xs text-muted-foreground">Current: {s.currentValue}</p>}
+                    {s.reason && <p className="text-xs text-muted-foreground italic">{s.reason}</p>}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setProposalDialogOpen(false)}>Skip</Button>
+            <Button onClick={confirmProfileProposals} disabled={selectedSuggestions.size === 0}>
+              Send{selectedSuggestions.size > 0 ? ` (${selectedSuggestions.size})` : ""} to patient
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
+}
+
+function ageFromDob(dob: string): number {
+  const b = new Date(dob)
+  const now = new Date()
+  let a = now.getFullYear() - b.getFullYear()
+  if (now.getMonth() < b.getMonth() || (now.getMonth() === b.getMonth() && now.getDate() < b.getDate())) a--
+  return a
+}
+
+function formatVitalsSummary(v: QueueEntry["vitals"]): string | null {
+  if (!v) return null
+  const parts: string[] = []
+  if (v.systolic != null && v.diastolic != null) parts.push(`BP ${v.systolic}/${v.diastolic} mmHg`)
+  if (v.heart_rate != null) parts.push(`HR ${v.heart_rate} bpm`)
+  if (v.temperature_c != null) parts.push(`${v.temperature_c} °C`)
+  if (v.weight_kg != null) parts.push(`${v.weight_kg} kg`)
+  return parts.length ? parts.join(", ") : null
 }
 
 /** Editable vitals tile. */

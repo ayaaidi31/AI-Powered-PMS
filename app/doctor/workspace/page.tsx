@@ -8,7 +8,7 @@
  */
 import {
   getCurrentDoctor, getAppointmentsByDoctor, getPatientById,
-  getPatientClinical, getReportsByPatient,
+  getPatientClinical, getReportsByPatient, getAppointmentsByPatient,
   getReportByAppointment, getAppointmentBillingItems, getVitalsByAppointment,
 } from "@/lib/queries"
 import { patientName } from "@/lib/display"
@@ -40,14 +40,29 @@ export default async function DoctorWorkspace() {
   // Assemble each queue entry with its clinical context (queue is small).
   const queue: QueueEntry[] = await Promise.all(
     queueAppointments.map(async (a) => {
-      const [patient, clinical, reports, existingReport, existingItems, apptVitals] = await Promise.all([
+      const [patient, clinical, reports, existingReport, existingItems, apptVitals, allAppointments] = await Promise.all([
         getPatientById(a.patient_id),
         getPatientClinical(a.patient_id),
         getReportsByPatient(a.patient_id),
         getReportByAppointment(a.id),
         getAppointmentBillingItems(a.id),
         getVitalsByAppointment(a.id),
+        getAppointmentsByPatient(a.patient_id),
       ])
+      // Past appointments (most recent first), each tagged with its report's
+      // diagnosis where one exists — the doctor's "previous visits" timeline.
+      const reportByAppt = new Map(reports.map((r) => [r.appointment_id, r]))
+      const history = allAppointments
+        .filter((h) => h.id !== a.id)
+        .sort((x, y) => +new Date(y.starts_at) - +new Date(x.starts_at))
+        .slice(0, 8)
+        .map((h) => ({
+          id: h.id,
+          date: h.starts_at,
+          reason: h.reason,
+          status: h.status,
+          diagnosis: reportByAppt.get(h.id)?.diagnosis ?? null,
+        }))
       return {
         appointmentId: a.id,
         patientId: a.patient_id,
@@ -57,6 +72,12 @@ export default async function DoctorWorkspace() {
         reason: a.reason,
         insuranceType: patient?.insurance_type ?? "gkv",
         birthDate: patient?.birth_date ?? null,
+        email: patient?.email ?? null,
+        phone: patient?.phone ?? null,
+        street: patient?.street ?? null,
+        city: patient?.city ?? null,
+        postalCode: patient?.postal_code ?? null,
+        country: patient?.country ?? null,
         allergies: clinical.allergies.map((x) => x.substance),
         conditions: clinical.conditions.map((x) => x.label ?? x.icd10_code),
         medications: clinical.medications.map((m) => ({ name: m.name, dosage: m.dosage })),
@@ -68,6 +89,7 @@ export default async function DoctorWorkspace() {
           weight_kg: clinical.currentVitals.weight_kg,
         },
         recentReports: reports.slice(0, 3).map((r) => ({ id: r.id, diagnosis: r.diagnosis })),
+        history,
         // This appointment's own recorded vitals (so the editable card reloads).
         existingVitals: apptVitals && {
           systolic: apptVitals.systolic,

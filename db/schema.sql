@@ -203,7 +203,28 @@ CREATE TABLE IF NOT EXISTS invoices (
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 
+-- AI-proposed patient-profile updates (Feature 15 / AI-Module-15). After a
+-- consultation is confirmed, the AI scans the report for profile data that
+-- changed (a new allergy, a new address …). The doctor confirms a proposal,
+-- stored here as 'pending_patient'; the patient then accepts (the field is
+-- applied to their profile) or rejects it.
+CREATE TABLE IF NOT EXISTS profile_change_proposals (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id     uuid NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  appointment_id uuid REFERENCES appointments(id) ON DELETE SET NULL,
+  field          text NOT NULL,   -- phone|email|street|city|postal_code|country|allergy|condition
+  label          text NOT NULL,   -- human-readable summary of the change
+  current_value  text,
+  proposed_value text NOT NULL,
+  reason         text,
+  status         text NOT NULL DEFAULT 'pending_patient'
+                 CHECK (status IN ('pending_patient','accepted','rejected')),
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  resolved_at    timestamptz
+);
+
 -- ──────────────────────────────── INDEXES ─────────────────────────────────
+CREATE INDEX IF NOT EXISTS idx_profile_proposals_patient   ON profile_change_proposals(patient_id, status);
 CREATE INDEX IF NOT EXISTS idx_patient_allergies_patient   ON patient_allergies(patient_id);
 CREATE INDEX IF NOT EXISTS idx_patient_conditions_patient  ON patient_conditions(patient_id);
 CREATE INDEX IF NOT EXISTS idx_medications_patient         ON medications(patient_id);
