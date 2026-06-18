@@ -22,6 +22,7 @@
 import { sql } from "@/lib/db"
 import { mistralChat, isLlmConfigured } from "@/lib/llm/mistral"
 import { getEbmCode, searchEbmCodes } from "@/lib/codes/ebm"
+import { CLINIC, CLINIC_FAQ } from "@/lib/clinic"
 import { ok, fail, type ActionResult } from "./types"
 import type { CodeSuggestion } from "./codes"
 
@@ -236,6 +237,79 @@ export async function extractVitals(text: string): Promise<ActionResult<Extracte
     })
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Vitals extraction failed.")
+  }
+}
+
+/**
+ * Patient-facing simplification (Feature 14, REQ-SIMP-01): rewrite a medical
+ * report in plain, reassuring language a layperson can understand. Strictly
+ * explanatory — it must not invent findings, diagnoses or recommendations.
+ */
+export async function simplifyReport(reportText: string): Promise<ActionResult<{ summary: string }>> {
+  if (!isLlmConfigured()) {
+    return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
+  }
+  if (!reportText.trim()) return fail("There is no report content to simplify.")
+  try {
+    const summary = await mistralChat(
+      [
+        {
+          role: "system",
+          content:
+            "Erkläre den folgenden Arztbericht in einfacher, leicht verständlicher Sprache für eine Patientin oder " +
+            "einen Patienten ohne medizinische Vorkenntnisse. Vermeide Fachbegriffe oder erkläre sie kurz in Klammern. " +
+            "Schreibe ruhig und sachlich. Gliedere kurz: was wurde festgestellt, was bedeutet das, und wie geht es weiter. " +
+            "Erfinde nichts: erkläre ausschließlich, was im Bericht steht; gib keine neuen Diagnosen oder " +
+            "Behandlungsempfehlungen. Sprich die Person direkt an („Sie“).",
+        },
+        { role: "user", content: reportText.slice(0, 6000) },
+      ],
+      { temperature: 0.3 },
+    )
+    return ok({ summary: summary.trim() })
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Simplification failed.")
+  }
+}
+
+/**
+ * Clinic FAQ assistant (Feature 13, REQ-FAQ-01): answers patient questions about
+ * the practice grounded STRICTLY in CLINIC_FAQ. Never gives medical advice and
+ * defers to reception for anything outside the facts. Conversational — recent
+ * turns are passed back as context.
+ */
+export async function askClinicFaq(
+  question: string,
+  history: { role: "user" | "assistant"; content: string }[] = [],
+): Promise<ActionResult<{ answer: string }>> {
+  if (!isLlmConfigured()) {
+    return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
+  }
+  if (!question.trim()) return fail("Please type a question.")
+  try {
+    const recent = history.slice(-6).map((m) => ({ role: m.role, content: m.content.slice(0, 1000) }))
+    const answer = await mistralChat(
+      [
+        {
+          role: "system",
+          content:
+            `You are the friendly virtual assistant of ${CLINIC.name}. Answer patient questions about the clinic ` +
+            `using ONLY the FACTS below.\n` +
+            `Rules:\n` +
+            `- If the answer is not in the facts, say you don't have that information and suggest contacting reception (${CLINIC.line2}).\n` +
+            `- Never give medical advice, diagnoses, or interpret symptoms or results. For medical concerns, advise contacting the practice; in an emergency, tell them to call 112.\n` +
+            `- Be concise, warm and clear. Use short sentences and bullet points where helpful.\n` +
+            `- Reply in the SAME language as the patient's latest message.\n\n` +
+            `FACTS:\n${CLINIC_FAQ}`,
+        },
+        ...recent,
+        { role: "user", content: question.slice(0, 1000) },
+      ],
+      { temperature: 0.2 },
+    )
+    return ok({ answer: answer.trim() })
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "The assistant is unavailable right now.")
   }
 }
 

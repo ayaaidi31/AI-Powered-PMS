@@ -240,6 +240,25 @@ export async function checkInAppointment(
 }
 
 /**
+ * Undo a check-in (REQ-REC-02 reversal): revert a `waiting` appointment back to
+ * `scheduled` and clear the check-in time. Only allowed while still `waiting` —
+ * once the consultation has started (`in_progress`) it can no longer be undone.
+ */
+export async function revertCheckIn(appointmentId: string): Promise<ActionResult<AppointmentRow>> {
+  const updated = await query<AppointmentRow>(
+    `UPDATE appointments SET status = 'scheduled', check_in_at = NULL
+     WHERE id = $1 AND status = 'waiting'
+     RETURNING *`,
+    [appointmentId],
+  )
+  if (updated.rowCount === 0) {
+    return fail("Check-in can only be undone while the patient is still waiting (not yet with the doctor).")
+  }
+  revalidateSchedules()
+  return ok(updated.rows[0])
+}
+
+/**
  * General status transition used by the clinical workflow (e.g. the Doctor
  * moving a patient from `waiting` to `in_progress` to `completed`).
  */

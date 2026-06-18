@@ -2,10 +2,11 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { HeartPulse, LayoutDashboard, Calendar, FileText, User, LogOut, Menu, X, MessageCircle } from "lucide-react"
+import { HeartPulse, LayoutDashboard, Calendar, FileText, User, LogOut, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { useState } from "react"
+import { FaqChat } from "@/components/faq-chat"
 
 const navItems = [
   { label: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
@@ -18,7 +19,6 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname()
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [isChatOpen, setIsChatOpen] = useState(false)
 
   const handleLogout = () => {
     sessionStorage.removeItem("userRole")
@@ -129,49 +129,8 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
         {children}
       </main>
 
-      {/* Floating Chat Widget */}
-      <div className="fixed bottom-6 right-6 z-50">
-        {isChatOpen && (
-          <div className="mb-4 bg-card border border-border rounded-lg shadow-lg w-80 overflow-hidden">
-            <div className="p-4 border-b border-border bg-muted">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-foreground flex items-center gap-2">
-                  <MessageCircle className="w-4 h-4" />
-                  Clinic FAQ Bot
-                </h3>
-                <Button variant="ghost" size="icon" onClick={() => setIsChatOpen(false)}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Ask about parking, hours, directions, etc.
-              </p>
-            </div>
-            <div className="p-4 h-48 bg-background flex items-center justify-center">
-              <p className="text-muted-foreground text-sm text-center">
-                Chat interface placeholder - Ready for AI integration
-              </p>
-            </div>
-            <div className="p-3 bg-card border-t border-border">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Type your question..."
-                  className="flex-1 px-3 py-2 text-sm border border-input rounded-md bg-background"
-                />
-                <Button size="sm">Send</Button>
-              </div>
-            </div>
-          </div>
-        )}
-        <Button
-          onClick={() => setIsChatOpen(!isChatOpen)}
-          className="rounded-full w-14 h-14 shadow-lg"
-        >
-          <MessageCircle className="w-6 h-6" />
-          <span className="sr-only">Open FAQ Chatbot</span>
-        </Button>
-      </div>
+      {/* Clinic FAQ assistant (Mistral-backed) */}
+      <FaqChat />
     </div>
   )
 }

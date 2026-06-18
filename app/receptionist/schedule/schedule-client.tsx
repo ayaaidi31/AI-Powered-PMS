@@ -37,7 +37,7 @@ import { toast } from "sonner"
 import type { DoctorRow, PatientRow } from "@/lib/seed-data"
 import { patientName, doctorName, statusColor } from "@/lib/display"
 import type { AppointmentWithNames } from "@/lib/queries"
-import { bookAppointment, checkInAppointment, cancelAppointment } from "@/lib/actions/appointments"
+import { bookAppointment, checkInAppointment, cancelAppointment, rescheduleAppointment, revertCheckIn } from "@/lib/actions/appointments"
 
 const TIME_SLOTS = [
   "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
@@ -60,12 +60,16 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
   const [isBookingOpen, setIsBookingOpen] = useState(false)
   const [form, setForm] = useState({ patientId: "", doctorId: "", date: "", time: "", reason: "" })
   const [cancelTarget, setCancelTarget] = useState<AppointmentWithNames | null>(null)
+  const [checkInTarget, setCheckInTarget] = useState<AppointmentWithNames | null>(null)
+  const [rescheduleTarget, setRescheduleTarget] = useState<AppointmentWithNames | null>(null)
+  const [rescheduleForm, setRescheduleForm] = useState({ date: "", time: "" })
 
   function getWeekDates() {
     const dates: Date[] = []
     const start = new Date(currentDate)
-    start.setDate(currentDate.getDate() - currentDate.getDay() + 1) // Monday
-    for (let i = 0; i < 5; i++) {
+    // Monday of the current week (correct even on Sunday, where getDay() === 0).
+    start.setDate(currentDate.getDate() - ((currentDate.getDay() + 6) % 7))
+    for (let i = 0; i < 7; i++) {
       const d = new Date(start)
       d.setDate(start.getDate() + i)
       dates.push(d)
@@ -114,16 +118,62 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
     })
   }
 
-  function handleCheckIn(id: string) {
+  function confirmCheckIn() {
+    if (!checkInTarget) return
     startTransition(async () => {
-      const result = await checkInAppointment(id)
+      const result = await checkInAppointment(checkInTarget.id)
       if (result.status === "ok") {
         toast.success("Patient checked in.")
         router.refresh()
       } else {
         toast.error(result.message)
       }
+      setCheckInTarget(null)
     })
+  }
+
+  function undoCheckIn(apt: AppointmentWithNames) {
+    startTransition(async () => {
+      const result = await revertCheckIn(apt.id)
+      if (result.status === "ok") {
+        toast.success("Check-in undone — appointment back to scheduled.")
+        router.refresh()
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
+  function openReschedule(apt: AppointmentWithNames) {
+    const d = new Date(apt.starts_at)
+    setRescheduleForm({ date: toYMD(d), time: d.toTimeString().slice(0, 5) })
+    setRescheduleTarget(apt)
+  }
+
+  function confirmReschedule() {
+    if (!rescheduleTarget) return
+    if (!rescheduleForm.date || !rescheduleForm.time) { toast.error("Pick a date and time."); return }
+    const startsAt = new Date(`${rescheduleForm.date}T${rescheduleForm.time}:00`).toISOString()
+    startTransition(async () => {
+      const result = await rescheduleAppointment(rescheduleTarget.id, startsAt, { reasonForChange: "Rescheduled by reception" })
+      if (result.status === "ok") {
+        toast.success("Appointment rescheduled.")
+        router.refresh()
+        setRescheduleTarget(null)
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
+  // Local YYYY-MM-DD (avoids the UTC shift toISOString would introduce).
+  const toYMD = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+
+  /** Open the booking dialog pre-filled with the clicked calendar slot. */
+  function openBookingAt(date: Date, time: string) {
+    setForm({ patientId: "", doctorId: "", date: toYMD(date), time, reason: "" })
+    setIsBookingOpen(true)
   }
 
   function confirmCancel() {
@@ -150,7 +200,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
         </div>
         <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2" onClick={() => setForm({ patientId: "", doctorId: "", date: "", time: "", reason: "" })}>
               <Plus className="w-4 h-4" />
               Book Appointment
             </Button>
@@ -158,7 +208,11 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Book New Appointment</DialogTitle>
-              <DialogDescription>Schedule a new appointment for a patient</DialogDescription>
+              <DialogDescription>
+                {form.date && form.time
+                  ? `New appointment on ${new Date(`${form.date}T00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at ${form.time}`
+                  : "Schedule a new appointment for a patient"}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-4">
               <div className="space-y-2">
@@ -247,8 +301,8 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
       {/* Schedule Grid */}
       <Card>
         <CardContent className="pt-4 overflow-x-auto">
-          <div className="min-w-[800px]">
-            <div className="grid grid-cols-6 gap-2 mb-4">
+          <div className="min-w-[1100px]">
+            <div className="grid grid-cols-8 gap-2 mb-4">
               <div className="w-16" />
               {weekDates.map((date, idx) => (
                 <div key={idx} className={`text-center p-3 rounded-lg ${isToday(date) ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
@@ -259,32 +313,59 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
             </div>
 
             <div className="space-y-1">
-              {TIME_SLOTS.filter((_, i) => i % 2 === 0).map((time) => (
-                <div key={time} className="grid grid-cols-6 gap-2">
+              {TIME_SLOTS.map((time) => (
+                <div key={time} className="grid grid-cols-8 gap-2">
                   <div className="w-16 text-sm text-muted-foreground text-right pr-2 py-3">{time}</div>
                   {weekDates.map((date, dayIdx) => {
                     const slotAppointments = appointmentsForSlot(date, time)
                     return (
-                      <div key={dayIdx} className="min-h-[60px] border border-border rounded-lg p-1 bg-card hover:bg-accent/30 transition-colors">
+                      <div
+                        key={dayIdx}
+                        onClick={() => openBookingAt(date, time)}
+                        title={`Book on ${date.toLocaleDateString("en-US", { weekday: "short", day: "numeric" })} at ${time}`}
+                        className="group relative min-h-[60px] border border-border rounded-lg p-1 bg-card hover:bg-accent/40 hover:border-primary/40 transition-colors cursor-pointer"
+                      >
+                        {slotAppointments.length === 0 && (
+                          <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Plus className="w-4 h-4" />
+                          </span>
+                        )}
                         {slotAppointments.map((apt) => (
                           <DropdownMenu key={apt.id}>
                             <DropdownMenuTrigger asChild>
-                              <button className={`w-full text-left p-2 rounded text-xs text-white ${statusColor(apt.status)} hover:opacity-90`}>
+                              <button onClick={(e) => e.stopPropagation()} className={`w-full text-left p-2 rounded text-xs text-white ${statusColor(apt.status)} hover:opacity-90`}>
                                 <p className="font-medium truncate">{apt.patient_name}</p>
                                 <p className="opacity-80 truncate">{apt.doctor_name}</p>
                               </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                              <DropdownMenuItem onClick={() => handleCheckIn(apt.id)} disabled={isPending}>
-                                Check In Patient
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => setCancelTarget(apt)}
-                                disabled={isPending}
-                              >
-                                Cancel
-                              </DropdownMenuItem>
+                            <DropdownMenuContent onClick={(e) => e.stopPropagation()}>
+                              {apt.status === "scheduled" && (
+                                <DropdownMenuItem onClick={() => setCheckInTarget(apt)} disabled={isPending}>
+                                  Check In Patient
+                                </DropdownMenuItem>
+                              )}
+                              {apt.status === "waiting" && (
+                                <DropdownMenuItem onClick={() => undoCheckIn(apt)} disabled={isPending}>
+                                  Undo Check-in
+                                </DropdownMenuItem>
+                              )}
+                              {(apt.status === "scheduled" || apt.status === "waiting") && (
+                                <DropdownMenuItem onClick={() => openReschedule(apt)} disabled={isPending}>
+                                  Reschedule
+                                </DropdownMenuItem>
+                              )}
+                              {apt.status === "scheduled" && (
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => setCancelTarget(apt)}
+                                  disabled={isPending}
+                                >
+                                  Cancel
+                                </DropdownMenuItem>
+                              )}
+                              {apt.status !== "scheduled" && apt.status !== "waiting" && (
+                                <DropdownMenuItem disabled>No actions available</DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         ))}
@@ -333,6 +414,54 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Check-in confirmation (avoid accidental check-ins). */}
+      <AlertDialog open={checkInTarget !== null} onOpenChange={(o) => !o && setCheckInTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Check in this patient?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {checkInTarget && `${checkInTarget.patient_name} will be marked as checked in (waiting) for ${checkInTarget.doctor_name} and will appear in the doctor's workspace.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCheckIn} disabled={isPending}>Check In</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reschedule — change the date/time of an appointment. */}
+      <Dialog open={rescheduleTarget !== null} onOpenChange={(o) => !o && setRescheduleTarget(null)}>
+        <DialogContent className="max-w-md">
+          {rescheduleTarget && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Reschedule appointment</DialogTitle>
+                <DialogDescription>{rescheduleTarget.patient_name} · {rescheduleTarget.doctor_name}</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>New date</Label>
+                    <Input type="date" value={rescheduleForm.date} onChange={(e) => setRescheduleForm({ ...rescheduleForm, date: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>New time</Label>
+                    <Select value={rescheduleForm.time} onValueChange={(v) => setRescheduleForm({ ...rescheduleForm, time: v })}>
+                      <SelectTrigger><SelectValue placeholder="Time" /></SelectTrigger>
+                      <SelectContent>{TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <Button className="w-full" onClick={confirmReschedule} disabled={isPending}>
+                  {isPending ? "Saving…" : "Save new time"}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

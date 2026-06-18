@@ -13,6 +13,7 @@
  */
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import {
   Search, Filter, UserPlus, MoreHorizontal, Phone, Mail, Calendar, Shield, Pencil, Trash2,
 } from "lucide-react"
@@ -191,6 +192,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
                   key={patient.id}
                   className="flex items-center gap-4 p-4 rounded-lg border border-border bg-card hover:bg-accent/50 transition-colors"
                 >
+                  <Link href={`/receptionist/patients/${patient.id}`} className="flex items-center gap-4 flex-1 min-w-0">
                   <Avatar className="w-12 h-12">
                     <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                       {initials(patient.first_name, patient.last_name)}
@@ -229,6 +231,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
                       </span>
                     </div>
                   </div>
+                  </Link>
 
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" className="hidden sm:flex gap-1" onClick={() => openEdit(patient)}>

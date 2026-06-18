@@ -1,12 +1,12 @@
 "use client"
 
 /**
- * Report detail view (Feature 14). Displays the official medical report. The
+ * Report detail view. Displays the official medical report. The
  * "Simplify with AI" control is a placeholder for the on-demand simplification
  * module (REQ-SIMP-01), which is not yet wired to a model — selecting it shows
  * a notice rather than fabricating a simplified text.
  */
-import { useRef } from "react"
+import { useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { FileText, Calendar, User, Sparkles, ArrowLeft, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { ReportDocument } from "@/components/report-document"
+import { ReportContent } from "@/components/report-content"
 import { printReport } from "@/lib/print-element"
+import { simplifyReport } from "@/lib/actions/ai"
 import type { PrescriptionItem } from "@/lib/seed-data"
 
 interface ReportDetail {
@@ -33,6 +35,22 @@ interface ReportDetail {
 
 export function RecordDetailClient({ report }: { report: ReportDetail | null }) {
   const reportRef = useRef<HTMLDivElement>(null)
+  const [simplified, setSimplified] = useState<string | null>(null)
+  const [isSimplifying, startSimplify] = useTransition()
+
+  function handleSimplify() {
+    if (!report) return
+    const text = report.formatted_report || report.raw_notes || report.diagnosis || ""
+    startSimplify(async () => {
+      const result = await simplifyReport(text)
+      if (result.status === "ok") {
+        setSimplified(result.data.summary)
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
   if (!report) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -84,24 +102,34 @@ export function RecordDetailClient({ report }: { report: ReportDetail | null }) 
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center shrink-0">
                   <Sparkles className="w-5 h-5 text-primary" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-foreground">AI Report Simplification</h3>
                   <p className="text-sm text-muted-foreground">
-                    Plain-language summaries (Feature 14) are coming soon.
+                    Get a plain-language explanation of your report.
                   </p>
                 </div>
               </div>
-              <Button
-                className="gap-2"
-                onClick={() => toast.info("AI simplification is not yet connected.")}
-              >
+              <Button className="gap-2 shrink-0" onClick={handleSimplify} disabled={isSimplifying}>
                 <Sparkles className="w-4 h-4" />
-                Simplify with AI
+                {isSimplifying ? "Simplifying…" : simplified ? "Regenerate" : "Simplify with AI"}
               </Button>
             </div>
+
+            {simplified && (
+              <div className="mt-4 rounded-xl border border-primary/20 bg-background p-5 sm:p-6 shadow-sm">
+                <div className="[&_h4]:text-primary [&_h4]:text-base [&_h4]:mt-5 [&_h4:first-child]:mt-0 [&_p]:text-[15px] [&_p]:text-foreground/90 leading-relaxed">
+                  <ReportContent text={simplified} />
+                </div>
+                <p className="mt-5 pt-3 border-t border-border text-xs text-muted-foreground flex items-start gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  AI-generated plain-language summary — for understanding only, not a medical document.
+                  Please rely on the official report and your doctor&apos;s advice.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
