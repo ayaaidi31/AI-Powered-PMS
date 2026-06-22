@@ -37,7 +37,8 @@ import { toast } from "sonner"
 import type { DoctorRow, PatientRow } from "@/lib/seed-data"
 import { patientName, doctorName, statusColor } from "@/lib/display"
 import type { AppointmentWithNames } from "@/lib/queries"
-import { bookAppointment, checkInAppointment, cancelAppointment, rescheduleAppointment, revertCheckIn, reassignAppointment } from "@/lib/actions/appointments"
+import { bookAppointment, checkInAppointment, cancelAppointment, rescheduleAppointment, revertCheckIn, reassignAppointment, deleteAppointment } from "@/lib/actions/appointments"
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
 
 const TIME_SLOTS = [
   "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
@@ -65,6 +66,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
   const [rescheduleForm, setRescheduleForm] = useState({ date: "", time: "" })
   const [reassignTarget, setReassignTarget] = useState<AppointmentWithNames | null>(null)
   const [reassignDoctorId, setReassignDoctorId] = useState("")
+  const [deleteApptTarget, setDeleteApptTarget] = useState<AppointmentWithNames | null>(null)
 
   function getWeekDates() {
     const dates: Date[] = []
@@ -140,6 +142,21 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
       if (result.status === "ok") {
         toast.success("Check-in undone — appointment back to scheduled.")
         router.refresh()
+      } else {
+        toast.error(result.message)
+      }
+    })
+  }
+
+  function confirmDeleteAppt(reason: string) {
+    if (!deleteApptTarget) return
+    const t = deleteApptTarget
+    startTransition(async () => {
+      const result = await deleteAppointment(t.id, reason)
+      if (result.status === "ok") {
+        toast.success("Appointment deleted.")
+        router.refresh()
+        setDeleteApptTarget(null)
       } else {
         toast.error(result.message)
       }
@@ -391,7 +408,16 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                                   Cancel
                                 </DropdownMenuItem>
                               )}
-                              {apt.status !== "scheduled" && apt.status !== "waiting" && (
+                              {(apt.status === "scheduled" || apt.status === "cancelled" || apt.status === "no_show") && (
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onClick={() => setDeleteApptTarget(apt)}
+                                  disabled={isPending}
+                                >
+                                  Delete (mistake)
+                                </DropdownMenuItem>
+                              )}
+                              {apt.status !== "scheduled" && apt.status !== "waiting" && apt.status !== "cancelled" && apt.status !== "no_show" && (
                                 <DropdownMenuItem disabled>No actions available</DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
@@ -524,6 +550,20 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
           )}
         </DialogContent>
       </Dialog>
+
+      {deleteApptTarget && (
+        <ConfirmDeleteDialog
+          open
+          onOpenChange={(o) => !o && setDeleteApptTarget(null)}
+          title="Delete appointment"
+          description={`${deleteApptTarget.patient_name} · ${new Date(deleteApptTarget.starts_at).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}`}
+          consequence="Only for mistaken entries (wrong patient, duplicate, never happened). The appointment is permanently removed. Appointments with a report or invoice cannot be deleted — cancel them instead."
+          confirmPhrase="DELETE"
+          confirmLabel="Delete permanently"
+          pending={isPending}
+          onConfirm={confirmDeleteAppt}
+        />
+      )}
     </div>
   )
 }

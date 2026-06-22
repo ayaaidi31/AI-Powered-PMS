@@ -18,6 +18,7 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { query, withTransaction } from "@/lib/db"
+import { getCurrentDoctor } from "@/lib/queries"
 import type { MedicalReportRow, ReportBillingCodeRow } from "@/lib/seed-data"
 import { ok, fail, type ActionResult } from "./types"
 
@@ -173,4 +174,46 @@ export async function setReportBillingCodes(
 
   revalidatePath("/doctor")
   return ok(saved)
+}
+
+/**
+ * Remove a report (two-tier, German retention law).
+ *  - A draft / pending-approval report is not yet part of the legal record, so
+ *    it is HARD-deleted (with its attached billing codes) — for genuine mistakes.
+ *  - An approved report is legally retained: it is RETRACTED (soft-deleted with a
+ *    reason and hidden from lists), never erased.
+ * Only the authoring doctor may do this (role-appropriate).
+ */
+export async function deleteReport(
+  reportId: string,
+  reason: string,
+): Promise<ActionResult<{ action: "deleted" | "retracted" }>> {
+  if (!reason.trim()) return fail("A reason is required.")
+  const doctor = await getCurrentDoctor()
+  if (!doctor) return fail("Only a doctor can remove a report.")
+
+  const res = await query<MedicalReportRow>(`SELECT * FROM medical_reports WHERE id = $1`, [reportId])
+  const report = res.rows[0]
+  if (!report) return fail("Report not found.")
+  if (report.deleted_at) return fail("This report has already been retracted.")
+  if (report.doctor_id !== doctor.id) return fail("You can only remove reports you authored.")
+
+  if (report.status === "approved") {
+    // Legally retained → retract (soft), keep the row + codes.
+    await query(
+      `UPDATE medical_reports SET deleted_at = now(), deletion_reason = $2 WHERE id = $1`,
+      [reportId, reason.trim()],
+    )
+    revalidatePath("/doctor")
+    revalidatePath("/patient/records")
+    return ok({ action: "retracted" })
+  }
+
+  // Draft / pending → hard delete (codes first to satisfy ON DELETE RESTRICT).
+  await withTransaction(async (client) => {
+    await client.query(`DELETE FROM report_billing_codes WHERE report_id = $1`, [reportId])
+    await client.query(`DELETE FROM medical_reports WHERE id = $1`, [reportId])
+  })
+  revalidatePath("/doctor")
+  return ok({ action: "deleted" })
 }

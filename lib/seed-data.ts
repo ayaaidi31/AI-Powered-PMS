@@ -343,6 +343,8 @@ export interface MedicalReportRow {
   approved_at: string | null
   version: number
   created_at: string
+  deleted_at?: string | null
+  deletion_reason?: string | null
 }
 export const medical_reports: MedicalReportRow[] = [
   { id: "rep-1", appointment_id: "apt-3", patient_id: "pat-3", doctor_id: "doc-1", diagnosis: "Type 2 Diabetes Mellitus - Well Controlled", raw_notes: "Routine diabetes follow-up. Improved energy. HbA1c 6.8%.", formatted_report: "Assessment: T2DM well controlled. Plan: continue Metformin 500mg BID; follow-up 3 months.", internal_notes: null, status: "approved", approved_at: "2024-01-15T09:00:00Z", version: 1, created_at: "2024-01-15T08:45:00Z" },

@@ -22,6 +22,7 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { query, withTransaction } from "@/lib/db"
+import { getCurrentReceptionist } from "@/lib/queries"
 import type { AppointmentRow } from "@/lib/seed-data"
 import { ok, fail, conflict, type ActionResult } from "./types"
 
@@ -319,4 +320,39 @@ export async function setAppointmentStatus(
   if (updated.rowCount === 0) return fail("Appointment not found.")
   revalidateSchedules()
   return ok(updated.rows[0])
+}
+
+/**
+ * Hard-delete a MISTAKEN appointment (wrong entry, never happened). Only allowed
+ * when it carries no clinical or billing record — otherwise it must be cancelled
+ * (soft), not erased. Receptionist-only (role-appropriate).
+ */
+export async function deleteAppointment(
+  appointmentId: string,
+  reason: string,
+): Promise<ActionResult<null>> {
+  if (!reason.trim()) return fail("A reason is required.")
+  const receptionist = await getCurrentReceptionist()
+  if (!receptionist) return fail("Only reception can delete an appointment.")
+
+  const cur = await query<AppointmentRow>(`SELECT * FROM appointments WHERE id = $1`, [appointmentId])
+  const appt = cur.rows[0]
+  if (!appt) return fail("Appointment not found.")
+
+  // Only "never really happened" states qualify; in-progress/waiting/completed don't.
+  if (!["scheduled", "cancelled", "no_show"].includes(appt.status)) {
+    return fail("This appointment has clinical activity and can't be deleted. Cancel it instead.")
+  }
+  const hasReport = await query(`SELECT 1 FROM medical_reports WHERE appointment_id = $1 LIMIT 1`, [appointmentId])
+  if (hasReport.rowCount && hasReport.rowCount > 0) {
+    return fail("This appointment has a report attached and can't be deleted (legally retained).")
+  }
+  const hasInvoice = await query(`SELECT 1 FROM invoices WHERE appointment_id = $1 AND status <> 'storno' LIMIT 1`, [appointmentId])
+  if (hasInvoice.rowCount && hasInvoice.rowCount > 0) {
+    return fail("This appointment has an invoice and can't be deleted.")
+  }
+
+  await query(`DELETE FROM appointments WHERE id = $1`, [appointmentId])
+  revalidateSchedules()
+  return ok(null)
 }

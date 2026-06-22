@@ -8,7 +8,7 @@
 import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { FileText, Search, Calendar, User, CheckCircle2, Save, Printer } from "lucide-react"
+import { FileText, Search, Calendar, User, CheckCircle2, Save, Printer, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -26,7 +26,8 @@ import type { ReportListRow } from "@/lib/queries"
 import type { MedicalReportRow } from "@/lib/seed-data"
 import { ReportDocument } from "@/components/report-document"
 import { printReport } from "@/lib/print-element"
-import { updateReport, approveReport } from "@/lib/actions/reports"
+import { updateReport, approveReport, deleteReport } from "@/lib/actions/reports"
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
 
 const STATUS: Record<MedicalReportRow["status"], { label: string; variant: "default" | "secondary" | "outline" }> = {
   draft: { label: "Draft", variant: "outline" },
@@ -45,6 +46,7 @@ export function DoctorReportsClient({
   const [statusFilter, setStatusFilter] = useState<string>("all")
 
   const [viewing, setViewing] = useState<ReportListRow | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ReportListRow | null>(null)
   const reportRef = useRef<HTMLDivElement>(null)
   const [diagnosis, setDiagnosis] = useState("")
   const [report, setReport] = useState("")
@@ -79,6 +81,21 @@ export function DoctorReportsClient({
         router.refresh()
       } else {
         toast.error(res.message)
+      }
+    })
+  }
+
+  function confirmDelete(reason: string) {
+    if (!deleteTarget) return
+    const t = deleteTarget
+    startTransition(async () => {
+      const r = await deleteReport(t.id, reason)
+      if (r.status === "ok") {
+        toast.success(r.data.action === "retracted" ? "Report retracted (kept for retention)." : "Report deleted.")
+        setDeleteTarget(null)
+        router.refresh()
+      } else {
+        toast.error(r.message)
       }
     })
   }
@@ -163,6 +180,15 @@ export function DoctorReportsClient({
                   >
                     <User className="w-3.5 h-3.5" />{r.patient_name}
                   </Link>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => setDeleteTarget(r)}
+                    title={r.status === "approved" ? "Retract report" : "Delete report"}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
               ))}
             </div>
@@ -235,6 +261,25 @@ export function DoctorReportsClient({
           )}
         </DialogContent>
       </Dialog>
+
+      {deleteTarget && (
+        <ConfirmDeleteDialog
+          open
+          onOpenChange={(o) => !o && setDeleteTarget(null)}
+          title={deleteTarget.status === "approved" ? "Retract report" : "Delete report"}
+          description={`${deleteTarget.patient_name} · ${fmtDate(deleteTarget.starts_at)}`}
+          consequence={
+            deleteTarget.status === "approved"
+              ? "This is a finalized report. By law it is retained: it will be kept in the records but hidden and marked as retracted — not erased."
+              : "This draft report and its attached billing codes will be permanently deleted. This cannot be undone."
+          }
+          confirmPhrase={deleteTarget.status === "approved" ? "RETRACT" : "DELETE"}
+          confirmLabel={deleteTarget.status === "approved" ? "Retract report" : "Delete permanently"}
+          destructive={deleteTarget.status !== "approved"}
+          pending={isPending}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   )
 }

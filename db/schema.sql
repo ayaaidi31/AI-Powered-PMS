@@ -236,6 +236,11 @@ CREATE INDEX IF NOT EXISTS idx_appointments_doctor_time    ON appointments(docto
 CREATE INDEX IF NOT EXISTS idx_appointments_patient        ON appointments(patient_id);
 CREATE INDEX IF NOT EXISTS idx_appointments_status         ON appointments(status);
 CREATE INDEX IF NOT EXISTS idx_medical_reports_patient     ON medical_reports(patient_id);
+-- Retraction (soft-delete) of finalized reports — legally retained, hidden from
+-- lists. Draft reports are instead hard-deleted. (Feature: report removal.)
+ALTER TABLE medical_reports ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE medical_reports ADD COLUMN IF NOT EXISTS deletion_reason text;
+
 CREATE INDEX IF NOT EXISTS idx_medical_reports_appointment ON medical_reports(appointment_id);
 CREATE INDEX IF NOT EXISTS idx_report_billing_codes_report ON report_billing_codes(report_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_patient            ON invoices(patient_id);

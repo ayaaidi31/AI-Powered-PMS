@@ -156,7 +156,7 @@ export async function getAppointmentById(id: string) {
 // ────────────────────────── Medical reports ────────────────────────
 export function getReportsByPatient(patientId: string) {
   return sql<MedicalReportRow>`
-    SELECT * FROM medical_reports WHERE patient_id = ${patientId}
+    SELECT * FROM medical_reports WHERE patient_id = ${patientId} AND deleted_at IS NULL
     ORDER BY created_at DESC`
 }
 
@@ -169,7 +169,7 @@ export async function getReportById(id: string) {
 /** The (single) report belonging to an appointment — for resuming a draft. */
 export async function getReportByAppointment(appointmentId: string) {
   const rows = await sql<MedicalReportRow>`
-    SELECT * FROM medical_reports WHERE appointment_id = ${appointmentId}
+    SELECT * FROM medical_reports WHERE appointment_id = ${appointmentId} AND deleted_at IS NULL
     ORDER BY created_at DESC LIMIT 1`
   return rows[0] ?? null
 }
@@ -353,7 +353,7 @@ export function getReportsByDoctor(doctorId: string) {
     FROM medical_reports mr
     JOIN patients p     ON p.id = mr.patient_id
     JOIN appointments a ON a.id = mr.appointment_id
-    WHERE mr.doctor_id = ${doctorId}
+    WHERE mr.doctor_id = ${doctorId} AND mr.deleted_at IS NULL
     ORDER BY mr.created_at DESC`
 }
 
