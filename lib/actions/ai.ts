@@ -26,6 +26,10 @@ import { CLINIC, CLINIC_FAQ } from "@/lib/clinic"
 import { retrieveChunks } from "@/lib/rag/retrieve"
 import { getReportsByPatient, getVitalsByPatient } from "@/lib/queries"
 import type { VitalsRow } from "@/lib/seed-data"
+import type { UrgencyLevel } from "@/lib/recovery-plan"
+export type { UrgencyLevel } from "@/lib/recovery-plan"
+import { matchAllergyAlerts, type SafetyAlert } from "@/lib/clinical-safety"
+export type { SafetyAlert } from "@/lib/clinical-safety"
 import { ok, fail, type ActionResult } from "./types"
 import type { CodeSuggestion } from "./codes"
 
@@ -295,7 +299,6 @@ export async function simplifyReport(reportText: string): Promise<ActionResult<{
  * Falls back to "medium" without the model. Pure classification — the actual
  * reassignment stays deterministic.
  */
-export type UrgencyLevel = "high" | "medium" | "routine"
 export async function classifyUrgency(
   items: { id: string; reason: string | null }[],
 ): Promise<Record<string, UrgencyLevel>> {
@@ -593,12 +596,6 @@ export async function askDecisionSupport(input: {
  *      and duplicate therapy, instructed to flag ONLY clear, well-established
  *      issues supported by the data (empty list when unsure).
  */
-export interface SafetyAlert {
-  severity: "high" | "medium" | "low"
-  category: "allergy" | "interaction" | "contraindication" | "dosing" | "duplicate" | "other"
-  medication: string | null
-  message: string
-}
 export async function checkPrescriptionSafety(input: {
   allergies: string[]
   conditions: string[]
@@ -610,21 +607,7 @@ export async function checkPrescriptionSafety(input: {
   if (rx.length === 0 && !input.diagnosis?.trim()) return ok({ alerts: [] })
 
   // 1) Deterministic allergy name-match (guaranteed, no model).
-  const deterministic: SafetyAlert[] = []
-  for (const p of rx) {
-    const medL = p.medication.toLowerCase()
-    for (const a of input.allergies) {
-      const aL = a.toLowerCase().trim()
-      if (aL.length > 2 && medL.length > 2 && (medL.includes(aL) || aL.includes(medL))) {
-        deterministic.push({
-          severity: "high",
-          category: "allergy",
-          medication: p.medication,
-          message: `Documented allergy to ${a} — "${p.medication}" appears to match. Verify before prescribing.`,
-        })
-      }
-    }
-  }
+  const deterministic: SafetyAlert[] = matchAllergyAlerts(input.allergies, rx)
 
   if (!isLlmConfigured()) return ok({ alerts: deterministic })
 

@@ -11,16 +11,9 @@ import { z } from "zod"
 import { query } from "@/lib/db"
 import { getAppointments, getBillingWorklist, getDoctors } from "@/lib/queries"
 import { doctorName } from "@/lib/display"
+import { receptionistSchema } from "@/lib/validation"
 import type { ReceptionistRow } from "@/lib/seed-data"
 import { ok, fail, type ActionResult } from "./types"
-
-const receptionistSchema = z.object({
-  first_name: z.string().trim().min(1, "First name is required."),
-  last_name: z.string().trim().min(1, "Last name is required."),
-  email: z.string().trim().email("Invalid email address."),
-  phone: z.string().trim().optional().or(z.literal("")),
-  department: z.string().trim().optional().or(z.literal("")),
-})
 
 export async function updateReceptionist(
   id: string,

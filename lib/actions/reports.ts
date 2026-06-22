@@ -19,6 +19,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { query, withTransaction } from "@/lib/db"
 import { getCurrentDoctor } from "@/lib/queries"
+import { reportRemovalMode } from "@/lib/rules"
 import type { MedicalReportRow, ReportBillingCodeRow } from "@/lib/seed-data"
 import { ok, fail, type ActionResult } from "./types"
 
@@ -198,7 +199,7 @@ export async function deleteReport(
   if (report.deleted_at) return fail("This report has already been retracted.")
   if (report.doctor_id !== doctor.id) return fail("You can only remove reports you authored.")
 
-  if (report.status === "approved") {
+  if (reportRemovalMode(report.status) === "retract") {
     // Legally retained → retract (soft), keep the row + codes.
     await query(
       `UPDATE medical_reports SET deleted_at = now(), deletion_reason = $2 WHERE id = $1`,

@@ -19,30 +19,13 @@
  * `deleted_at`, preserving the record for the statutory retention period.
  */
 import { revalidatePath } from "next/cache"
-import { z } from "zod"
 import { sql, query } from "@/lib/db"
+import { patientSchema, orNull, type PatientInput } from "@/lib/validation"
+import { isPortalEligible } from "@/lib/rules"
 import type { PatientRow } from "@/lib/seed-data"
 import { ok, fail, conflict, type ActionResult } from "./types"
 
-const patientSchema = z.object({
-  first_name: z.string().trim().min(1, "First name is required."),
-  last_name: z.string().trim().min(1, "Last name is required."),
-  birth_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be YYYY-MM-DD."),
-  insurance_type: z.enum(["gkv", "pkv", "selbstzahler"]),
-  email: z.string().trim().email("Invalid email address.").optional().or(z.literal("")),
-  phone: z.string().trim().optional().or(z.literal("")),
-  versicherten_id: z.string().trim().optional().or(z.literal("")),
-  guardian_contact: z.string().trim().optional().or(z.literal("")),
-  street: z.string().trim().optional().or(z.literal("")),
-  city: z.string().trim().optional().or(z.literal("")),
-  postal_code: z.string().trim().optional().or(z.literal("")),
-  country: z.string().trim().optional().or(z.literal("")),
-})
-
-export type PatientInput = z.infer<typeof patientSchema>
-
-/** Normalise an optional form field: empty string becomes NULL in the database. */
-const orNull = (value?: string) => (value && value.trim() !== "" ? value.trim() : null)
+export type { PatientInput } from "@/lib/validation"
 
 /**
  * Register a new patient.
@@ -83,7 +66,7 @@ export async function registerPatient(
   // A patient is portal-eligible only if a digital contact channel was provided.
   const email = orNull(data.email)
   const phone = orNull(data.phone)
-  const isDigitalActive = Boolean(email || phone)
+  const isDigitalActive = isPortalEligible(email, phone)
 
   const rows = await sql<PatientRow>`
     INSERT INTO patients (

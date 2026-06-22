@@ -1,7 +1,5 @@
 import React from "react"
-
-// Drop dangling emphasis markers so unmatched bold markers never render literally.
-const stripMarkers = (s: string) => s.replace(/\*\*|__/g, "")
+import { stripMarkers, parseRow, isSeparatorRow } from "@/lib/markdown"
 
 /** Render inline emphasis: **bold** / __bold__ and *italic*. */
 function renderInline(text: string, keyBase: string): React.ReactNode[] {
@@ -20,18 +18,6 @@ function renderInline(text: string, keyBase: string): React.ReactNode[] {
   }
   if (last < text.length) nodes.push(stripMarkers(text.slice(last)))
   return nodes
-}
-
-/** Split a Markdown table row "| a | b |" into trimmed cells. */
-function parseRow(line: string): string[] {
-  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim())
-}
-
-/** True for a Markdown table separator row like "|---|:--:|". */
-function isSeparatorRow(line: string): boolean {
-  if (!line.includes("-")) return false
-  const cells = parseRow(line)
-  return cells.length > 0 && cells.every((c) => /^:?-{1,}:?$/.test(c))
 }
 
 /**

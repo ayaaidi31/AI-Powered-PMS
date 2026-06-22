@@ -23,6 +23,7 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { query, withTransaction } from "@/lib/db"
 import { getCurrentReceptionist } from "@/lib/queries"
+import { cancellationCheck, appointmentDeletable, checkInDecision } from "@/lib/rules"
 import type { AppointmentRow } from "@/lib/seed-data"
 import { ok, fail, conflict, type ActionResult } from "./types"
 
@@ -215,23 +216,13 @@ export async function cancelAppointment(
   if (current.rowCount === 0) return fail("Appointment not found.")
   const appt = current.rows[0]
 
-  if (appt.status === "cancelled") return fail("This appointment is already cancelled.")
-
-  // An appointment can only be cancelled while still `scheduled`. Once the
-  // patient has checked in (waiting) or progressed further, cancellation is no
-  // longer permitted — the visit must be closed via its status instead.
-  if (appt.status !== "scheduled") {
-    return fail(
-      "This appointment can no longer be cancelled — the patient has already checked in.",
-    )
-  }
-
-  if (options.enforce24hWindow) {
-    const hoursUntil = (new Date(appt.starts_at).getTime() - Date.now()) / 3_600_000
-    if (hoursUntil < 24) {
-      return fail("Appointments within 24 hours must be cancelled by calling the clinic directly.")
-    }
-  }
+  const check = cancellationCheck(
+    appt.status,
+    new Date(appt.starts_at).getTime(),
+    Boolean(options.enforce24hWindow),
+    Date.now(),
+  )
+  if (!check.ok) return fail(check.reason!)
 
   const updated = await query<AppointmentRow>(
     `UPDATE appointments
@@ -264,18 +255,13 @@ export async function checkInAppointment(
   if (current.rowCount === 0) return fail("Appointment not found.")
   const appt = current.rows[0]
 
-  if (appt.status === "waiting") return ok(appt) // already checked in
-
-  if (appt.status !== "scheduled") {
-    return fail(`Cannot check in an appointment with status "${appt.status}".`)
-  }
-
-  if (options.enforceSameDay) {
-    const apptDay = new Date(appt.starts_at).toDateString()
-    if (apptDay !== new Date().toDateString()) {
-      return fail("Check-in is only available on the day of your appointment.")
-    }
-  }
+  const decision = checkInDecision({
+    status: appt.status,
+    isAppointmentToday: new Date(appt.starts_at).toDateString() === new Date().toDateString(),
+    enforceSameDay: Boolean(options.enforceSameDay),
+  })
+  if (decision.action === "already") return ok(appt) // idempotent (REQ-PAT-05)
+  if (decision.action === "blocked") return fail(decision.reason)
 
   const updated = await query<AppointmentRow>(
     `UPDATE appointments SET status = 'waiting', check_in_at = now()
@@ -339,18 +325,14 @@ export async function deleteAppointment(
   const appt = cur.rows[0]
   if (!appt) return fail("Appointment not found.")
 
-  // Only "never really happened" states qualify; in-progress/waiting/completed don't.
-  if (!["scheduled", "cancelled", "no_show"].includes(appt.status)) {
-    return fail("This appointment has clinical activity and can't be deleted. Cancel it instead.")
-  }
-  const hasReport = await query(`SELECT 1 FROM medical_reports WHERE appointment_id = $1 LIMIT 1`, [appointmentId])
-  if (hasReport.rowCount && hasReport.rowCount > 0) {
-    return fail("This appointment has a report attached and can't be deleted (legally retained).")
-  }
-  const hasInvoice = await query(`SELECT 1 FROM invoices WHERE appointment_id = $1 AND status <> 'storno' LIMIT 1`, [appointmentId])
-  if (hasInvoice.rowCount && hasInvoice.rowCount > 0) {
-    return fail("This appointment has an invoice and can't be deleted.")
-  }
+  const reportRows = await query(`SELECT 1 FROM medical_reports WHERE appointment_id = $1 LIMIT 1`, [appointmentId])
+  const invoiceRows = await query(`SELECT 1 FROM invoices WHERE appointment_id = $1 AND status <> 'storno' LIMIT 1`, [appointmentId])
+  const check = appointmentDeletable({
+    status: appt.status,
+    hasReport: Boolean(reportRows.rowCount && reportRows.rowCount > 0),
+    hasInvoice: Boolean(invoiceRows.rowCount && invoiceRows.rowCount > 0),
+  })
+  if (!check.ok) return fail(check.reason!)
 
   await query(`DELETE FROM appointments WHERE id = $1`, [appointmentId])
   revalidateSchedules()

@@ -14,18 +14,8 @@ import { z } from "zod"
 import { query } from "@/lib/db"
 import { getCurrentDoctor, getAppointmentsByDoctor, getReportsByDoctor } from "@/lib/queries"
 import type { DoctorRow } from "@/lib/seed-data"
+import { doctorSchema } from "@/lib/validation"
 import { ok, fail, type ActionResult } from "./types"
-
-const doctorSchema = z.object({
-  first_name: z.string().trim().min(1, "First name is required."),
-  last_name: z.string().trim().min(1, "Last name is required."),
-  email: z.string().trim().email("Invalid email address."),
-  phone: z.string().trim().optional().or(z.literal("")),
-  specialization: z.string().trim().optional().or(z.literal("")),
-  department: z.string().trim().optional().or(z.literal("")),
-  max_daily_capacity: z.coerce.number().int().min(1, "Capacity must be at least 1.").max(200),
-  is_available: z.boolean(),
-})
 
 export async function updateDoctor(
   id: string,

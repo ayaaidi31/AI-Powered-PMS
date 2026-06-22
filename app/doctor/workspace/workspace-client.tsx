@@ -43,6 +43,7 @@ import { searchBillingCodes, type CodeSuggestion } from "@/lib/actions/codes"
 import { generateConsultationReport, suggestBillingCodes, extractPrescriptions, extractVitals, summarizePatientHistory, checkPrescriptionSafety, suggestProfileUpdates, type SafetyAlert, type ProfileUpdateSuggestion } from "@/lib/actions/ai"
 import { createProfileProposals } from "@/lib/actions/profile-proposals"
 import { saveAppointmentVitals } from "@/lib/actions/vitals"
+import { codePriceCents as billingPriceCents } from "@/lib/billing-values"
 import { ReportContent } from "@/components/report-content"
 import { DecisionSupport, type DsMessage } from "@/components/decision-support"
 import { RecordsQA, type RecordsQAMessage } from "@/components/records-qa"
@@ -64,20 +65,8 @@ interface SelectedCode {
   multiplier: number | null // GOÄ Steigerungssatz; null for EBM
 }
 
-// Point values for converting a code's points into a monetary figure.
-const GOAE_PUNKTWERT_CENTS = 5.82873 // GOÄ Punktwert (fixed since 1996)
-const EBM_ORIENTIERUNGSWERT_CENTS = 11.9339 // EBM 2024 Orientierungswert (KV settlement value)
-
-/**
- * Monetary value of a code: GOÄ = base × Steigerungssatz (the patient invoice
- * amount); EBM = points × Orientierungswert (the value settled by the KV — GKV
- * patients are not invoiced, so this is informational for the doctor).
- */
-function codePriceCents(c: SelectedCode): number | null {
-  if (c.points == null) return null
-  if (c.catalog === "GOAE") return Math.round(c.points * GOAE_PUNKTWERT_CENTS * (c.multiplier ?? 1))
-  return Math.round(c.points * EBM_ORIENTIERUNGSWERT_CENTS)
-}
+// Monetary conversion lives in lib/billing-values.ts (pure + unit-tested).
+const codePriceCents = (c: SelectedCode) => billingPriceCents(c)
 
 export interface QueueEntry {
   appointmentId: string
