@@ -70,7 +70,7 @@ export default function LoginPage() {
             AI-assisted documentation, and seamless patient communication.
           </p>
 
-          <div className="grid grid-cols-2 gap-6 pt-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-8">
             <Feature icon={<Stethoscope className="w-5 h-5 text-primary-foreground" />} title="For Doctors" text="AI-assisted report generation and billing" />
             <Feature icon={<Users className="w-5 h-5 text-primary-foreground" />} title="For Patients" text="Easy scheduling and mobile check-in" />
             <Feature icon={<Activity className="w-5 h-5 text-primary-foreground" />} title="For Staff" text="Efficient front desk management" />

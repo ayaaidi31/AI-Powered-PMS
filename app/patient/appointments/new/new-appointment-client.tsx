@@ -220,7 +220,7 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
                 {selectedDate && (
                   <div>
                     <Label className="mb-3 block">Available Times</Label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {timeSlots.map((time) => (
                         <button
                           key={time}

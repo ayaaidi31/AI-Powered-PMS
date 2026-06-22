@@ -284,7 +284,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="First Name" error={fieldErrors.first_name}>
                 <Input value={form.first_name} onChange={(e) => set("first_name", e.target.value)} />
               </Field>
@@ -292,7 +292,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
                 <Input value={form.last_name} onChange={(e) => set("last_name", e.target.value)} />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Date of Birth" error={fieldErrors.birth_date}>
                 <Input type="date" value={form.birth_date} onChange={(e) => set("birth_date", e.target.value)} />
               </Field>
@@ -307,7 +307,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
                 </Select>
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Email (optional)" error={fieldErrors.email}>
                 <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
               </Field>
@@ -323,7 +323,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
             <Field label="Street">
               <Input value={form.street} onChange={(e) => set("street", e.target.value)} />
             </Field>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <Field label="Postal Code">
                 <Input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value)} />
               </Field>

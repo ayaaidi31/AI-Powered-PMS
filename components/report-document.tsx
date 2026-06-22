@@ -28,7 +28,7 @@ export const ReportDocument = React.forwardRef<HTMLDivElement, Props>(function R
   doctorName, doctorSpecialization, doctorLanr, patientName, patientDob, date, diagnosis, body, rawNotes, prescriptions,
 }, ref) {
   return (
-    <div ref={ref} className="report-print bg-white text-neutral-900 font-serif rounded-lg border border-neutral-200 shadow-sm p-5 sm:p-8 lg:p-10 leading-relaxed">
+    <div ref={ref} className="report-print w-full min-w-0 max-w-full bg-white text-neutral-900 font-serif rounded-lg border border-neutral-200 shadow-sm p-5 sm:p-8 lg:p-10 leading-relaxed">
       {/* Letterhead */}
       <div className="flex items-start justify-between gap-4 border-b-2 border-neutral-800 pb-4">
         <div>
