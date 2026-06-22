@@ -155,7 +155,7 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">{children}</main>
       </div>
     </div>
   )

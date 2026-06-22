@@ -63,10 +63,10 @@ export default async function ReceptionistDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="relative overflow-hidden">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div><p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Today</p><p className="text-3xl font-bold text-foreground mt-1">{stats.total}</p></div>
-              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center"><Calendar className="w-6 h-6 text-primary" /></div>
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0"><p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Today</p><p className="text-2xl sm:text-3xl font-bold text-foreground mt-1">{stats.total}</p></div>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-2xl bg-primary/10 flex items-center justify-center"><Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-primary" /></div>
             </div>
             <div className="mt-3 flex items-center gap-2"><Progress value={completionRate} className="h-1.5 flex-1" /><span className="text-xs text-muted-foreground">{completionRate}%</span></div>
           </CardContent>
@@ -77,7 +77,7 @@ export default async function ReceptionistDashboard() {
         <DashStat label="No Shows" value={stats.noShow} sub="Missed appointments" border="border-red-200 bg-red-50/30" text="text-red-700" icon={<AlertCircle className="w-6 h-6 text-red-600" />} iconBg="bg-red-100" />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 min-w-0 lg:grid-cols-3 gap-6">
         {/* Searchable schedule (client island) */}
         <div className="lg:col-span-2">
           <DashboardSchedule appointments={today} />
@@ -141,10 +141,10 @@ export default async function ReceptionistDashboard() {
 function DashStat({ label, value, sub, border, text, icon, iconBg }: { label: string; value: number; sub: string; border: string; text: string; icon: React.ReactNode; iconBg: string }) {
   return (
     <Card className={border}>
-      <CardContent className="p-5">
-        <div className="flex items-center justify-between">
-          <div><p className={`text-xs font-medium uppercase tracking-wide ${text}`}>{label}</p><p className="text-3xl font-bold text-foreground mt-1">{value}</p></div>
-          <div className={`w-12 h-12 rounded-2xl ${iconBg} flex items-center justify-center`}>{icon}</div>
+      <CardContent className="p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0"><p className={`text-xs font-medium uppercase tracking-wide ${text}`}>{label}</p><p className="text-2xl sm:text-3xl font-bold text-foreground mt-1">{value}</p></div>
+          <div className={`w-10 h-10 sm:w-12 sm:h-12 shrink-0 rounded-2xl ${iconBg} flex items-center justify-center`}>{icon}</div>
         </div>
         <p className={`text-xs mt-3 ${text}`}>{sub}</p>
       </CardContent>

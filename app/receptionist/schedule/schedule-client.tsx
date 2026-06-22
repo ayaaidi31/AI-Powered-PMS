@@ -15,7 +15,7 @@
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
-  ChevronLeft, ChevronRight, Plus, Filter,
+  ChevronLeft, ChevronRight, Plus, Filter, MoreVertical,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -35,7 +35,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import type { DoctorRow, PatientRow } from "@/lib/seed-data"
-import { patientName, doctorName, statusColor } from "@/lib/display"
+import { patientName, doctorName, statusColor, statusLabel } from "@/lib/display"
 import type { AppointmentWithNames } from "@/lib/queries"
 import { bookAppointment, checkInAppointment, cancelAppointment, rescheduleAppointment, revertCheckIn, reassignAppointment, deleteAppointment } from "@/lib/actions/appointments"
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
@@ -67,6 +67,8 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
   const [reassignTarget, setReassignTarget] = useState<AppointmentWithNames | null>(null)
   const [reassignDoctorId, setReassignDoctorId] = useState("")
   const [deleteApptTarget, setDeleteApptTarget] = useState<AppointmentWithNames | null>(null)
+  // Mobile agenda: the single day shown in the phone (list) view.
+  const [mobileDate, setMobileDate] = useState(new Date())
 
   function getWeekDates() {
     const dates: Date[] = []
@@ -96,8 +98,24 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
     const d = new Date(currentDate)
     d.setDate(currentDate.getDate() + days)
     setCurrentDate(d)
+    const m = new Date(mobileDate)
+    m.setDate(mobileDate.getDate() + days)
+    setMobileDate(m)
   }
+  const goToday = () => { setCurrentDate(new Date()); setMobileDate(new Date()) }
   const isToday = (date: Date) => date.toDateString() === new Date().toDateString()
+  const isSameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+
+  /** All appointments for one day (mobile agenda), sorted by start time. */
+  function appointmentsForDay(date: Date) {
+    return appointments
+      .filter((apt) => {
+        const d = new Date(apt.starts_at)
+        const matchesDoctor = selectedDoctor === "all" || apt.doctor_id === selectedDoctor
+        return d.toDateString() === date.toDateString() && matchesDoctor && apt.status !== "cancelled"
+      })
+      .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime())
+  }
 
   function handleBook() {
     if (!form.patientId || !form.doctorId || !form.date || !form.time) {
@@ -230,8 +248,36 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
     })
   }
 
+  // Shared action menu for an appointment (used by both the week grid and the
+  // mobile agenda) so the two views stay behaviourally identical.
+  const apptMenuItems = (apt: AppointmentWithNames) => (
+    <>
+      {apt.status === "scheduled" && (
+        <DropdownMenuItem onClick={() => setCheckInTarget(apt)} disabled={isPending}>Check In Patient</DropdownMenuItem>
+      )}
+      {apt.status === "waiting" && (
+        <DropdownMenuItem onClick={() => undoCheckIn(apt)} disabled={isPending}>Undo Check-in</DropdownMenuItem>
+      )}
+      {(apt.status === "scheduled" || apt.status === "waiting") && (
+        <DropdownMenuItem onClick={() => openReschedule(apt)} disabled={isPending}>Reschedule</DropdownMenuItem>
+      )}
+      {(apt.status === "scheduled" || apt.status === "waiting") && (
+        <DropdownMenuItem onClick={() => openReassign(apt)} disabled={isPending}>Reassign doctor</DropdownMenuItem>
+      )}
+      {apt.status === "scheduled" && (
+        <DropdownMenuItem className="text-destructive" onClick={() => setCancelTarget(apt)} disabled={isPending}>Cancel</DropdownMenuItem>
+      )}
+      {(apt.status === "scheduled" || apt.status === "cancelled" || apt.status === "no_show") && (
+        <DropdownMenuItem className="text-destructive" onClick={() => setDeleteApptTarget(apt)} disabled={isPending}>Delete (mistake)</DropdownMenuItem>
+      )}
+      {apt.status !== "scheduled" && apt.status !== "waiting" && apt.status !== "cancelled" && apt.status !== "no_show" && (
+        <DropdownMenuItem disabled>No actions available</DropdownMenuItem>
+      )}
+    </>
+  )
+
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
@@ -277,7 +323,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Date</Label>
                   <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
@@ -311,23 +357,23 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
       {/* Controls */}
       <Card className="mb-6">
         <CardContent className="pt-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon" onClick={() => shiftWeek(-7)}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              <Button variant="outline" onClick={() => setCurrentDate(new Date())}>Today</Button>
+              <Button variant="outline" onClick={goToday}>Today</Button>
               <Button variant="outline" size="icon" onClick={() => shiftWeek(7)}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
-              <span className="ml-2 font-medium text-foreground">
+              <span className="ml-2 font-medium text-foreground text-sm sm:text-base">
                 {weekDates[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {weekDates[4].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-muted-foreground" />
+              <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
               <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
-                <SelectTrigger className="w-[200px]"><SelectValue placeholder="Filter by doctor" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by doctor" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Doctors</SelectItem>
                   {doctors.map((d) => <SelectItem key={d.id} value={d.id}>{doctorName(d)}</SelectItem>)}
@@ -338,8 +384,8 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
         </CardContent>
       </Card>
 
-      {/* Schedule Grid */}
-      <Card>
+      {/* Schedule Grid — full week (desktop / tablet) */}
+      <Card className="hidden lg:block">
         <CardContent className="pt-4 overflow-x-auto">
           <div className="min-w-[1100px]">
             <div className="grid grid-cols-8 gap-2 mb-4">
@@ -379,47 +425,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent onClick={(e) => e.stopPropagation()}>
-                              {apt.status === "scheduled" && (
-                                <DropdownMenuItem onClick={() => setCheckInTarget(apt)} disabled={isPending}>
-                                  Check In Patient
-                                </DropdownMenuItem>
-                              )}
-                              {apt.status === "waiting" && (
-                                <DropdownMenuItem onClick={() => undoCheckIn(apt)} disabled={isPending}>
-                                  Undo Check-in
-                                </DropdownMenuItem>
-                              )}
-                              {(apt.status === "scheduled" || apt.status === "waiting") && (
-                                <DropdownMenuItem onClick={() => openReschedule(apt)} disabled={isPending}>
-                                  Reschedule
-                                </DropdownMenuItem>
-                              )}
-                              {(apt.status === "scheduled" || apt.status === "waiting") && (
-                                <DropdownMenuItem onClick={() => openReassign(apt)} disabled={isPending}>
-                                  Reassign doctor
-                                </DropdownMenuItem>
-                              )}
-                              {apt.status === "scheduled" && (
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => setCancelTarget(apt)}
-                                  disabled={isPending}
-                                >
-                                  Cancel
-                                </DropdownMenuItem>
-                              )}
-                              {(apt.status === "scheduled" || apt.status === "cancelled" || apt.status === "no_show") && (
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => setDeleteApptTarget(apt)}
-                                  disabled={isPending}
-                                >
-                                  Delete (mistake)
-                                </DropdownMenuItem>
-                              )}
-                              {apt.status !== "scheduled" && apt.status !== "waiting" && apt.status !== "cancelled" && apt.status !== "no_show" && (
-                                <DropdownMenuItem disabled>No actions available</DropdownMenuItem>
-                              )}
+                              {apptMenuItems(apt)}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         ))}
@@ -430,6 +436,78 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
               ))}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Mobile agenda — one day as a list (phones) */}
+      <Card className="lg:hidden">
+        <CardContent className="pt-4">
+          {/* Day picker */}
+          <div className="grid grid-cols-7 gap-1 mb-4">
+            {weekDates.map((date, idx) => {
+              const selected = isSameDay(date, mobileDate)
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setMobileDate(date)}
+                  className={`flex flex-col items-center py-2 rounded-lg border text-center transition-colors ${
+                    selected
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : isToday(date)
+                        ? "border-primary/50 text-foreground"
+                        : "border-border text-muted-foreground hover:bg-accent"
+                  }`}
+                >
+                  <span className="text-[10px] uppercase">{date.toLocaleDateString("en-US", { weekday: "narrow" })}</span>
+                  <span className="text-sm font-bold">{date.getDate()}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Selected day heading + quick book */}
+          <div className="flex items-center justify-between mb-3">
+            <p className="font-semibold text-foreground">
+              {mobileDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+            </p>
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => openBookingAt(mobileDate, "09:00")}>
+              <Plus className="w-3.5 h-3.5" /> Book
+            </Button>
+          </div>
+
+          {/* Appointment list for the selected day */}
+          {(() => {
+            const dayAppts = appointmentsForDay(mobileDate)
+            if (dayAppts.length === 0) {
+              return <p className="text-sm text-muted-foreground py-10 text-center">No appointments this day.</p>
+            }
+            return (
+              <div className="space-y-2">
+                {dayAppts.map((apt) => (
+                  <div key={apt.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
+                    <div className="text-center shrink-0 w-12">
+                      <p className="text-sm font-bold text-foreground">{new Date(apt.starts_at).toTimeString().slice(0, 5)}</p>
+                      <p className="text-[10px] text-muted-foreground">{apt.duration_min}m</p>
+                    </div>
+                    <span className={`w-1.5 self-stretch rounded-full ${statusColor(apt.status)}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground truncate">{apt.patient_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{apt.doctor_name}</p>
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{statusLabel(apt.status)}</span>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="shrink-0">
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">{apptMenuItems(apt)}</DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
         </CardContent>
       </Card>
 
@@ -495,7 +573,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                 <DialogDescription>{rescheduleTarget.patient_name} · {rescheduleTarget.doctor_name}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 pt-2">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>New date</Label>
                     <Input type="date" value={rescheduleForm.date} onChange={(e) => setRescheduleForm({ ...rescheduleForm, date: e.target.value })} />

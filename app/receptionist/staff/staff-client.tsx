@@ -150,7 +150,7 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
         </div>
 
         {/* Crisis overview */}
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 min-w-0 sm:grid-cols-2 gap-4">
           <Card>
             <CardContent className="pt-6">
               <p className="text-xs text-muted-foreground">Impacted appointments</p>
@@ -173,7 +173,7 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
           </Card>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6 items-start">
+        <div className="grid grid-cols-1 min-w-0 lg:grid-cols-3 gap-6 items-start">
           {/* Plan table */}
           <Card className="lg:col-span-2">
             <CardHeader className="pb-3">

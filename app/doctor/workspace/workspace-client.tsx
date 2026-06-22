@@ -139,7 +139,10 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
   const [generatingReport, setGeneratingReport] = useState(false)
   const [suggestingCodes, setSuggestingCodes] = useState(false)
-  const [historySummary, setHistorySummary] = useState<string | null>(null)
+  // AI history briefing per appointment (persisted like the AI conversations),
+  // so it survives leaving/returning to the workspace until the consultation is
+  // completed — the doctor only regenerates it on demand.
+  const [historySummaries, setHistorySummaries] = useState<Record<string, string>>({})
   const [summarizingHistory, setSummarizingHistory] = useState(false)
   // On wide screens, cap the consultation pane to the sidebar's height so long
   // tabs scroll inside it instead of growing the card and pushing cards below.
@@ -196,6 +199,17 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     if (!current) return
     setRecordsConversations((prev) => ({ ...prev, [current.appointmentId]: updater(prev[current.appointmentId] ?? []) }))
   }
+  // The current appointment's AI history briefing (null until generated).
+  const historySummary = current ? historySummaries[current.appointmentId] ?? null : null
+  const setHistorySummary = (value: string | null) => {
+    if (!current) return
+    setHistorySummaries((prev) => {
+      const next = { ...prev }
+      if (value == null) delete next[current.appointmentId]
+      else next[current.appointmentId] = value
+      return next
+    })
+  }
 
   // Load the displayed appointment's consultation. Loads ONLY when the shown
   // appointment changes (patient switch / first mount) — a server refresh
@@ -224,7 +238,6 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     setBillingCodes(e.existingCodes ?? [])
     setCodeQuery("")
     setCodeResults([])
-    setHistorySummary(null)
     setSafetyAlerts([])
     setDismissedAlerts(new Set())
   }, [queue, currentIndex])
@@ -234,6 +247,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
   // completed (which clears that appointment's threads).
   const DS_KEY = "pms.workspace.ds"
   const RECORDS_KEY = "pms.workspace.records"
+  const HISTORY_KEY = "pms.workspace.history"
   const convHydrated = useRef(false)
   useEffect(() => {
     try {
@@ -241,6 +255,8 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       if (ds) setDsConversations(JSON.parse(ds))
       const rec = localStorage.getItem(RECORDS_KEY)
       if (rec) setRecordsConversations(JSON.parse(rec))
+      const hist = localStorage.getItem(HISTORY_KEY)
+      if (hist) setHistorySummaries(JSON.parse(hist))
     } catch { /* ignore corrupt/unavailable storage */ }
     // Enable saving only AFTER this mount's effects settle, so the save effects
     // (which run with stale empty state) can't overwrite the just-loaded data.
@@ -255,6 +271,10 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     if (!convHydrated.current) return
     try { localStorage.setItem(RECORDS_KEY, JSON.stringify(recordsConversations)) } catch { /* ignore */ }
   }, [recordsConversations])
+  useEffect(() => {
+    if (!convHydrated.current) return
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(historySummaries)) } catch { /* ignore */ }
+  }, [historySummaries])
 
   // Real-time safety check: when the prescriptions or working diagnosis change,
   // review them against the patient's allergies/conditions/medication (debounced).
@@ -385,7 +405,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     await saveCodes(rid)
     await saveVitals()
     await setAppointmentStatus(current.appointmentId, "completed")
-    // The consultation is confirmed — discard its decision-support conversation.
+    // The consultation is confirmed — discard its AI conversations and briefing.
     const finishedId = current.appointmentId
     setDsConversations((prev) => {
       const next = { ...prev }
@@ -393,6 +413,11 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       return next
     })
     setRecordsConversations((prev) => {
+      const next = { ...prev }
+      delete next[finishedId]
+      return next
+    })
+    setHistorySummaries((prev) => {
       const next = { ...prev }
       delete next[finishedId]
       return next
@@ -888,7 +913,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                       Consultation
                       {reportId && <Badge variant="secondary" className="text-xs">Draft saved</Badge>}
                     </CardTitle>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button variant={isRecording ? "destructive" : "outline"} size="sm" onClick={() => setIsRecording(!isRecording)} className="gap-2">
                         {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                         {isRecording ? "Stop" : "Record"}
@@ -980,11 +1005,17 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                 <CardContent className="flex-1 min-h-0 flex flex-col">
                   <Tabs defaultValue="notes" className="flex-1 min-h-0 flex flex-col">
                     <TabsList className="grid w-full grid-cols-5 shrink-0">
-                      <TabsTrigger value="notes">Notes</TabsTrigger>
-                      <TabsTrigger value="diagnosis">Diagnosis</TabsTrigger>
-                      <TabsTrigger value="report">AI Report</TabsTrigger>
-                      <TabsTrigger value="prescription">Prescription</TabsTrigger>
-                      <TabsTrigger value="billing">Billing</TabsTrigger>
+                      <TabsTrigger value="notes" className="text-xs sm:text-sm px-1 sm:px-3">Notes</TabsTrigger>
+                      <TabsTrigger value="diagnosis" className="text-xs sm:text-sm px-1 sm:px-3">
+                        <span className="sm:hidden">Diag</span><span className="hidden sm:inline">Diagnosis</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="report" className="text-xs sm:text-sm px-1 sm:px-3">
+                        <span className="sm:hidden">Report</span><span className="hidden sm:inline">AI Report</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="prescription" className="text-xs sm:text-sm px-1 sm:px-3">
+                        <span className="sm:hidden">Meds</span><span className="hidden sm:inline">Prescription</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="billing" className="text-xs sm:text-sm px-1 sm:px-3">Billing</TabsTrigger>
                     </TabsList>
 
                     {/* Single bounded scroll viewport: long content in any tab
@@ -1233,16 +1264,16 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
                 {/* Action Footer */}
                 <div className="p-4 border-t border-border flex flex-col sm:flex-row gap-2 sm:justify-between">
-                  <Button variant="outline" className="gap-2" onClick={handleSaveDraft} disabled={isSaving}>
+                  <Button variant="outline" className="w-full sm:w-auto gap-2" onClick={handleSaveDraft} disabled={isSaving}>
                     <Save className="w-4 h-4" />
                     Save Draft
                   </Button>
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="gap-2" onClick={handleScanProfile} disabled={isSaving || scanningProfile}>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button variant="outline" className="w-full sm:w-auto gap-2" onClick={handleScanProfile} disabled={isSaving || scanningProfile}>
                       <Sparkles className="w-4 h-4" />
                       {scanningProfile ? "Scanning…" : "Profile updates"}
                     </Button>
-                    <Button className="gap-2" onClick={handleComplete} disabled={isSaving}>
+                    <Button className="w-full sm:w-auto gap-2" onClick={handleComplete} disabled={isSaving}>
                       <CheckCircle2 className="w-4 h-4" />
                       {isSaving ? "Saving…" : "Complete Consultation"}
                     </Button>
@@ -1273,17 +1304,17 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid lg:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 min-w-0 lg:grid-cols-2 gap-5">
                 {/* Visit timeline */}
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-2">Timeline</p>
                   {current.history.length > 0 ? (
                     <div className="space-y-2">
                       {current.history.map((h) => (
-                        <div key={h.id} className="flex items-center gap-3 rounded-lg border border-border p-2.5">
-                          <span className="text-xs font-medium text-foreground w-20 shrink-0">{new Date(h.date).toLocaleDateString("de-DE")}</span>
+                        <div key={h.id} className="flex items-center gap-2 sm:gap-3 rounded-lg border border-border p-2.5">
+                          <span className="text-xs font-medium text-foreground w-16 sm:w-20 shrink-0">{new Date(h.date).toLocaleDateString("de-DE")}</span>
                           <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{statusLabel(h.status as AppointmentStatusDb)}</Badge>
-                          <span className="text-sm text-muted-foreground truncate flex-1">{h.diagnosis || h.reason || "—"}</span>
+                          <span className="text-sm text-muted-foreground truncate flex-1 min-w-0">{h.diagnosis || h.reason || "—"}</span>
                         </div>
                       ))}
                     </div>

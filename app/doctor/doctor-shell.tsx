@@ -201,7 +201,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
           </div>
         </header>
 
-        <main className="min-h-[calc(100vh-4rem)]">{children}</main>
+        <main className="min-h-[calc(100vh-4rem)] min-w-0 overflow-x-hidden">{children}</main>
       </div>
     </div>
   )

@@ -83,11 +83,11 @@ export function DashboardSchedule({ appointments }: { appointments: TodayAppoint
             <CardDescription>{filtered.length} appointments</CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <div className="relative">
+            <div className="relative flex-1 sm:flex-initial">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder="Search patients..." className="pl-9 w-full sm:w-[200px]" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <Link href="/receptionist/schedule"><Button variant="outline" size="sm" className="gap-1">View All <ArrowRight className="w-4 h-4" /></Button></Link>
+            <Link href="/receptionist/schedule" className="shrink-0"><Button variant="outline" size="sm" className="gap-1">View All <ArrowRight className="w-4 h-4" /></Button></Link>
           </div>
         </div>
       </CardHeader>
@@ -108,7 +108,7 @@ export function DashboardSchedule({ appointments }: { appointments: TodayAppoint
                   <Badge className={`${st.bg} ${st.text} border-0 whitespace-nowrap`}>{statusLabel(a.status as AppointmentStatusDb)}</Badge>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity"><MoreHorizontal className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" className="shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><MoreHorizontal className="w-4 h-4" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem disabled={isPending || a.status !== "scheduled"} onClick={() => run(checkInAppointment(a.id), "Patient checked in.")}>Check In Patient</DropdownMenuItem>

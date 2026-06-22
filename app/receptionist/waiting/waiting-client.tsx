@@ -124,7 +124,7 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 min-w-0 lg:grid-cols-3 gap-6">
         {/* Waiting */}
         <Column color="yellow" title={`Waiting (${waiting.length})`} description="Patients waiting to be seen"
           icon={<Clock className="w-5 h-5" />}

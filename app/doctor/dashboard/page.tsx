@@ -68,14 +68,14 @@ export default async function DoctorDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="relative overflow-hidden">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Today&apos;s Patients</p>
-                <p className="text-3xl font-bold text-foreground mt-1">{stats.total}</p>
+                <p className="text-2xl sm:text-3xl font-bold text-foreground mt-1">{stats.total}</p>
                 <p className="text-xs text-muted-foreground mt-1">{stats.completed} completed</p>
               </div>
-              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center"><Users className="w-7 h-7 text-primary" /></div>
+              <div className="w-11 h-11 sm:w-14 sm:h-14 shrink-0 rounded-2xl bg-primary/10 flex items-center justify-center"><Users className="w-6 h-6 sm:w-7 sm:h-7 text-primary" /></div>
             </div>
             <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary/20"><div className="h-full bg-primary transition-all" style={{ width: `${completionRate}%` }} /></div>
           </CardContent>
@@ -85,7 +85,7 @@ export default async function DoctorDashboard() {
         <MiniStat label="Completed" value={stats.completed} sub={`${completionRate}% completion`} border="border-emerald-200 bg-emerald-50/30" text="text-emerald-700" icon={<CheckCircle2 className="w-7 h-7 text-emerald-600" />} iconBg="bg-emerald-100" />
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 min-w-0 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {current && (
             <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
@@ -184,14 +184,14 @@ export default async function DoctorDashboard() {
 function MiniStat({ label, value, sub, border, text, icon, iconBg }: { label: string; value: number; sub: string; border: string; text: string; icon: React.ReactNode; iconBg: string }) {
   return (
     <Card className={`relative overflow-hidden ${border}`}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
             <p className={`text-sm font-medium ${text}`}>{label}</p>
-            <p className="text-3xl font-bold text-foreground mt-1">{value}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-foreground mt-1">{value}</p>
             <p className="text-xs text-muted-foreground mt-1">{sub}</p>
           </div>
-          <div className={`w-14 h-14 rounded-2xl ${iconBg} flex items-center justify-center`}>{icon}</div>
+          <div className={`w-11 h-11 sm:w-14 sm:h-14 shrink-0 rounded-2xl ${iconBg} flex items-center justify-center`}>{icon}</div>
         </div>
       </CardContent>
     </Card>
