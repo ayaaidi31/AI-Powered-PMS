@@ -293,6 +293,55 @@ export async function simplifyReport(reportText: string): Promise<ActionResult<{
 }
 
 /**
+ * Speaker attribution for the consultation voice scribe (Feature 9). Takes the
+ * raw, unlabeled speech-to-text transcript of a German consultation and splits
+ * it into "Arzt:" / "Patient:" turns by reasoning over the content — no acoustic
+ * diariser required. Pure segmentation: no content is invented or summarised.
+ */
+export async function diarizeTranscript(
+  rawTranscript: string,
+  lang: "de" | "en" = "de",
+): Promise<ActionResult<{ transcript: string }>> {
+  if (!isLlmConfigured()) {
+    return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
+  }
+  const raw = rawTranscript.trim()
+  if (!raw) return fail("There is nothing to transcribe yet.")
+
+  const system =
+    lang === "en"
+      ? "You receive the raw, unstructured speech-to-text transcript of a doctor–patient consultation in English, " +
+        "with no speaker labels. Split it into alternating turns and label each as \"Doctor:\" (asks questions, " +
+        "examines, explains, advises) or \"Patient:\" (describes symptoms, answers questions). Rules: output ONLY " +
+        "the labelled transcript, one turn per line, in English. Do not add, invent, summarise, or translate the " +
+        "content — only segment and label what is present. Merge consecutive sentences from the same speaker into one turn."
+      : "Du erhältst das rohe, unstrukturierte Transkript (Speech-to-Text) eines Arzt-Patienten-Gesprächs auf " +
+        "Deutsch, ganz ohne Sprecherkennzeichnung. Teile den Text in abwechselnde Gesprächsbeiträge auf und " +
+        "kennzeichne jeden Beitrag mit „Arzt:“ (stellt Fragen, untersucht, erklärt, berät) oder „Patient:“ " +
+        "(schildert Beschwerden, beantwortet Fragen). Regeln: Gib NUR das gekennzeichnete Transkript aus, einen " +
+        "Beitrag pro Zeile, auf Deutsch. Füge nichts hinzu, erfinde nichts, fasse nichts zusammen und übersetze " +
+        "nicht — segmentiere und kennzeichne ausschließlich den vorhandenen Text. Fasse aufeinanderfolgende Sätze " +
+        "desselben Sprechers zu einem Beitrag zusammen."
+  const inLabel = lang === "en" ? "Raw transcript" : "Rohes Transkript"
+  const outLabel = lang === "en" ? "Labelled transcript" : "Gekennzeichnetes Transkript"
+
+  try {
+    const labelled = await mistralChat(
+      [
+        { role: "system", content: system },
+        { role: "user", content: `${inLabel}:\n${raw.slice(0, 8000)}\n\n${outLabel}:` },
+      ],
+      { temperature: 0 },
+    )
+    const text = labelled.trim()
+    if (!text) return fail("Could not process the transcript.")
+    return ok({ transcript: text })
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Transcription assistant unavailable.")
+  }
+}
+
+/**
  * Triage classification for sick-leave recovery (Feature 18). Classifies each
  * appointment's urgency from its visit reason so the recovery optimizer can
  * prioritize urgent patients for scarce slots. The receptionist can override.

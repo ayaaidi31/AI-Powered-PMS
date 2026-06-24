@@ -20,7 +20,7 @@ import { useRouter } from "next/navigation"
 import {
   ArrowRight, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight,
   Stethoscope, Save, Pill, ClipboardList, Plus, Trash2,
-  Mic, MicOff, Sparkles, History, User,
+  Mic, Sparkles, History, User,
   Heart, Thermometer, Activity, FileText, Eye, Pencil, AlertTriangle, X, Check, FileSearch,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -47,6 +47,7 @@ import { codePriceCents as billingPriceCents } from "@/lib/billing-values"
 import { ReportContent } from "@/components/report-content"
 import { DecisionSupport, type DsMessage } from "@/components/decision-support"
 import { RecordsQA, type RecordsQAMessage } from "@/components/records-qa"
+import { useRecording } from "@/components/recording/recording-provider"
 
 interface VitalsForm {
   systolic: string; diastolic: string; heart_rate: string
@@ -116,7 +117,7 @@ export interface QueueEntry {
 export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: QueueEntry[] }) {
   const router = useRouter()
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [isRecording, setIsRecording] = useState(false)
+  const recording = useRecording()
   const [isSaving, setIsSaving] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [recordsOpen, setRecordsOpen] = useState(false)
@@ -905,6 +906,23 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
             {/* Right - Consultation */}
             <div className="flex-1 min-w-0 flex flex-col min-h-0">
+              {/* Voice transcript ready for THIS consultation → insert into notes. */}
+              {recording.result?.appointmentId === current.appointmentId && (
+                <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30 p-3">
+                  <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <p className="text-sm text-emerald-800 dark:text-emerald-300 flex-1 min-w-0">Voice transcript ready for this consultation.</p>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const t = recording.consumeResult()
+                      if (t) { setNotes((prev) => (prev?.trim() ? prev.trimEnd() + "\n\n" : "") + t); toast.success("Transcript added to notes.") }
+                    }}
+                  >
+                    Insert into notes
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => recording.discard()}>Dismiss</Button>
+                </div>
+              )}
               <Card className="flex flex-col flex-1 min-h-0" style={paneH ? { maxHeight: paneH } : undefined}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -914,9 +932,26 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                       {reportId && <Badge variant="secondary" className="text-xs">Draft saved</Badge>}
                     </CardTitle>
                     <div className="flex flex-wrap items-center gap-2">
-                      <Button variant={isRecording ? "destructive" : "outline"} size="sm" onClick={() => setIsRecording(!isRecording)} className="gap-2">
-                        {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                        {isRecording ? "Stop" : "Record"}
+                      <div className="inline-flex rounded-md border border-border overflow-hidden text-xs" title="Recognition language">
+                        {(["de-DE", "en-US"] as const).map((l) => (
+                          <button
+                            key={l} type="button"
+                            onClick={() => recording.setLang(l)}
+                            disabled={recording.status === "recording" || recording.status === "processing"}
+                            className={`px-2 py-1 transition-colors disabled:opacity-50 ${recording.lang === l ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"}`}
+                          >
+                            {l === "de-DE" ? "DE" : "EN"}
+                          </button>
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline" size="sm"
+                        onClick={() => recording.start({ appointmentId: current.appointmentId, patientName: current.patientName })}
+                        disabled={recording.status === "recording" || recording.status === "processing"}
+                        className="gap-2"
+                      >
+                        <Mic className="w-4 h-4" />
+                        {recording.status === "recording" ? "Recording…" : recording.status === "processing" ? "Transcribing…" : "Record"}
                       </Button>
                       <Dialog open={aiOpen} onOpenChange={setAiOpen}>
                         <DialogTrigger asChild>

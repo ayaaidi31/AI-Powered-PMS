@@ -24,6 +24,7 @@ import { NotificationBell } from "@/components/notification-bell"
 import { getDoctorNotifications, setDoctorAvailability } from "@/lib/actions/doctors"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { RecordingProvider } from "@/components/recording/recording-provider"
 
 export interface DoctorProfile {
   id: string
@@ -71,6 +72,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
   }
 
   return (
+    <RecordingProvider>
     <div className="min-h-screen bg-background">
       {sidebarOpen && <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
@@ -201,8 +203,9 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
           </div>
         </header>
 
-        <main className="min-h-[calc(100vh-4rem)] min-w-0 overflow-x-hidden">{children}</main>
+        <main className="min-h-[calc(100vh-4rem)] min-w-0 overflow-x-clip">{children}</main>
       </div>
     </div>
+    </RecordingProvider>
   )
 }

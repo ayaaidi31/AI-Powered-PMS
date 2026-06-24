@@ -215,6 +215,14 @@ export function getInvoicesByPatient(patientId: string) {
     ORDER BY invoice_number DESC`
 }
 
+/** The active (non-cancelled) invoice for a visit — for the consultation record. */
+export async function getInvoiceByAppointment(appointmentId: string) {
+  const rows = await sql<InvoiceRow>`
+    SELECT * FROM invoices WHERE appointment_id = ${appointmentId} AND status <> 'storno'
+    ORDER BY created_at DESC LIMIT 1`
+  return rows[0] ?? null
+}
+
 // ─────────────────────────── Billing (Feature 3) ───────────────────────────
 
 /** One completed appointment in the receptionist's billing worklist. */

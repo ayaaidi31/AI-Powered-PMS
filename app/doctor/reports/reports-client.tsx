@@ -8,7 +8,7 @@
 import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { FileText, Search, Calendar, User, CheckCircle2, Save, Printer, Trash2 } from "lucide-react"
+import { FileText, Search, Calendar, User, CheckCircle2, Save, Printer, Trash2, ClipboardList } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -179,6 +179,13 @@ export function DoctorReportsClient({
                     className="flex items-center gap-1 text-sm text-primary hover:underline shrink-0"
                   >
                     <User className="w-3.5 h-3.5" />{r.patient_name}
+                  </Link>
+                  <Link
+                    href={`/doctor/reports/${r.id}`}
+                    className="shrink-0 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                    title="Open the full consultation record"
+                  >
+                    <ClipboardList className="w-3.5 h-3.5" /> Record
                   </Link>
                   <Button
                     variant="ghost"
