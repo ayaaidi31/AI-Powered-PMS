@@ -84,3 +84,15 @@ export function statusColor(status: AppointmentStatusDb): string {
     default: return "bg-primary"
   }
 }
+
+/**
+ * How an appointment was booked, for at-a-glance provenance chips.
+ * 'manual' = front desk · 'online' = patient self-service · 'ai_voice' = AI agent.
+ */
+export function bookingSource(source?: string | null): { label: string; className: string } {
+  switch (source) {
+    case "ai_voice": return { label: "AI assistant", className: "border-primary/30 text-primary" }
+    case "online": return { label: "Online", className: "border-blue-500/30 text-blue-600" }
+    default: return { label: "Front desk", className: "border-border text-muted-foreground" }
+  }
+}

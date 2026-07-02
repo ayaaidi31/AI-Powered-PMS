@@ -1,7 +1,7 @@
 "use server"
 
 /**
- * Billing-code lookup for the Doctor's manual code entry (Feature 12).
+ * Billing-code lookup for the Doctor's manual code entry (Feature 14).
  *
  * This is the temporary manual path — the AI suggestion layer (RAG) will plug
  * in here later. Statutory (GKV) patients are coded with EBM (read from the

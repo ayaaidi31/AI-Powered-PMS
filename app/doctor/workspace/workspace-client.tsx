@@ -5,7 +5,7 @@
  *
  * Each appointment owns ONE consultation (notes, diagnosis, AI report, billing
  * codes). When the doctor opens an appointment its existing report is loaded, so
- * a saved draft reappears exactly where it was left (Feature 2 auto-save/recover
+ * a saved draft reappears exactly where it was left (Feature 9 auto-save/recover
  * flow). Saving UPDATES that one report rather than creating duplicates:
  *   - "Save Draft"            → upsert report (status: draft) + save codes
  *   - "Complete Consultation" → upsert → approveReport → save codes
@@ -132,7 +132,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
   const [vitalsForm, setVitalsForm] = useState<VitalsForm>(EMPTY_VITALS)
   const [extractingVitals, setExtractingVitals] = useState(false)
 
-  // Billing (Feature 12). Catalog is fixed by insurance: GKV → EBM, else GOÄ.
+  // Billing (Feature 14). Catalog is fixed by insurance: GKV → EBM, else GOÄ.
   const [billingCodes, setBillingCodes] = useState<SelectedCode[]>([])
   const [codeQuery, setCodeQuery] = useState("")
   const [codeResults, setCodeResults] = useState<CodeSuggestion[]>([])
@@ -424,7 +424,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       return next
     })
 
-    // Feature 15: scan the confirmed consultation for profile data that should
+    // Feature 10: scan the confirmed consultation for profile data that should
     // be updated, and let the doctor confirm what to send to the patient.
     const scan = await suggestProfileUpdates({
       reportText: formattedReport || undefined,
@@ -487,7 +487,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     setProposalDialogOpen(false)
   }
 
-  /** Generate a structured report from the notes (Feature 2, AI). */
+  /** Generate a structured report from the notes (Feature 9, AI). */
   async function handleGenerateReport() {
     if (!current) return
     setGeneratingReport(true)
@@ -518,7 +518,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     toast.success("Report generated and saved as draft. Review and edit before completing.")
   }
 
-  /** Ask the model for billing codes, grounded in the real catalog (Feature 12). */
+  /** Ask the model for billing codes, grounded in the real catalog (Feature 14). */
   async function handleSuggestCodes() {
     if (!current) return
     const reportText = formattedReport || `${notes}${diagnosis ? `\nDiagnose: ${diagnosis}` : ""}`
@@ -1180,7 +1180,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                           {suggestingCodes ? "Suggesting…" : "Suggest codes with AI"}
                         </Button>
 
-                        {/* Add codes manually — results appear as you type;
+                        {/* Add codes manually — results appear while typing;
                             click a result, or type an exact code and press Add. */}
                         <div className="flex gap-2">
                           <Input
@@ -1380,7 +1380,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
         </div>
       </div>
 
-      {/* Feature 15 — doctor confirms which AI-detected profile changes to send. */}
+      {/* Feature 10 — doctor confirms which AI-detected profile changes to send. */}
       <Dialog open={proposalDialogOpen} onOpenChange={setProposalDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>

@@ -1,8 +1,8 @@
 /**
- * Patient — Report Detail (Feature 14).
+ * Patient — Report Detail (Feature 15).
  *
  * Server Component: loads the requested report and the treating doctor's name,
- * then renders the official report. The on-demand AI simplification (Feature 14)
+ * then renders the official report. The on-demand AI simplification (Feature 15)
  * is not yet connected; its control is presented as a placeholder.
  */
 import { getReportById, getDoctorById, getPatientById } from "@/lib/queries"

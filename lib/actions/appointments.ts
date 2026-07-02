@@ -4,14 +4,14 @@
  * Appointment scheduling and lifecycle management.
  *
  * Covers:
- *  - Feature 4  (Web Appointment Scheduling, UC-PAT-02) — booking with
+ *  - Feature 2  (Web Appointment Scheduling, UC-PAT-02) — booking with
  *    concurrency control to prevent double-booking (REQ-SCHED-03/04).
- *  - Feature 6  (Appointment Modification & Cancellation, UC-PAT-03) —
+ *  - Feature 4  (Appointment Modification & Cancellation, UC-PAT-03) —
  *    patient-initiated reschedule/cancel with the 24-hour cut-off (REQ-MOD-05).
- *  - Feature 7  (Receptionist Manual Check-in, UC-REC-02) and Feature 5
+ *  - Feature 6  (Receptionist Manual Check-in, UC-REC-02) and Feature 3
  *    (Patient Mobile Self Check-in, UC-PAT-01) — status transition to
  *    `waiting`, guarded against duplicate check-ins (REQ-PAT-05).
- *  - Feature 9  (Receptionist Appointment Management, UC-REC-04) — staff
+ *  - Feature 8  (Receptionist Appointment Management, UC-REC-04) — staff
  *    override of any appointment, recording the reason for change (BR-09-02).
  *
  * Booking and rescheduling run inside a transaction that first takes a
@@ -22,8 +22,8 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { query, withTransaction } from "@/lib/db"
-import { getCurrentReceptionist } from "@/lib/queries"
-import { cancellationCheck, appointmentDeletable, checkInDecision } from "@/lib/rules"
+import { getCurrentReceptionist, getDoctorById } from "@/lib/queries"
+import { cancellationCheck, appointmentDeletable, checkInDecision, doctorAvailableOn } from "@/lib/rules"
 import type { AppointmentRow } from "@/lib/seed-data"
 import { ok, fail, conflict, type ActionResult } from "./types"
 
@@ -36,6 +36,7 @@ const bookingSchema = z.object({
   starts_at: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Invalid date/time."),
   duration_min: z.number().int().positive().max(8 * 60).default(30),
   reason: z.string().trim().max(500).optional(),
+  source: z.enum(["manual", "online", "ai_voice"]).default("manual"),
 })
 
 export type BookingInput = z.infer<typeof bookingSchema>
@@ -63,7 +64,17 @@ export async function bookAppointment(
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message
     return fail("Please correct the highlighted fields.", fieldErrors)
   }
-  const { patient_id, doctor_id, starts_at, duration_min, reason } = parsed.data
+  const { patient_id, doctor_id, starts_at, duration_min, reason, source } = parsed.data
+
+  // Reject a slot that falls inside the doctor's absence window (Feature 8 override).
+  const doctor = await getDoctorById(doctor_id)
+  if (!doctor) return fail("Doctor not found.")
+  if (!doctorAvailableOn(
+    { isAvailable: doctor.is_available, unavailableFrom: doctor.unavailable_from, unavailableUntil: doctor.unavailable_until },
+    starts_at,
+  )) {
+    return fail(`Dr. ${doctor.last_name} is not available on the selected date.`)
+  }
 
   const result = await withTransaction(async (client) => {
     // Serialise concurrent bookings for this doctor (released at COMMIT/ROLLBACK).
@@ -81,10 +92,10 @@ export async function bookAppointment(
     if (clash.rowCount && clash.rowCount > 0) return null // slot taken
 
     const inserted = await client.query<AppointmentRow>(
-      `INSERT INTO appointments (patient_id, doctor_id, starts_at, duration_min, status, reason)
-       VALUES ($1, $2, $3::timestamptz, $4, 'scheduled', $5)
+      `INSERT INTO appointments (patient_id, doctor_id, starts_at, duration_min, status, reason, source, ai_review_status)
+       VALUES ($1, $2, $3::timestamptz, $4, 'scheduled', $5, $6, $7)
        RETURNING *`,
-      [patient_id, doctor_id, starts_at, duration_min, reason ?? null],
+      [patient_id, doctor_id, starts_at, duration_min, reason ?? null, source, source === "ai_voice" ? "pending" : null],
     )
     return inserted.rows[0]
   })
@@ -236,7 +247,7 @@ export async function cancelAppointment(
 }
 
 /**
- * Check a patient in on arrival (Feature 5 self check-in / Feature 7 manual
+ * Check a patient in on arrival (Feature 3 self check-in / Feature 6 manual
  * check-in). Transitions `scheduled` → `waiting` and timestamps the arrival.
  *
  *  - Restricted to the day of the appointment (REQ-PAT-02) when
@@ -335,6 +346,29 @@ export async function deleteAppointment(
   if (!check.ok) return fail(check.reason!)
 
   await query(`DELETE FROM appointments WHERE id = $1`, [appointmentId])
+  revalidateSchedules()
+  return ok(null)
+}
+
+/**
+ * Receptionist supervision of AI voice-agent bookings (Feature 11): mark a
+ * voice-booked appointment as reviewed — 'confirmed' (details are correct) or
+ * 'flagged' (needs attention; the receptionist then fixes or cancels it).
+ */
+export async function reviewVoiceBooking(
+  appointmentId: string,
+  status: "confirmed" | "flagged",
+): Promise<ActionResult<null>> {
+  const receptionist = await getCurrentReceptionist()
+  if (!receptionist) return fail("Only reception can review AI bookings.")
+  if (status !== "confirmed" && status !== "flagged") return fail("Invalid review status.")
+
+  const res = await query(
+    `UPDATE appointments SET ai_review_status = $2 WHERE id = $1 AND source = 'ai_voice'`,
+    [appointmentId, status],
+  )
+  if (!res.rowCount) return fail("This is not an AI-booked appointment.")
+  revalidatePath("/receptionist/calls")
   revalidateSchedules()
   return ok(null)
 }

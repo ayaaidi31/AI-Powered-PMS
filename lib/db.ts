@@ -2,7 +2,7 @@
  * lib/db.ts — single shared PostgreSQL (Neon) connection pool.
  *
  * Reads DATABASE_URL from the environment (.env.local). A single Pool is
- * reused across hot-reloads in dev via a global cache so we don't exhaust
+ * reused across hot-reloads in dev via a global cache to avoid exhausting
  * Neon's connection limit.
  *
  * Usage:
@@ -13,7 +13,7 @@ import { Pool, types, type PoolClient, type QueryResultRow } from "pg"
 
 // Return DATE columns (OID 1082) as plain 'YYYY-MM-DD' strings instead of JS
 // Date objects. The application types these as strings (e.g. patient.birth_date)
-// and binds them to <input type="date">, so the raw string is what we want;
+// and binds them to <input type="date">, so the raw string is what is needed;
 // keeping the default Date object breaks date inputs and string validation.
 types.setTypeParser(1082, (value) => value)
 
@@ -32,8 +32,8 @@ export const pool: Pool =
   globalForDb.__pgPool ??
   new Pool({
     connectionString,
-    // Neon requires SSL; the connection string carries sslmode=require, but we
-    // set this explicitly so it also works if the param is ever dropped.
+    // Neon requires SSL; the connection string carries sslmode=require, but this
+    // is set explicitly so it also works if the param is ever dropped.
     ssl: { rejectUnauthorized: false },
     max: 10,
   })
@@ -57,7 +57,7 @@ export async function sql<T extends QueryResultRow = QueryResultRow>(
   return res.rows
 }
 
-/** Run a raw parameterized query (when you need the full QueryResult). */
+/** Run a raw parameterized query (when the full QueryResult is needed). */
 export function query<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params?: unknown[],

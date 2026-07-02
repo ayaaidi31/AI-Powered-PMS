@@ -61,7 +61,7 @@ describe("deleteAppointment (mistake-only, receptionist)", () => {
   })
 })
 
-describe("checkInAppointment (Feature 5 self check-in / Feature 7 manual)", () => {
+describe("checkInAppointment (Feature 3 self check-in / Feature 6 manual)", () => {
   it("fails when the appointment does not exist", async () => {
     h.query.mockResolvedValueOnce({ rows: [], rowCount: 0 })
     expect((await checkInAppointment("a1")).status).toBe("error")
@@ -94,7 +94,7 @@ describe("checkInAppointment (Feature 5 self check-in / Feature 7 manual)", () =
   })
 })
 
-describe("revertCheckIn (Feature 7 undo)", () => {
+describe("revertCheckIn (Feature 6 undo)", () => {
   it("reverts while still waiting", async () => {
     h.query.mockResolvedValueOnce({ rows: [appt({ status: "scheduled" })], rowCount: 1 }) // UPDATE matched
     expect((await revertCheckIn("a1")).status).toBe("ok")

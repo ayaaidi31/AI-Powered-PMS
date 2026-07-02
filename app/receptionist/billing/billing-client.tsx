@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Billing dashboard (Feature 3 — UC-REC-01).
+ * Billing dashboard (Feature 7 — UC-REC-01).
  *
  * Two areas:
  *  1. Worklist of completed appointments. The processing path is chosen by the

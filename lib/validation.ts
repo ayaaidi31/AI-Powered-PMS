@@ -9,7 +9,7 @@ import { z } from "zod"
 export const orNull = (value?: string | null): string | null =>
   value && value.trim() !== "" ? value.trim() : null
 
-/** Patient registration / profile (Feature 8 — REQ-REC-09/10). */
+/** Patient registration / profile (Feature 5 — REQ-REC-09/10). */
 export const patientSchema = z.object({
   first_name: z.string().trim().min(1, "First name is required."),
   last_name: z.string().trim().min(1, "Last name is required."),

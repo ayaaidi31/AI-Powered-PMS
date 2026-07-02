@@ -1,7 +1,7 @@
 "use server"
 
 /**
- * Patient-profile change proposals (Feature 15 / AI-Module-15).
+ * Patient-profile change proposals (Feature 10 / AI-Module-15).
  *
  * Flow: the AI suggests profile updates from a confirmed consultation → the
  * doctor confirms a subset (createProfileProposals, stored 'pending_patient') →

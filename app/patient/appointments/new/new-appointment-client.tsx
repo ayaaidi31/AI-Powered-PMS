@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Three-step booking wizard (Feature 4 — UC-PAT-02): choose a doctor, pick a
+ * Three-step booking wizard (Feature 2 — UC-PAT-02): choose a doctor, pick a
  * date and time, then confirm with a reason for the visit. Submission calls the
  * `bookAppointment` Server Action, which performs the real-time availability
  * check and double-booking guard (REQ-SCHED-03) before creating the record.
@@ -51,11 +51,23 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
   }
   const calendarDays = generateCalendarDays()
 
+  // Absence window of the chosen doctor (dates the patient must not be able to pick).
+  const absenceFrom = doctor?.is_available ? null : doctor?.unavailable_from ?? null
+  const absenceUntil = doctor?.is_available ? null : doctor?.unavailable_until ?? null
+
   const isDateSelectable = (date: Date | null) => {
     if (!date) return false
     const d = new Date(date)
     d.setHours(0, 0, 0, 0)
-    return d >= today && d.getDay() !== 0 // today onwards, excluding Sundays
+    if (d < today || d.getDay() === 0) return false // today onwards, excluding Sundays
+    // Block dates inside the selected doctor's absence window.
+    if (absenceFrom) {
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+      const from = absenceFrom.slice(0, 10)
+      const until = absenceUntil ? absenceUntil.slice(0, 10) : null
+      if (key >= from && (!until || key <= until)) return false
+    }
+    return true
   }
 
   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))
@@ -78,7 +90,7 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
     setIsSubmitting(true)
     const result = await bookAppointment({
       patient_id: patientId, doctor_id: selectedDoctor,
-      starts_at: startsAt, duration_min: 30, reason,
+      starts_at: startsAt, duration_min: 30, reason, source: "online",
     })
     setIsSubmitting(false)
 

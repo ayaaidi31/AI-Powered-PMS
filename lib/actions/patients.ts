@@ -1,7 +1,7 @@
 "use server"
 
 /**
- * Patient registration and profile maintenance (Feature 8 — Receptionist
+ * Patient registration and profile maintenance (Feature 5 — Receptionist
  * Patient Registration; UC-REC-03).
  *
  * Implements:

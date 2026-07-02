@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Patient appointment list with self-service cancellation (Feature 6 —
+ * Patient appointment list with self-service cancellation (Feature 4 —
  * UC-PAT-03). Cancellation calls `cancelAppointment` with the 24-hour cut-off
  * enforced server-side (REQ-MOD-05); the action also frees the slot for
  * re-booking. Rescheduling is offered via the existing booking flow.
@@ -9,7 +9,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Calendar, Clock, User, Plus, MoreHorizontal } from "lucide-react"
+import { Calendar, Clock, User, Plus, MoreHorizontal, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -143,12 +143,21 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
             <h1 className="text-2xl font-bold text-foreground">My Appointments</h1>
             <p className="text-muted-foreground">Manage your scheduled visits</p>
           </div>
-          <Link href="/patient/appointments/new">
-            <Button className="gap-2">
-              <Plus className="w-4 h-4" />
-              Book New
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/patient/book-voice">
+              <Button variant="outline" className="gap-2">
+                <Sparkles className="w-4 h-4" />
+                <span className="hidden sm:inline">Book by voice</span>
+                <span className="sm:hidden">Voice</span>
+              </Button>
+            </Link>
+            <Link href="/patient/appointments/new">
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" />
+                Book New
+              </Button>
+            </Link>
+          </div>
         </div>
 
         <Tabs defaultValue="upcoming" className="space-y-6">

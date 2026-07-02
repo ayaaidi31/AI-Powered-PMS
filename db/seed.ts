@@ -1,8 +1,8 @@
 /**
  * db/seed.ts — loads the demo data from lib/seed-data.ts into Postgres.
  *
- * The seed file uses readable string ids ("doc-1", "pat-1", "apt-3"). Here we
- * generate real uuids and keep a map from each seed id → uuid so foreign keys
+ * The seed file uses readable string ids ("doc-1", "pat-1", "apt-3"). Real
+ * uuids are generated here, with a map from each seed id → uuid so foreign keys
  * resolve correctly across tables.
  *
  * Idempotent: TRUNCATEs ONLY the application tables (explicitly listed — the
@@ -31,10 +31,10 @@ function uuidFor(map: Map<string, string>, key: string): string {
   return v
 }
 
-// App tables in child→parent order. We DELETE in this order (NOT TRUNCATE) so
-// we never touch unrelated pre-existing tables (patient/encounter/condition
+// App tables in child→parent order. Deletion runs in this order (NOT TRUNCATE)
+// so unrelated pre-existing tables are never touched (patient/encounter/condition
 // from the old FHIR schema, or the langchain_pg_* RAG tables). DELETE also
-// safely refuses if external rows ever reference our lookup tables.
+// safely refuses if external rows ever reference these lookup tables.
 const APP_TABLES = [
   "invoices",
   "report_billing_codes",
@@ -74,7 +74,7 @@ async function main() {
   console.log("→ Seeding demo data …")
   await pool.query("BEGIN")
   try {
-    // Clear our tables in child→parent order (idempotent re-seed).
+    // Clear the application tables in child→parent order (idempotent re-seed).
     for (const t of APP_TABLES) await pool.query(`DELETE FROM ${t}`)
 
     // ── Lookup tables (natural text keys) ──

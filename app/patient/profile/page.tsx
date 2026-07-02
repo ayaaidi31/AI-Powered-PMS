@@ -1,5 +1,5 @@
 /**
- * Patient — My Profile (Feature 15 surface).
+ * Patient — My Profile (Feature 10 surface).
  *
  * Server Component: loads the current patient and their clinical alerts
  * (allergies, conditions, medications), then renders the editable profile.

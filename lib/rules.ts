@@ -39,7 +39,7 @@ export function appointmentDeletable(input: {
 }
 
 /**
- * Patient self check-in (Feature 5) / receptionist manual check-in (Feature 7).
+ * Patient self check-in (Feature 3) / receptionist manual check-in (Feature 6).
  *  - "already": a second call on a `waiting` appointment is an idempotent no-op
  *    (REQ-PAT-05 — no duplicate check-ins).
  *  - "blocked": only `scheduled` appointments can be checked in; the self-service
@@ -64,6 +64,54 @@ export function checkInDecision(input: {
 
 /** Undo a check-in only while still `waiting` (not yet with the doctor). */
 export const canRevertCheckIn = (status: string): boolean => status === "waiting"
+
+/** Normalize any date-parseable value to a comparable `YYYY-MM-DD` key. */
+function dayKey(value: string): string | null {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return null
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
+/**
+ * Whether a doctor can see patients on a given calendar date, honouring an
+ * absence window (Feature 8 override → Feature 2 booking).
+ *  - On duty → always available.
+ *  - Off duty with a fixed return date → unavailable only within
+ *    [unavailableFrom, unavailableUntil]; bookable again after it ends.
+ *  - Off duty open-ended (no return date) → unavailable for every future date.
+ */
+export function doctorAvailableOn(
+  doc: { isAvailable: boolean; unavailableFrom?: string | null; unavailableUntil?: string | null },
+  dateISO: string,
+): boolean {
+  if (doc.isAvailable) return true
+  const day = dayKey(dateISO)
+  if (!day) return false
+  const from = doc.unavailableFrom ? dayKey(doc.unavailableFrom) : null
+  const until = doc.unavailableUntil ? dayKey(doc.unavailableUntil) : null
+  // Open-ended leave: unavailable from the start date onward (all future dates).
+  if (!until) return from ? day < from : false
+  // Bounded leave: free before the window opens or after it closes.
+  if (from && day < from) return true
+  return day > until
+}
+
+/**
+ * Office-hours check for the voice booking assistant (Feature 11). Returns the
+ * reason a requested slot is not bookable, or null when it is fine. Hours are
+ * Monday–Friday, 08:00–16:30 (last 30-minute start).
+ */
+export type OfficeHoursViolation = "invalid" | "past" | "weekend" | "closed"
+export function officeHoursViolation(dateISO: string, nowMs: number): OfficeHoursViolation | null {
+  const d = new Date(dateISO)
+  if (Number.isNaN(d.getTime())) return "invalid"
+  if (d.getTime() < nowMs) return "past"
+  const weekday = d.getDay() // 0 Sun … 6 Sat
+  if (weekday === 0 || weekday === 6) return "weekend"
+  const minutes = d.getHours() * 60 + d.getMinutes()
+  if (minutes < 8 * 60 || minutes > 16 * 60 + 30) return "closed"
+  return null
+}
 
 /**
  * Cancellation eligibility. Only `scheduled` appointments can be cancelled; the

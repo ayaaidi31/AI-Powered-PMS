@@ -1,5 +1,5 @@
 /**
- * Receptionist — Billing Dashboard (Feature 3, UC-REC-01).
+ * Receptionist — Billing Dashboard (Feature 7, UC-REC-01).
  *
  * Server Component: lists completed appointments awaiting billing finalisation,
  * each enriched with its attached billing items and (for private/self-pay) the

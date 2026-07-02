@@ -35,7 +35,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import type { DoctorRow, PatientRow } from "@/lib/seed-data"
-import { patientName, doctorName, statusColor, statusLabel } from "@/lib/display"
+import { patientName, doctorName, statusColor, statusLabel, bookingSource } from "@/lib/display"
 import type { AppointmentWithNames } from "@/lib/queries"
 import { bookAppointment, checkInAppointment, cancelAppointment, rescheduleAppointment, revertCheckIn, reassignAppointment, deleteAppointment } from "@/lib/actions/appointments"
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
@@ -127,7 +127,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
     startTransition(async () => {
       const result = await bookAppointment({
         patient_id: form.patientId, doctor_id: form.doctorId,
-        starts_at: startsAt, duration_min: 30, reason: form.reason,
+        starts_at: startsAt, duration_min: 30, reason: form.reason, source: "manual",
       })
       if (result.status === "ok") {
         toast.success("Appointment booked.")
@@ -493,7 +493,10 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-foreground truncate">{apt.patient_name}</p>
                       <p className="text-xs text-muted-foreground truncate">{apt.doctor_name}</p>
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{statusLabel(apt.status)}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{statusLabel(apt.status)}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${bookingSource(apt.source).className}`}>{bookingSource(apt.source).label}</span>
+                      </div>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

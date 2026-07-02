@@ -63,6 +63,21 @@ export async function getPatientById(id: string) {
   return rows[0] ?? null
 }
 
+/**
+ * Identify a caller by full name + date of birth — used by the telephone voice
+ * agent (F11) to match an inbound caller to a patient record before acting on
+ * their appointments. Match is case-insensitive on "first last".
+ */
+export async function getPatientByNameDob(fullName: string, birthDate: string) {
+  const rows = await sql<PatientRow>`
+    SELECT * FROM patients
+    WHERE lower(trim(first_name || ' ' || last_name)) = lower(trim(${fullName}))
+      AND birth_date = ${birthDate}::date
+      AND deleted_at IS NULL
+    LIMIT 1`
+  return rows[0] ?? null
+}
+
 /** Everything a doctor's "Patient Briefing" panel needs in one call. */
 export async function getPatientClinical(patientId: string) {
   const [allergies, conditions, medications, surgeries, latestVitals] =
@@ -121,6 +136,24 @@ export function getAppointmentsForDay(day: string /* 'YYYY-MM-DD' */) {
     JOIN doctors  d ON d.id = a.doctor_id
     WHERE a.starts_at::date = ${day}::date
     ORDER BY a.starts_at`
+}
+
+/**
+ * Appointments booked by the AI voice assistant (F11), newest first — powers the
+ * receptionist's "AI Call Agent" review queue. Bookings carry `source =
+ * 'ai_voice'` and an `ai_review_status` of 'pending' until staff review them.
+ */
+export function getVoiceAgentAppointments() {
+  return sql<AppointmentWithNames>`
+    SELECT a.*,
+           p.first_name || ' ' || p.last_name AS patient_name,
+           'Dr. ' || d.last_name              AS doctor_name
+    FROM appointments a
+    JOIN patients p ON p.id = a.patient_id
+    JOIN doctors  d ON d.id = a.doctor_id
+    WHERE a.source = 'ai_voice'
+    ORDER BY a.created_at DESC
+    LIMIT 50`
 }
 
 export function getAppointmentsByDoctor(doctorId: string) {
@@ -223,7 +256,7 @@ export async function getInvoiceByAppointment(appointmentId: string) {
   return rows[0] ?? null
 }
 
-// ─────────────────────────── Billing (Feature 3) ───────────────────────────
+// ─────────────────────────── Billing (Feature 7) ───────────────────────────
 
 /** One completed appointment in the receptionist's billing worklist. */
 export interface BillingWorklistRow {

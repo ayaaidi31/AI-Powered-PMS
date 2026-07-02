@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Patient-facing clinic FAQ assistant (Feature 13). A floating chat widget that
+ * Patient-facing clinic FAQ assistant (Feature 16). A floating chat widget that
  * answers questions about the practice via the Mistral-backed `askClinicFaq`
  * action (grounded in CLINIC_FAQ). General info only — not medical advice.
  */

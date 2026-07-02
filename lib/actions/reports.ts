@@ -1,8 +1,8 @@
 "use server"
 
 /**
- * Medical report authoring (Feature 2 — Document Consultation & Report
- * Generation, UC-DOC-01) and billing-code attachment (Feature 12 — AI Billing
+ * Medical report authoring (Feature 9 — Document Consultation & Report
+ * Generation, UC-DOC-01) and billing-code attachment (Feature 14 — AI Billing
  * Code Suggestion, UC-DOC-06).
  *
  * Workflow states: `draft` → `pending_approval` → `approved`.
@@ -147,7 +147,7 @@ const billingCodeSchema = z.object({
 })
 
 /**
- * Replace the full set of billing codes attached to a report (Feature 12).
+ * Replace the full set of billing codes attached to a report (Feature 14).
  * Runs in a transaction so the report never has a partially-updated code set.
  * GOÄ codes carry a multiplier (Steigerungssatz); EBM codes do not.
  */

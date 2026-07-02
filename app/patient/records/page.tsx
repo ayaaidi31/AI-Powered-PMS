@@ -1,5 +1,5 @@
 /**
- * Patient — Health Records (Feature 14 entry point).
+ * Patient — Health Records (Feature 15 entry point).
  *
  * Server Component: resolves the current patient and loads their finalised
  * medical reports, then renders the searchable list.

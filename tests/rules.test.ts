@@ -47,7 +47,7 @@ describe("appointmentDeletable", () => {
   })
 })
 
-describe("checkInDecision (Feature 5 self check-in / Feature 7 manual)", () => {
+describe("checkInDecision (Feature 3 self check-in / Feature 6 manual)", () => {
   it("transitions a scheduled appointment to waiting (REQ-PAT-03 / REQ-REC-07)", () => {
     expect(checkInDecision({ status: "scheduled", isAppointmentToday: true, enforceSameDay: false }).action).toBe("ok")
   })
@@ -69,7 +69,7 @@ describe("checkInDecision (Feature 5 self check-in / Feature 7 manual)", () => {
   })
 })
 
-describe("canRevertCheckIn (Feature 7 undo)", () => {
+describe("canRevertCheckIn (Feature 6 undo)", () => {
   it("allows undo only while waiting", () => {
     expect(canRevertCheckIn("waiting")).toBe(true)
     expect(canRevertCheckIn("scheduled")).toBe(false)

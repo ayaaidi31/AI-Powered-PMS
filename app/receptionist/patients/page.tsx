@@ -1,5 +1,5 @@
 /**
- * Receptionist — Patient Directory (Feature 8).
+ * Receptionist — Patient Directory (Feature 5).
  *
  * Server Component: loads the live patient list from the database and hands it
  * to the interactive client view. Re-runs whenever the patient actions call

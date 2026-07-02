@@ -10,8 +10,8 @@
  *   - ISO-8859-1 (Latin-1) encoded, semicolon-delimited, quoted values
  *   - Columns: EBM-Ziffer; EBM_Bezeichnung; Punktzahl; EBM_Betrag; Waehrung;
  *              Zusatzkennzeichen; gueltigab; gueltigbis; geaendert
- *   - The file is a historical snapshot (validity periods back to 2013), so we
- *     keep only the most recent version of each code (latest `gueltigab`).
+ *   - The file is a historical snapshot (validity periods back to 2013), so
+ *     only the most recent version of each code is kept (latest `gueltigab`).
  */
 import "server-only"
 import { readFileSync } from "node:fs"

@@ -6,7 +6,7 @@
  */
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { HeartPulse, LayoutDashboard, Calendar, Users, LogOut, Menu, Clock, Search, Receipt, Settings, Stethoscope } from "lucide-react"
+import { HeartPulse, LayoutDashboard, Calendar, Users, LogOut, Menu, Clock, Search, Receipt, Settings, Stethoscope, PhoneCall } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
@@ -28,6 +28,7 @@ const navItems = [
   { label: "Schedule", href: "/receptionist/schedule", icon: Calendar },
   { label: "Patients", href: "/receptionist/patients", icon: Users },
   { label: "Waiting Room", href: "/receptionist/waiting", icon: Clock },
+  { label: "AI Call Agent", href: "/receptionist/calls", icon: PhoneCall },
   { label: "Staff", href: "/receptionist/staff", icon: Stethoscope },
   { label: "Billing", href: "/receptionist/billing", icon: Receipt },
 ]

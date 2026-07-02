@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Mobile self check-in flow (Feature 5 — UC-PAT-01).
+ * Mobile self check-in flow (Feature 3 — UC-PAT-01).
  *
  * Steps: OTP verification (simulated until auth/SMS is wired) → confirm arrival
  * → success. Confirming arrival calls `checkInAppointment` with same-day

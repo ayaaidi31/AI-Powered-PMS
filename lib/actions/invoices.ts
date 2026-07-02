@@ -1,7 +1,7 @@
 "use server"
 
 /**
- * Invoice generation and billing finalisation (Feature 3 — Invoice Generation
+ * Invoice generation and billing finalisation (Feature 7 — Invoice Generation
  * & Billing Management, UC-REC-01).
  *
  *  - REQ-REC-02: the workflow branches on the patient's insurance type.

@@ -10,7 +10,7 @@
 --
 -- German-law design choices baked in:
 --  * No ON DELETE CASCADE on patient clinical rows (§630f BGB ~10y retention) —
---    we RESTRICT and rely on a `deleted_at` soft delete instead.
+--    RESTRICT is used, relying on a `deleted_at` soft delete instead.
 --  * invoice_number is UNIQUE and sequential/gapless (§14 UStG / GoBD); a
 --    cancellation references the original via `storno_of` (never deleted).
 --  * Money in integer CENTS (no float rounding).
@@ -146,6 +146,13 @@ CREATE TABLE IF NOT EXISTS appointments (
   doctor_notes      text,                         -- raw notes (AI reads this)
   created_at        timestamptz NOT NULL DEFAULT now()
 );
+
+-- Booking provenance (Feature 11): how the appointment was created, and — for
+-- AI voice-agent bookings — whether reception has reviewed it.
+--   source: 'manual' (receptionist) | 'online' (patient self-service) | 'ai_voice'
+--   ai_review_status: NULL normally; 'pending' | 'confirmed' | 'flagged' for ai_voice
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual';
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS ai_review_status text;
 
 -- vitals: per-visit time series. "Current vitals" = latest recorded_at.
 CREATE TABLE IF NOT EXISTS vitals (

@@ -1,5 +1,5 @@
 /**
- * Monetary conversion for billing codes (Feature 12). Pure + dependency-free.
+ * Monetary conversion for billing codes (Feature 14). Pure + dependency-free.
  *
  * GOÄ (private)  = points × Punktwert × Steigerungssatz → the invoiced amount.
  * EBM (statutory) = points × Orientierungswert → the value the KV settles

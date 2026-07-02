@@ -1,12 +1,12 @@
 "use server"
 
 /**
- * Vitals write actions (Feature 10).
+ * Vitals write actions (Feature 9).
  *
  * Vitals are a per-visit measurement: each consultation records its own row,
  * keyed by `appointment_id`. The patient's "current vitals" is simply the row
  * with the latest `recorded_at`, so saving here surfaces in the patient account
- * automatically. We keep one row per appointment (upsert in place).
+ * automatically. One row is kept per appointment (upsert in place).
  */
 import { z } from "zod"
 import { revalidatePath } from "next/cache"

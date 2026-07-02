@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Interactive patient directory (Feature 8 — UC-REC-03).
+ * Interactive patient directory (Feature 5 — UC-REC-03).
  *
  * Renders the live patient list and drives the create/update/deactivate
  * operations through the Server Actions in lib/actions/patients. Search and

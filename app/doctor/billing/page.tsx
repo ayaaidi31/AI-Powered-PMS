@@ -4,7 +4,7 @@
  * Server Component: gathers the doctor's completed consultations and computes a
  * value for each — GOÄ invoice amount for private patients, and the EBM KV
  * settlement value (points × Orientierungswert) for statutory patients. Actual
- * invoicing is performed by reception (Feature 3); this is the doctor's summary.
+ * invoicing is performed by reception (Feature 7); this is the doctor's summary.
  */
 import {
   getCurrentDoctor, getDoctorBillingWorklist, getAppointmentBillingItems,

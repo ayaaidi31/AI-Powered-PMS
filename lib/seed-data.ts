@@ -2,9 +2,9 @@
  * seed-data.ts — DB-shaped seed data (normalized relational, NOT FHIR)
  * ---------------------------------------------------------------------
  * This file is the "correct table" version of the demo data. Each export is
- * ONE table: a flat array of rows whose fields map 1:1 to columns you create
- * in Postgres. Column types are noted in the comment above each table so you
- * can write the CREATE TABLE statements yourself.
+ * ONE table: a flat array of rows whose fields map 1:1 to the Postgres columns.
+ * Column types are noted in the comment above each table as a reference for the
+ * CREATE TABLE statements.
  *
  * Design choices (kept deliberately lean for a thesis prototype):
  *  - No FHIR. Plain normalized tables. The `patients` table stays SHORT;
@@ -303,6 +303,10 @@ export interface AppointmentRow {
   check_in_at: string | null
   doctor_notes: string | null
   created_at: string
+  /** How the appointment was created: 'manual' | 'online' | 'ai_voice'. */
+  source?: string
+  /** For ai_voice bookings: 'pending' | 'confirmed' | 'flagged'. */
+  ai_review_status?: string | null
 }
 export const appointments: AppointmentRow[] = [
   { id: "apt-1", patient_id: "pat-1", doctor_id: "doc-1", starts_at: "2024-01-15T09:00:00Z", duration_min: 30, status: "scheduled", reason: "General checkup", reason_for_change: null, check_in_at: null, doctor_notes: null, created_at: "2024-01-10T00:00:00Z" },
@@ -313,7 +317,7 @@ export const appointments: AppointmentRow[] = [
 ]
 
 /**
- * medical_reports  (Feature 2 output; immutable after approval — BR-02-06)
+ * medical_reports  (Feature 9 output; immutable after approval — BR-02-06)
  *  id               uuid PK
  *  appointment_id   uuid FK -> appointments(id)
  *  patient_id       uuid FK -> patients(id)
@@ -368,7 +372,7 @@ export const report_billing_codes: ReportBillingCodeRow[] = [
 ]
 
 /**
- * invoices  (Feature 3; sequential number is a legal requirement — §14 UStG/GoBD)
+ * invoices  (Feature 7; sequential number is a legal requirement — §14 UStG/GoBD)
  *  id             uuid PK
  *  invoice_number text UNIQUE     -- sequential, no gaps
  *  appointment_id uuid FK -> appointments(id)

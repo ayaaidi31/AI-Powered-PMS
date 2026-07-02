@@ -48,7 +48,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="bg-background">
-      <body className="font-sans antialiased min-h-screen">
+      <body className="font-sans antialiased min-h-screen" suppressHydrationWarning>
         {children}
         <Toaster />
         {process.env.NODE_ENV === 'production' && <Analytics />}

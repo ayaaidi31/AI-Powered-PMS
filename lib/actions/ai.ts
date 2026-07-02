@@ -7,9 +7,9 @@
  * can replace them later:
  *   - generateConsultationReport: rough notes → structured German report.
  *   - suggestBillingCodes: report → billing codes, using a retrieve-then-select
- *     (RAG-lite) approach. We FIRST retrieve candidate codes from the real
+ *     (RAG-lite) approach. It FIRST retrieves candidate codes from the real
  *     catalog (the GP base GOPs + EBM codes matching the services extracted from
- *     the report, or the full GOÄ table), then ask the model to SELECT only from
+ *     the report, or the full GOÄ table), then asks the model to SELECT only from
  *     that candidate list at temperature 0. So the model never invents codes and
  *     only picks relevant ones; selections are still re-checked against the
  *     candidate set, and the Doctor approves (REQ-BIL-04). This temporary layer
@@ -261,7 +261,7 @@ export async function extractVitals(text: string): Promise<ActionResult<Extracte
 }
 
 /**
- * Patient-facing simplification (Feature 14, REQ-SIMP-01): rewrite a medical
+ * Patient-facing simplification (Feature 15, REQ-SIMP-01): rewrite a medical
  * report in plain, reassuring language a layperson can understand. Strictly
  * explanatory — it must not invent findings, diagnoses or recommendations.
  */
@@ -382,7 +382,7 @@ export async function classifyUrgency(
 }
 
 /**
- * Doctor-facing pre-consultation briefing (Feature 10): summarize the patient's
+ * Doctor-facing pre-consultation briefing (Feature 12): summarize the patient's
  * history and the course of previous appointments before the doctor sees them.
  * Strictly grounded in the supplied data — recurring problems, the last visit's
  * outcome, relevant chronic conditions/allergies/medication, and what to watch.
@@ -441,7 +441,7 @@ export async function summarizePatientHistory(input: {
 }
 
 /**
- * Profile-update suggestions (Feature 15 / AI-Module-15). After a consultation,
+ * Profile-update suggestions (Feature 10 / AI-Module-15). After a consultation,
  * scan the report/notes for patient-profile data that is NEW or CHANGED versus
  * what's on file (a newly discovered allergy, a moved address, a new phone …),
  * so the doctor can confirm them. Strictly grounded: only data explicitly stated
@@ -532,7 +532,7 @@ export async function suggestProfileUpdates(input: {
 }
 
 /**
- * Clinical decision support (Feature 11, REQ-AI-03): a guideline-grounded RAG
+ * Clinical decision support (Feature 13, REQ-AI-03): a guideline-grounded RAG
  * assistant for the doctor. Retrieves relevant chunks from the BGE pgvector
  * collection (read-only) and asks Mistral to answer using ONLY those excerpts,
  * with [n] citations. It is decision SUPPORT, not a decision: it never issues a
@@ -636,7 +636,7 @@ export async function askDecisionSupport(input: {
 }
 
 /**
- * Real-time safety check (Feature 11 — REQ-AI-04). Reviews what the doctor is
+ * Real-time safety check (Feature 13 — REQ-AI-04). Reviews what the doctor is
  * about to commit (prescriptions + working diagnosis) against the patient's
  * allergies, conditions and current medication, and surfaces alerts the doctor
  * can heed or dismiss. Two layers, conservative by design:
@@ -788,7 +788,7 @@ export async function askPatientRecordsQA(input: {
 }
 
 /**
- * Clinic FAQ assistant (Feature 13, REQ-FAQ-01): answers patient questions about
+ * Clinic FAQ assistant (Feature 16, REQ-FAQ-01): answers patient questions about
  * the practice grounded STRICTLY in CLINIC_FAQ. Never gives medical advice and
  * defers to reception for anything outside the facts. Conversational — recent
  * turns are passed back as context.

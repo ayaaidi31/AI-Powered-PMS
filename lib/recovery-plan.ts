@@ -60,7 +60,7 @@ export function buildRecoveryPlan(input: {
   const sickSpecialty = norm(sickSpecialization)
   const isSameSpecialty = (d: { specialization: string | null }) => norm(d.specialization) === sickSpecialty
 
-  // Candidate commitments — mutated as we assign so we never double-book / over-fill.
+  // Candidate commitments — mutated during assignment to avoid double-booking / over-filling.
   const load = new Map<string, { busy: { startsAt: string; dur: number }[]; perDay: Map<string, number> }>()
   for (const d of candidates) load.set(d.id, { busy: [], perDay: new Map() })
   for (const a of existing) {

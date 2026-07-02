@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * Clinical decision-support panel (Feature 11). A guideline-grounded Q&A for the
+ * Clinical decision-support panel (Feature 13). A guideline-grounded Q&A for the
  * doctor: questions go to `askDecisionSupport`, which retrieves chunks from the
  * BGE pgvector store and answers via Mistral with [n] citations. The current
  * consultation notes + working diagnosis are sent along as context. Support

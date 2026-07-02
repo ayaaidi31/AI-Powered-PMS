@@ -11,7 +11,7 @@ export const CLINIC = {
 }
 
 /**
- * Knowledge base for the patient-facing FAQ assistant (Feature 13, REQ-FAQ-01).
+ * Knowledge base for the patient-facing FAQ assistant (Feature 16, REQ-FAQ-01).
  * The model answers patient questions STRICTLY from these facts. Edit here to
  * change what the bot knows about the practice.
  */

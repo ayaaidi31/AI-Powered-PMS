@@ -1,5 +1,5 @@
 /**
- * Patient — Mobile Self Check-in (Feature 5, UC-PAT-01).
+ * Patient — Mobile Self Check-in (Feature 3, UC-PAT-01).
  *
  * Server Component: loads the scanned appointment by id and renders the mobile
  * check-in flow. The actual status transition is performed by the

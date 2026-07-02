@@ -1,5 +1,5 @@
 /**
- * Patient — My Appointments (Feature 6).
+ * Patient — My Appointments (Feature 4).
  *
  * Server Component: resolves the current patient (stand-in until authentication
  * is implemented), loads their appointments joined with the doctor's name, and
