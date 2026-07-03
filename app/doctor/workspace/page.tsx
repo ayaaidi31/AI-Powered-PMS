@@ -10,6 +10,7 @@ import {
   getCurrentDoctor, getAppointmentsByDoctor, getPatientById,
   getPatientClinical, getReportsByPatient, getAppointmentsByPatient,
   getReportByAppointment, getAppointmentBillingItems, getVitalsByAppointment,
+  getPatientDocuments,
 } from "@/lib/queries"
 import { patientName } from "@/lib/display"
 import { WorkspaceClient, type QueueEntry } from "./workspace-client"
@@ -40,7 +41,7 @@ export default async function DoctorWorkspace() {
   // Assemble each queue entry with its clinical context (queue is small).
   const queue: QueueEntry[] = await Promise.all(
     queueAppointments.map(async (a) => {
-      const [patient, clinical, reports, existingReport, existingItems, apptVitals, allAppointments] = await Promise.all([
+      const [patient, clinical, reports, existingReport, existingItems, apptVitals, allAppointments, documents] = await Promise.all([
         getPatientById(a.patient_id),
         getPatientClinical(a.patient_id),
         getReportsByPatient(a.patient_id),
@@ -48,6 +49,7 @@ export default async function DoctorWorkspace() {
         getAppointmentBillingItems(a.id),
         getVitalsByAppointment(a.id),
         getAppointmentsByPatient(a.patient_id),
+        getPatientDocuments(a.patient_id, doctor.id),
       ])
       // Past appointments (most recent first), each tagged with its report's
       // diagnosis where one exists — the doctor's "previous visits" timeline.
@@ -115,6 +117,7 @@ export default async function DoctorWorkspace() {
           points: it.points,
           multiplier: it.multiplier,
         })),
+        documents,
       }
     }),
   )

@@ -241,6 +241,23 @@ export const medications: MedicationRow[] = [
  *  notes       text
  */
 export interface SurgeryRow { id: string; patient_id: string; name: string; surgery_date: string; notes: string | null }
+
+/**
+ * patient_documents  (uploaded files attached to a record: X-ray, MRI, lab …).
+ * This metadata shape deliberately omits the `content` bytea column — the bytes
+ * are streamed separately by the download route, never bundled into list views.
+ */
+export type DocumentCategory =
+  | "xray" | "mri" | "ct" | "ultrasound" | "lab" | "prescription" | "referral" | "discharge" | "other"
+export interface PatientDocumentRow {
+  id: string; patient_id: string; appointment_id: string | null
+  title: string; description: string | null; category: DocumentCategory
+  file_name: string; mime_type: string; file_size: number
+  uploaded_by_role: "doctor" | "patient" | "receptionist"
+  uploaded_by_id: string | null; uploaded_by_name: string
+  created_at: string; deleted_at: string | null
+}
+
 export const surgeries: SurgeryRow[] = [
   { id: "surg-1", patient_id: "pat-3", name: "Appendectomy", surgery_date: "2010-08-20", notes: "Routine procedure, no complications" },
 ]

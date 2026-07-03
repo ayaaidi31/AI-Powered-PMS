@@ -232,6 +232,32 @@ CREATE TABLE IF NOT EXISTS profile_change_proposals (
   resolved_at    timestamptz
 );
 
+-- patient_documents: files attached to a patient record (imaging such as X-ray
+-- or MRI, lab results, referrals, prescriptions …). A document may be uploaded
+-- by the treating doctor during, before, or after a consultation, or by the
+-- patient from the portal. Title and description are free text. The file bytes
+-- live in `content` (bytea) so the prototype stays self-contained without an
+-- external object store. Retention follows the clinical-record rule: RESTRICT on
+-- the patient FK and a `deleted_at` soft delete rather than a hard delete.
+CREATE TABLE IF NOT EXISTS patient_documents (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_id       uuid NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
+  appointment_id   uuid REFERENCES appointments(id) ON DELETE SET NULL,  -- consultation it was attached during (optional)
+  title            text NOT NULL,
+  description      text,
+  category         text NOT NULL DEFAULT 'other'
+                   CHECK (category IN ('xray','mri','ct','ultrasound','lab','prescription','referral','discharge','other')),
+  file_name        text NOT NULL,
+  mime_type        text NOT NULL,
+  file_size        integer NOT NULL CHECK (file_size >= 0),
+  content          bytea NOT NULL,                       -- the raw file bytes
+  uploaded_by_role text NOT NULL CHECK (uploaded_by_role IN ('doctor','patient','receptionist')),
+  uploaded_by_id   uuid,                                 -- doctor/patient/receptionist id (NULL if unknown)
+  uploaded_by_name text NOT NULL,                        -- display label ("Dr. Braun" / patient name)
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  deleted_at       timestamptz                           -- soft delete (legal retention)
+);
+
 -- ──────────────────────────────── INDEXES ─────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_profile_proposals_patient   ON profile_change_proposals(patient_id, status);
 CREATE INDEX IF NOT EXISTS idx_patient_allergies_patient   ON patient_allergies(patient_id);
@@ -252,3 +278,4 @@ CREATE INDEX IF NOT EXISTS idx_medical_reports_appointment ON medical_reports(ap
 CREATE INDEX IF NOT EXISTS idx_report_billing_codes_report ON report_billing_codes(report_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_patient            ON invoices(patient_id);
 CREATE INDEX IF NOT EXISTS idx_invoices_status             ON invoices(status);
+CREATE INDEX IF NOT EXISTS idx_patient_documents_patient   ON patient_documents(patient_id, created_at DESC);

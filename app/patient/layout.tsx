@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { HeartPulse, LayoutDashboard, Calendar, FileText, User, LogOut, Menu } from "lucide-react"
+import { HeartPulse, LayoutDashboard, Calendar, FileText, FolderOpen, User, LogOut, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { useState } from "react"
@@ -12,6 +12,7 @@ const navItems = [
   { label: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
   { label: "My Appointments", href: "/patient/appointments", icon: Calendar },
   { label: "Health Records", href: "/patient/records", icon: FileText },
+  { label: "Documents", href: "/patient/documents", icon: FolderOpen },
   { label: "My Profile", href: "/patient/profile", icon: User },
 ]
 

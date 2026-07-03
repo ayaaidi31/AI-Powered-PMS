@@ -48,6 +48,8 @@ import { ReportContent } from "@/components/report-content"
 import { DecisionSupport, type DsMessage } from "@/components/decision-support"
 import { RecordsQA, type RecordsQAMessage } from "@/components/records-qa"
 import { useRecording } from "@/components/recording/recording-provider"
+import { PatientDocuments } from "@/components/patient-documents"
+import type { PatientDocumentRow } from "@/lib/seed-data"
 
 interface VitalsForm {
   systolic: string; diastolic: string; heart_rate: string
@@ -112,6 +114,8 @@ export interface QueueEntry {
     temperature_c: number | null; weight_kg: number | null; height_cm: number | null
   } | null
   existingCodes: SelectedCode[]
+  // Files already attached to the record (imaging, lab results, referrals).
+  documents: PatientDocumentRow[]
 }
 
 export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: QueueEntry[] }) {
@@ -901,6 +905,17 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                   )}
                 </CardContent>
               </Card>
+
+              {/* Documents — attach imaging/lab files to this visit, or open earlier ones. */}
+              <PatientDocuments
+                patientId={current.patientId}
+                documents={current.documents}
+                canUpload
+                viewerRole="doctor"
+                currentUserId={doctorId}
+                appointmentId={current.appointmentId}
+                compact
+              />
               </div>
             </div>
 

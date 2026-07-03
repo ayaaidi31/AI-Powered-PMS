@@ -26,6 +26,7 @@ import type {
   MedicalReportRow,
   ReportBillingCodeRow,
   InvoiceRow,
+  PatientDocumentRow,
 } from "./seed-data"
 
 // ───────────────────────────── Doctors ─────────────────────────────
@@ -475,4 +476,55 @@ export async function getPatientIdsWithAllergies(): Promise<Set<string>> {
   const rows = await sql<{ patient_id: string }>`
     SELECT DISTINCT patient_id FROM patient_allergies`
   return new Set(rows.map((r) => r.patient_id))
+}
+
+// ─────────────────────────── Patient documents ─────────────────────────────
+// Uploaded files (imaging, lab results, referrals …) attached to a record. The
+// list query returns metadata only; the file bytes are fetched on demand by the
+// download route so large blobs never travel with the page payload.
+
+/**
+ * Documents on a patient record. Passing `viewerDoctorId` narrows the result to
+ * the view a treating doctor is entitled to: their own uploads plus the
+ * patient's (and any front-desk) files, while another doctor's uploads stay
+ * hidden. Omitting it (the patient's own view, or reception) returns everything.
+ */
+export async function getPatientDocuments(
+  patientId: string,
+  viewerDoctorId?: string,
+): Promise<PatientDocumentRow[]> {
+  if (viewerDoctorId) {
+    return sql<PatientDocumentRow>`
+      SELECT id, patient_id, appointment_id, title, description, category,
+             file_name, mime_type, file_size, uploaded_by_role, uploaded_by_id,
+             uploaded_by_name, created_at, deleted_at
+      FROM patient_documents
+      WHERE patient_id = ${patientId} AND deleted_at IS NULL
+        AND (uploaded_by_role <> 'doctor' OR uploaded_by_id = ${viewerDoctorId})
+      ORDER BY created_at DESC`
+  }
+  return sql<PatientDocumentRow>`
+    SELECT id, patient_id, appointment_id, title, description, category,
+           file_name, mime_type, file_size, uploaded_by_role, uploaded_by_id,
+           uploaded_by_name, created_at, deleted_at
+    FROM patient_documents
+    WHERE patient_id = ${patientId} AND deleted_at IS NULL
+    ORDER BY created_at DESC`
+}
+
+/** Load a single document's bytes plus the minimum needed for an access check. */
+export async function getPatientDocumentBlob(
+  id: string,
+): Promise<{
+  content: Buffer; mime_type: string; file_name: string; patient_id: string
+  uploaded_by_role: string; uploaded_by_id: string | null
+} | null> {
+  const rows = await sql<{
+    content: Buffer; mime_type: string; file_name: string; patient_id: string
+    uploaded_by_role: string; uploaded_by_id: string | null
+  }>`
+    SELECT content, mime_type, file_name, patient_id, uploaded_by_role, uploaded_by_id
+    FROM patient_documents
+    WHERE id = ${id} AND deleted_at IS NULL`
+  return rows[0] ?? null
 }

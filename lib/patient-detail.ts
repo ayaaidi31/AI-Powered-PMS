@@ -5,19 +5,23 @@
  */
 import {
   getPatientById, getPatientClinical, getReportsByPatient, getAppointmentsByPatient,
-  getDoctorById, getInvoicesDetailed, getAppointmentBillingItems,
+  getDoctorById, getInvoicesDetailed, getAppointmentBillingItems, getPatientDocuments,
 } from "./queries"
 import { doctorName } from "./display"
 import type { PatientDetailData } from "@/components/patient-detail-client"
 
-export async function loadPatientDetail(id: string): Promise<PatientDetailData | null> {
+export async function loadPatientDetail(
+  id: string,
+  viewerDoctorId?: string,
+): Promise<PatientDetailData | null> {
   const patient = await getPatientById(id)
   if (!patient) return null
 
-  const [clinical, reports, appointments] = await Promise.all([
+  const [clinical, reports, appointments, documents] = await Promise.all([
     getPatientClinical(id),
     getReportsByPatient(id),
     getAppointmentsByPatient(id),
+    getPatientDocuments(id, viewerDoctorId),
   ])
 
   // Resolve the treating doctor's name/specialty for each report and appointment.
@@ -74,5 +78,6 @@ export async function loadPatientDetail(id: string): Promise<PatientDetailData |
       doctorName: docName(a.doctor_id),
     })),
     billing,
+    documents,
   }
 }

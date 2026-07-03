@@ -22,11 +22,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
-import type { PatientRow, VitalsRow, PrescriptionItem, MedicalReportRow, InvoiceRow } from "@/lib/seed-data"
+import type { PatientRow, VitalsRow, PrescriptionItem, MedicalReportRow, InvoiceRow, PatientDocumentRow } from "@/lib/seed-data"
 import type { BillingItem } from "@/lib/queries"
 import { patientName, initials, insuranceLabel, insuranceVariant, formatCents, statusLabel, type AppointmentStatusDb } from "@/lib/display"
 import { ReportDocument } from "@/components/report-document"
 import { InvoiceDocument } from "@/components/invoice-document"
+import { PatientDocuments } from "@/components/patient-documents"
 import { printReport } from "@/lib/print-element"
 
 interface ReportItem {
@@ -75,6 +76,7 @@ export interface PatientDetailData {
   reports: ReportItem[]
   appointments: AppointmentItem[]
   billing: BillingDoc[]
+  documents: PatientDocumentRow[]
 }
 
 const INVOICE_STATUS: Record<InvoiceRow["status"], string> = {
@@ -101,8 +103,13 @@ function age(birthDate: string) {
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE")
 
 export function PatientDetailClient({
-  patient, clinical, reports, appointments, billing, backHref = "/doctor/patients",
-}: PatientDetailData & { backHref?: string }) {
+  patient, clinical, reports, appointments, billing, documents,
+  backHref = "/doctor/patients", viewerRole = "doctor", currentUserId = null,
+}: PatientDetailData & {
+  backHref?: string
+  viewerRole?: "doctor" | "receptionist"
+  currentUserId?: string | null
+}) {
   const [viewing, setViewing] = useState<ReportItem | null>(null)
   const [viewingAppt, setViewingAppt] = useState<AppointmentItem | null>(null)
   const [viewingInvoice, setViewingInvoice] = useState<BillingDoc | null>(null)
@@ -313,6 +320,15 @@ export function PatientDetailClient({
           )}
         </CardContent>
       </Card>
+
+      {/* Documents — imaging, lab results, referrals attached to the record */}
+      <PatientDocuments
+        patientId={patient.id}
+        documents={documents}
+        canUpload
+        viewerRole={viewerRole}
+        currentUserId={currentUserId}
+      />
 
       {/* Report — formal printable document */}
       <Dialog open={viewing !== null} onOpenChange={(o) => !o && setViewing(null)}>
