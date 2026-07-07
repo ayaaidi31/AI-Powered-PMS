@@ -154,6 +154,12 @@ CREATE TABLE IF NOT EXISTS appointments (
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual';
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS ai_review_status text;
 
+-- Self check-in (Feature 3): a short, no-ambiguous-character code issued at
+-- booking. The patient enters it at the clinic QR page (or is identified by
+-- their session) to mark arrival. Scoped to the appointment day; harmless once
+-- the visit is past.
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS check_in_code text;
+
 -- vitals: per-visit time series. "Current vitals" = latest recorded_at.
 CREATE TABLE IF NOT EXISTS vitals (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),

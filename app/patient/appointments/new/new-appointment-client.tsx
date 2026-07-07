@@ -5,6 +5,10 @@
  * date and time, then confirm with a reason for the visit. Submission calls the
  * `bookAppointment` Server Action, which performs the real-time availability
  * check and double-booking guard (REQ-SCHED-03) before creating the record.
+ *
+ * With a `reschedule` context (Feature 4 — UC-PAT-03) the same wizard EDITS an
+ * existing appointment: the doctor is locked, and submission calls
+ * `rescheduleAppointment` to move the slot in place rather than creating a new one.
  */
 import { useState } from "react"
 import Link from "next/link"
@@ -19,18 +23,33 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
 import type { DoctorRow } from "@/lib/seed-data"
 import { doctorName } from "@/lib/display"
-import { bookAppointment } from "@/lib/actions/appointments"
+import { bookAppointment, rescheduleAppointment } from "@/lib/actions/appointments"
 
 const daysOfWeek = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
 const timeSlots = ["09:00", "09:30", "10:00", "10:30", "11:00", "14:00", "14:30", "15:00", "15:30"]
 
-export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRow[]; patientId: string }) {
+/** When set, the wizard edits an existing appointment (same doctor) instead of booking a new one. */
+export interface RescheduleContext {
+  id: string
+  doctorId: string
+  reason: string
+}
+
+export function NewAppointmentClient({
+  doctors,
+  patientId,
+  reschedule = null,
+}: {
+  doctors: DoctorRow[]
+  patientId: string
+  reschedule?: RescheduleContext | null
+}) {
   const router = useRouter()
   const [step, setStep] = useState(1)
-  const [selectedDoctor, setSelectedDoctor] = useState<string>("")
+  const [selectedDoctor, setSelectedDoctor] = useState<string>(reschedule?.doctorId ?? "")
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedTime, setSelectedTime] = useState<string>("")
-  const [reason, setReason] = useState("")
+  const [reason, setReason] = useState(reschedule?.reason ?? "")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date())
 
@@ -77,7 +96,7 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
   }
 
   async function handleSubmit() {
-    if (!selectedDoctor || !selectedDate || !selectedTime || !reason.trim()) {
+    if (!selectedDoctor || !selectedDate || !selectedTime || (!reschedule && !reason.trim())) {
       toast.error("Please fill in all required fields")
       return
     }
@@ -88,14 +107,16 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
     ).toISOString()
 
     setIsSubmitting(true)
-    const result = await bookAppointment({
-      patient_id: patientId, doctor_id: selectedDoctor,
-      starts_at: startsAt, duration_min: 30, reason, source: "online",
-    })
+    const result = reschedule
+      ? await rescheduleAppointment(reschedule.id, startsAt, { durationMin: 30, enforce24hWindow: true })
+      : await bookAppointment({
+          patient_id: patientId, doctor_id: selectedDoctor,
+          starts_at: startsAt, duration_min: 30, reason, source: "online",
+        })
     setIsSubmitting(false)
 
     if (result.status === "ok") {
-      toast.success("Appointment booked successfully!")
+      toast.success(reschedule ? "Appointment rescheduled." : "Appointment booked successfully!")
       router.push("/patient/appointments")
       router.refresh()
     } else {
@@ -111,7 +132,7 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
           <div className="flex items-center gap-2 text-sm">
             <Link href="/patient/dashboard" className="text-muted-foreground hover:text-foreground">Dashboard</Link>
             <span className="text-muted-foreground">/</span>
-            <span className="font-medium text-foreground">Book New Appointment</span>
+            <span className="font-medium text-foreground">{reschedule ? "Reschedule Appointment" : "Book New Appointment"}</span>
           </div>
         </div>
       </div>
@@ -141,14 +162,16 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
                 <div className="w-10 h-10 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-bold">1</div>
                 <div>
                   <CardTitle>Select Doctor / Department</CardTitle>
-                  <CardDescription>Choose your preferred healthcare provider</CardDescription>
+                  <CardDescription>
+                    {reschedule ? "Rescheduling keeps the same doctor — only the time changes." : "Choose your preferred healthcare provider"}
+                  </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label>Healthcare Provider</Label>
-                <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
+                <Select value={selectedDoctor} onValueChange={setSelectedDoctor} disabled={!!reschedule}>
                   <SelectTrigger className="w-full"><SelectValue placeholder="Select a doctor" /></SelectTrigger>
                   <SelectContent>
                     {doctors.map((doc) => (
@@ -299,7 +322,7 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-bold">3</div>
                 <div>
-                  <CardTitle>Confirm Your Booking</CardTitle>
+                  <CardTitle>{reschedule ? "Confirm Reschedule" : "Confirm Your Booking"}</CardTitle>
                   <CardDescription>Review and confirm your appointment details</CardDescription>
                 </div>
               </div>
@@ -326,14 +349,20 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="reason">Reason for Visit *</Label>
+                <Label htmlFor="reason">{reschedule ? "Reason for Visit" : "Reason for Visit *"}</Label>
                 <Textarea
                   id="reason"
                   placeholder="Please briefly describe the reason for your visit..."
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   rows={4}
+                  disabled={!!reschedule}
                 />
+                {reschedule && (
+                  <p className="text-xs text-muted-foreground">
+                    Rescheduling only changes the date and time. To change the reason or doctor, cancel and book a new appointment.
+                  </p>
+                )}
               </div>
 
               <Alert>
@@ -346,8 +375,8 @@ export function NewAppointmentClient({ doctors, patientId }: { doctors: DoctorRo
 
               <div className="flex justify-between">
                 <Button variant="outline" onClick={() => setStep(2)}><ChevronLeft className="w-4 h-4 mr-2" />Back</Button>
-                <Button onClick={handleSubmit} disabled={!reason.trim() || isSubmitting}>
-                  {isSubmitting ? "Booking..." : "Confirm Booking"}
+                <Button onClick={handleSubmit} disabled={(!reschedule && !reason.trim()) || isSubmitting}>
+                  {isSubmitting ? (reschedule ? "Rescheduling..." : "Booking...") : (reschedule ? "Confirm Reschedule" : "Confirm Booking")}
                   {!isSubmitting && <Check className="w-4 h-4 ml-2" />}
                 </Button>
               </div>

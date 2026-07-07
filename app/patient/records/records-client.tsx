@@ -61,7 +61,9 @@ export function RecordsClient({ reports }: { reports: ReportListItem[] }) {
                           <FileText className="w-6 h-6 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-foreground">{report.diagnosis ?? "Medical Report"}</h3>
+                          <h3 className="font-semibold text-foreground line-clamp-1 break-words">
+                            {report.diagnosis?.trim() || "Medical Report"}
+                          </h3>
                           <p className="text-sm text-muted-foreground">{report.doctorName}</p>
                           <div className="flex items-center gap-2 mt-2">
                             <Badge variant="outline" className="text-xs gap-1">

@@ -22,8 +22,10 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { query, withTransaction } from "@/lib/db"
-import { getCurrentReceptionist, getDoctorById } from "@/lib/queries"
-import { cancellationCheck, appointmentDeletable, checkInDecision, doctorAvailableOn } from "@/lib/rules"
+import { getCurrentReceptionist, getDoctorById, getPatientById, type AppointmentWithNames } from "@/lib/queries"
+import { cancellationCheck, rescheduleCheck, appointmentDeletable, checkInDecision, doctorAvailableOn } from "@/lib/rules"
+import { generateCheckInCode, normalizeCheckInCode } from "@/lib/check-in-code"
+import { isEmailConfigured, sendCheckInCodeEmail } from "@/lib/email"
 import type { AppointmentRow } from "@/lib/seed-data"
 import { ok, fail, conflict, type ActionResult } from "./types"
 
@@ -91,11 +93,22 @@ export async function bookAppointment(
     )
     if (clash.rowCount && clash.rowCount > 0) return null // slot taken
 
+    // Issue a self check-in code, unique among currently-scheduled appointments.
+    let checkInCode = generateCheckInCode()
+    for (let i = 0; i < 5; i++) {
+      const taken = await client.query(
+        `SELECT 1 FROM appointments WHERE check_in_code = $1 AND status = 'scheduled' LIMIT 1`,
+        [checkInCode],
+      )
+      if (!taken.rowCount) break
+      checkInCode = generateCheckInCode()
+    }
+
     const inserted = await client.query<AppointmentRow>(
-      `INSERT INTO appointments (patient_id, doctor_id, starts_at, duration_min, status, reason, source, ai_review_status)
-       VALUES ($1, $2, $3::timestamptz, $4, 'scheduled', $5, $6, $7)
+      `INSERT INTO appointments (patient_id, doctor_id, starts_at, duration_min, status, reason, source, ai_review_status, check_in_code)
+       VALUES ($1, $2, $3::timestamptz, $4, 'scheduled', $5, $6, $7, $8)
        RETURNING *`,
-      [patient_id, doctor_id, starts_at, duration_min, reason ?? null, source, source === "ai_voice" ? "pending" : null],
+      [patient_id, doctor_id, starts_at, duration_min, reason ?? null, source, source === "ai_voice" ? "pending" : null, checkInCode],
     )
     return inserted.rows[0]
   })
@@ -104,6 +117,29 @@ export async function bookAppointment(
     return conflict("This time slot was just booked by someone else. Please choose another time.")
   }
   revalidateSchedules()
+
+  // Deliver the check-in code by email (best-effort; never blocks the booking).
+  if (isEmailConfigured() && result.check_in_code) {
+    try {
+      const patient = await getPatientById(patient_id)
+      if (patient?.email) {
+        const whenText = new Date(result.starts_at).toLocaleString("en-GB", {
+          weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+          timeZone: "Europe/Berlin",
+        })
+        await sendCheckInCodeEmail({
+          to: patient.email,
+          patientFirstName: patient.first_name,
+          code: result.check_in_code,
+          doctorName: `Dr. ${doctor.last_name}`,
+          whenText,
+        })
+      }
+    } catch {
+      /* email delivery is best-effort — the code is still shown in-app */
+    }
+  }
+
   return ok(result)
 }
 
@@ -112,11 +148,16 @@ export async function bookAppointment(
  * availability guard (excluding the appointment itself). A reason for the
  * change is recorded for the audit trail when the change is staff-initiated
  * (BR-09-02 / REQ-REC-16).
+ *
+ * A reschedule is a cancel + re-book, so the patient self-service path
+ * (`enforce24hWindow`) applies the SAME 24-hour cut-off as cancellation, judged
+ * against the CURRENT appointment's start time (REQ-MOD-05). Staff overrides
+ * leave it off.
  */
 export async function rescheduleAppointment(
   appointmentId: string,
   newStartsAt: string,
-  options: { durationMin?: number; reasonForChange?: string } = {},
+  options: { durationMin?: number; reasonForChange?: string; enforce24hWindow?: boolean } = {},
 ): Promise<ActionResult<AppointmentRow>> {
   if (Number.isNaN(Date.parse(newStartsAt))) return fail("Invalid date/time.")
 
@@ -127,6 +168,16 @@ export async function rescheduleAppointment(
     )
     if (current.rowCount === 0) return "not_found" as const
     const appt = current.rows[0]
+
+    // Enforce the 24-hour cut-off against the CURRENT start time (patient path).
+    const eligibility = rescheduleCheck(
+      appt.status,
+      new Date(appt.starts_at).getTime(),
+      Boolean(options.enforce24hWindow),
+      Date.now(),
+    )
+    if (!eligibility.ok) return { blocked: eligibility.reason! } as const
+
     const duration = options.durationMin ?? appt.duration_min
 
     await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [appt.doctor_id])
@@ -157,6 +208,9 @@ export async function rescheduleAppointment(
   if (result === "not_found") return fail("Appointment not found.")
   if (result === "conflict") {
     return conflict("The chosen time is no longer available. Please select another.")
+  }
+  if (typeof result === "object" && result !== null && "blocked" in result) {
+    return fail(result.blocked)
   }
   revalidateSchedules()
   return ok(result)
@@ -281,6 +335,55 @@ export async function checkInAppointment(
   )
   revalidateSchedules()
   return ok(updated.rows[0])
+}
+
+/**
+ * Self check-in by code (Feature 3 — clinic QR fallback path). Looks up TODAY's
+ * appointment carrying this code and transitions it to `waiting`. The code is
+ * only matched among `scheduled`/`waiting` appointments and the same-day rule is
+ * enforced, so a leaked or old code cannot check in a future or past visit.
+ * Idempotent: entering the code again once already `waiting` reports success.
+ */
+export async function checkInByCode(
+  codeInput: string,
+): Promise<ActionResult<{ id: string; doctor_name: string; patient_name: string; starts_at: string }>> {
+  const code = normalizeCheckInCode(codeInput)
+  if (code.length < 4) return fail("Please enter your check-in code.")
+
+  const found = await query<AppointmentWithNames>(
+    `SELECT a.*,
+            p.first_name || ' ' || p.last_name AS patient_name,
+            'Dr. ' || d.last_name              AS doctor_name
+     FROM appointments a
+     JOIN patients p ON p.id = a.patient_id
+     JOIN doctors  d ON d.id = a.doctor_id
+     WHERE a.check_in_code = $1 AND a.status IN ('scheduled', 'waiting')
+     ORDER BY a.starts_at
+     LIMIT 1`,
+    [code],
+  )
+  if (found.rowCount === 0) {
+    return fail("No appointment matches that code. Please check the code, or ask reception for help.")
+  }
+  const appt = found.rows[0]
+  const project = () => ({
+    id: appt.id, doctor_name: appt.doctor_name, patient_name: appt.patient_name, starts_at: appt.starts_at,
+  })
+
+  const decision = checkInDecision({
+    status: appt.status,
+    isAppointmentToday: new Date(appt.starts_at).toDateString() === new Date().toDateString(),
+    enforceSameDay: true,
+  })
+  if (decision.action === "already") return ok(project()) // idempotent (REQ-PAT-05)
+  if (decision.action === "blocked") return fail(decision.reason)
+
+  await query(
+    `UPDATE appointments SET status = 'waiting', check_in_at = now() WHERE id = $1`,
+    [appt.id],
+  )
+  revalidateSchedules()
+  return ok(project())
 }
 
 /**

@@ -14,6 +14,7 @@
 import { randomUUID } from "node:crypto"
 import { pool } from "./_connect"
 import * as seed from "../lib/seed-data"
+import { generateCheckInCode } from "../lib/check-in-code"
 
 // seed-id → uuid maps
 const docId = new Map<string, string>()
@@ -137,12 +138,14 @@ async function main() {
     // ── Scheduling / clinical events ──
     await insert(
       "appointments",
-      ["id", "patient_id", "doctor_id", "starts_at", "duration_min", "status", "reason", "reason_for_change", "check_in_at", "doctor_notes", "created_at"],
+      ["id", "patient_id", "doctor_id", "starts_at", "duration_min", "status", "reason", "reason_for_change", "check_in_at", "doctor_notes", "created_at", "check_in_code"],
       seed.appointments.map((a) => ({
         ...a,
         id: uuidFor(apptId, a.id),
         patient_id: patId.get(a.patient_id),
         doctor_id: docId.get(a.doctor_id),
+        // Only live (scheduled/waiting) visits carry a usable code.
+        check_in_code: a.status === "scheduled" || a.status === "waiting" ? generateCheckInCode() : null,
       })),
     )
     await insert(

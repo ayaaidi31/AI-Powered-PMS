@@ -132,3 +132,25 @@ export function cancellationCheck(
   }
   return { ok: true }
 }
+
+/**
+ * Reschedule eligibility. A reschedule is a cancel + re-book of the same visit,
+ * so the self-service path enforces the SAME 24-hour window as cancellation
+ * (REQ-MOD-05) — judged against how soon the CURRENT appointment is. This stops
+ * a within-24h appointment being moved out and then cancelled to dodge the
+ * cut-off. Staff-initiated changes pass `enforce24hWindow = false` to override.
+ */
+export function rescheduleCheck(
+  status: string,
+  startsAtMs: number,
+  enforce24hWindow: boolean,
+  nowMs: number,
+): { ok: boolean; reason?: string } {
+  if (status !== "scheduled") {
+    return { ok: false, reason: "This appointment can no longer be rescheduled." }
+  }
+  if (enforce24hWindow && (startsAtMs - nowMs) / 3_600_000 < 24) {
+    return { ok: false, reason: "Appointments within 24 hours must be rescheduled by calling the clinic directly." }
+  }
+  return { ok: true }
+}

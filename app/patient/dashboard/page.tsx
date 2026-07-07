@@ -143,7 +143,7 @@ export default async function PatientDashboard() {
                             </div>
                             <div className="flex flex-col gap-2">
                               {canCheckIn ? (
-                                <Link href={`/patient/check-in/${appointment.id}`}>
+                                <Link href="/checkin">
                                   <Button className="w-full sm:w-auto gap-2 shadow-md"><Smartphone className="w-4 h-4" />Self Check-in</Button>
                                 </Link>
                               ) : (

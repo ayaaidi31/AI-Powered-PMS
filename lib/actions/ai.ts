@@ -5,7 +5,7 @@
  *
  * Two model-backed steps, both kept behind lib/llm/mistral.ts so the RAG system
  * can replace them later:
- *   - generateConsultationReport: rough notes → structured German report.
+ *   - generateConsultationReport: rough notes → structured clinical report.
  *   - suggestBillingCodes: report → billing codes, using a retrieve-then-select
  *     (RAG-lite) approach. It FIRST retrieves candidate codes from the real
  *     catalog (the GP base GOPs + EBM codes matching the services extracted from
@@ -32,6 +32,7 @@ import { matchAllergyAlerts, type SafetyAlert } from "@/lib/clinical-safety"
 export type { SafetyAlert } from "@/lib/clinical-safety"
 import { ok, fail, type ActionResult } from "./types"
 import type { CodeSuggestion } from "./codes"
+import { languageDirective } from "@/lib/ai-language"
 
 /** Format a vitals row into a compact clinical string (German units). */
 function fmtVitals(v: VitalsRow): string {
@@ -51,7 +52,7 @@ interface ReportInput {
   context?: { conditions: string[]; allergies: string[]; medications: string[]; vitals?: string | null }
 }
 
-/** Turn the doctor's rough notes into a structured, formal German report. */
+/** Turn the doctor's rough notes into a structured, formal clinical report. */
 export async function generateConsultationReport(
   input: ReportInput,
 ): Promise<ActionResult<{ report: string }>> {
@@ -65,10 +66,10 @@ export async function generateConsultationReport(
   const ctx = input.context
   const contextBlock = ctx
     ? [
-        ctx.conditions.length ? `Vorerkrankungen: ${ctx.conditions.join(", ")}` : "",
-        ctx.allergies.length ? `Allergien: ${ctx.allergies.join(", ")}` : "",
-        ctx.medications.length ? `Aktuelle Medikation: ${ctx.medications.join(", ")}` : "",
-        ctx.vitals ? `Vitalwerte (diese Konsultation): ${ctx.vitals}` : "",
+        ctx.conditions.length ? `Pre-existing conditions: ${ctx.conditions.join(", ")}` : "",
+        ctx.allergies.length ? `Allergies: ${ctx.allergies.join(", ")}` : "",
+        ctx.medications.length ? `Current medication: ${ctx.medications.join(", ")}` : "",
+        ctx.vitals ? `Vitals (this consultation): ${ctx.vitals}` : "",
       ].filter(Boolean).join("\n")
     : ""
 
@@ -78,18 +79,19 @@ export async function generateConsultationReport(
         {
           role: "system",
           content:
-            "Du bist ein medizinischer Dokumentationsassistent. Wandle die stichwortartigen Konsultationsnotizen in einen formellen, strukturierten deutschen Arztbericht um. " +
-            "Gliederung: Anamnese, Befund, Diagnose, Therapie/Procedere. " +
-            "Falls Vitalwerte angegeben sind, nimm sie in den Befund auf. " +
-            "Erfinde keine Befunde, Werte oder Diagnosen, die nicht in den Notizen oder Vitalwerten stehen. Nenne keine personenbezogenen Identifikatoren.",
+            "You are a medical documentation assistant. Turn the doctor's shorthand consultation notes into a formal, structured clinical report. " +
+            "Use the sections: History, Findings, Diagnosis, Treatment/Plan. " +
+            "If vitals are provided, include them in the Findings. " +
+            "Do not invent findings, values or diagnoses that are not in the notes or vitals. Do not include personal identifiers. " +
+            languageDirective(),
         },
         {
           role: "user",
           content:
-            (contextBlock ? `Patientenkontext:\n${contextBlock}\n\n` : "") +
-            `Notizen:\n${input.rawNotes}\n` +
-            (input.diagnosis ? `\nDiagnose: ${input.diagnosis}` : "") +
-            (input.treatment ? `\nBehandlung: ${input.treatment}` : ""),
+            (contextBlock ? `Patient context:\n${contextBlock}\n\n` : "") +
+            `Notes:\n${input.rawNotes}\n` +
+            (input.diagnosis ? `\nDiagnosis: ${input.diagnosis}` : "") +
+            (input.treatment ? `\nTreatment: ${input.treatment}` : ""),
         },
       ],
       { temperature: 0.3 },
@@ -276,11 +278,12 @@ export async function simplifyReport(reportText: string): Promise<ActionResult<{
         {
           role: "system",
           content:
-            "Erkläre den folgenden Arztbericht in einfacher, leicht verständlicher Sprache für eine Patientin oder " +
-            "einen Patienten ohne medizinische Vorkenntnisse. Vermeide Fachbegriffe oder erkläre sie kurz in Klammern. " +
-            "Schreibe ruhig und sachlich. Gliedere kurz: was wurde festgestellt, was bedeutet das, und wie geht es weiter. " +
-            "Erfinde nichts: erkläre ausschließlich, was im Bericht steht; gib keine neuen Diagnosen oder " +
-            "Behandlungsempfehlungen. Sprich die Person direkt an („Sie“).",
+            "Explain the following medical report in simple, easy-to-understand language for a patient with no medical " +
+            "background. Avoid technical terms, or explain them briefly in brackets. " +
+            "Keep the tone calm and matter-of-fact. Structure it briefly: what was found, what it means, and what happens next. " +
+            "Do not invent anything: explain only what is in the report; give no new diagnoses or treatment " +
+            "recommendations. Address the person directly (\"you\"). " +
+            languageDirective(),
         },
         { role: "user", content: reportText.slice(0, 6000) },
       ],
@@ -401,35 +404,36 @@ export async function summarizePatientHistory(input: {
     return fail("Not enough history to summarize for this patient.")
   }
   try {
-    const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE")
+    const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB")
     const visitsBlock = input.visits.length
       ? input.visits
-          .map((v) => `- ${fmtDate(v.date)} | ${v.status} | ${v.reason ?? "—"}${v.diagnosis ? ` | Diagnose: ${v.diagnosis}` : ""}`)
+          .map((v) => `- ${fmtDate(v.date)} | ${v.status} | ${v.reason ?? "—"}${v.diagnosis ? ` | Diagnosis: ${v.diagnosis}` : ""}`)
           .join("\n")
-      : "Keine früheren Termine."
+      : "No previous appointments."
     const ctxBlock = [
-      input.conditions.length ? `Vorerkrankungen: ${input.conditions.join(", ")}` : "",
-      input.allergies.length ? `Allergien: ${input.allergies.join(", ")}` : "",
-      input.medications.length ? `Dauermedikation: ${input.medications.join(", ")}` : "",
-      input.vitals ? `Letzte Vitalwerte: ${input.vitals}` : "",
+      input.conditions.length ? `Pre-existing conditions: ${input.conditions.join(", ")}` : "",
+      input.allergies.length ? `Allergies: ${input.allergies.join(", ")}` : "",
+      input.medications.length ? `Long-term medication: ${input.medications.join(", ")}` : "",
+      input.vitals ? `Latest vitals: ${input.vitals}` : "",
     ].filter(Boolean).join("\n")
     const summary = await mistralChat(
       [
         {
           role: "system",
           content:
-            "Du bist ein klinischer Assistent. Fasse die Krankengeschichte des Patienten für die behandelnde " +
-            "Ärztin oder den behandelnden Arzt VOR der Konsultation kurz und sachlich zusammen. " +
-            "Nenne: wiederkehrende Probleme und den Verlauf, das Ergebnis des letzten Besuchs, relevante " +
-            "Dauerdiagnosen, Allergien und Medikation sowie worauf heute besonders zu achten ist. " +
-            "Nutze AUSSCHLIESSLICH die bereitgestellten Daten; erfinde keine Befunde oder Diagnosen. " +
-            "Halte dich kurz: maximal etwa sechs Stichpunkte.",
+            "You are a clinical assistant. Summarize the patient's medical history for the treating doctor BEFORE " +
+            "the consultation, briefly and factually. " +
+            "Cover: recurring problems and their course, the outcome of the last visit, relevant chronic " +
+            "diagnoses, allergies and medication, and what to pay particular attention to today. " +
+            "Use ONLY the supplied data; do not invent findings or diagnoses. " +
+            "Keep it short: at most about six bullet points. " +
+            languageDirective(),
         },
         {
           role: "user",
           content:
             (ctxBlock ? `${ctxBlock}\n\n` : "") +
-            `Frühere Termine (neueste zuerst):\n${visitsBlock}`,
+            `Previous appointments (most recent first):\n${visitsBlock}`,
         },
       ],
       { temperature: 0.3 },
@@ -471,24 +475,25 @@ export async function suggestProfileUpdates(input: {
   const c = input.current
   try {
     const currentBlock =
-      `Telefon: ${c.phone || "—"}\nE-Mail: ${c.email || "—"}\n` +
-      `Adresse: ${[c.street, c.postal_code, c.city, c.country].filter(Boolean).join(", ") || "—"}\n` +
-      `Allergien: ${c.allergies?.length ? c.allergies.join(", ") : "—"}\n` +
-      `Vorerkrankungen: ${c.conditions?.length ? c.conditions.join(", ") : "—"}`
+      `Phone: ${c.phone || "—"}\nEmail: ${c.email || "—"}\n` +
+      `Address: ${[c.street, c.postal_code, c.city, c.country].filter(Boolean).join(", ") || "—"}\n` +
+      `Allergies: ${c.allergies?.length ? c.allergies.join(", ") : "—"}\n` +
+      `Pre-existing conditions: ${c.conditions?.length ? c.conditions.join(", ") : "—"}`
     const raw = await mistralChat(
       [
         {
           role: "system",
           content:
-            "Du prüfst, ob aus einem Konsultationstext STAMMDATEN der Patientenakte aktualisiert werden sollten. " +
-            "Gib NUR Änderungen aus, die im Text AUSDRÜCKLICH genannt sind UND vom aktuellen Stand abweichen bzw. neu sind. " +
-            "Erlaubte Felder: phone, email, street, city, postal_code, country, allergy (neue Allergie), condition (neue Dauerdiagnose). " +
-            "Für allergy/condition NUR Einträge, die noch nicht in der Liste stehen. Erfinde nichts; im Zweifel weglassen. " +
-            "Keine reinen Konsultationsbefunde (akute Symptome) als condition. " +
-            'Antworte ausschließlich als JSON: {"updates":[{"field":"...","proposedValue":"...","reason":"kurz, woraus im Text"}]}. ' +
-            "Leere Liste, wenn nichts Eindeutiges vorliegt.",
+            "You check whether a consultation text implies that MASTER DATA in the patient record should be updated. " +
+            "Return ONLY changes that are EXPLICITLY stated in the text AND differ from the current value or are new. " +
+            "Allowed fields: phone, email, street, city, postal_code, country, allergy (new allergy), condition (new chronic diagnosis). " +
+            "For allergy/condition, ONLY entries not already in the list. Invent nothing; when in doubt, leave it out. " +
+            "Do not treat plain consultation findings (acute symptoms) as a condition. " +
+            'Respond ONLY as JSON: {"updates":[{"field":"...","proposedValue":"...","reason":"short, from where in the text"}]}. ' +
+            "Empty list when nothing is unambiguous. " +
+            languageDirective(),
         },
-        { role: "user", content: `AKTUELLE STAMMDATEN:\n${currentBlock}\n\nKONSULTATIONSTEXT:\n${text.slice(0, 6000)}` },
+        { role: "user", content: `CURRENT MASTER DATA:\n${currentBlock}\n\nCONSULTATION TEXT:\n${text.slice(0, 6000)}` },
       ],
       { json: true, temperature: 0 },
     )
@@ -566,20 +571,20 @@ export async function askDecisionSupport(input: {
     const chunks = retrieval.chunks
     const context = chunks.length
       ? chunks
-          .map((c, i) => `[${i + 1}] ${c.title ?? "Leitlinie"}${c.page ? `, S. ${c.page}` : ""}\n${c.document.slice(0, 1200)}`)
+          .map((c, i) => `[${i + 1}] ${c.title ?? "Guideline"}${c.page ? `, p. ${c.page}` : ""}\n${c.document.slice(0, 1200)}`)
           .join("\n\n")
-      : "(keine passenden Leitlinien-Auszüge gefunden)"
+      : "(no matching guideline excerpts found)"
 
     const p = input.patient
     const patientBlock = p
       ? [
-          "PATIENTENKONTEXT (aktuelle Konsultation):",
-          p.ageYears != null ? `Alter: ${p.ageYears} Jahre` : "",
-          `Allergien: ${p.allergies?.length ? p.allergies.join(", ") : "keine dokumentiert"}`,
-          p.conditions?.length ? `Vorerkrankungen: ${p.conditions.join(", ")}` : "",
-          p.medications?.length ? `Dauermedikation: ${p.medications.join(", ")}` : "",
-          p.vitals ? `Vitalwerte: ${p.vitals}` : "",
-          p.history ? `Frühere Besuche (Verlauf): ${p.history}` : "",
+          "PATIENT CONTEXT (current consultation):",
+          p.ageYears != null ? `Age: ${p.ageYears} years` : "",
+          `Allergies: ${p.allergies?.length ? p.allergies.join(", ") : "none documented"}`,
+          p.conditions?.length ? `Pre-existing conditions: ${p.conditions.join(", ")}` : "",
+          p.medications?.length ? `Long-term medication: ${p.medications.join(", ")}` : "",
+          p.vitals ? `Vitals: ${p.vitals}` : "",
+          p.history ? `Previous visits (course): ${p.history}` : "",
         ].filter(Boolean).join("\n")
       : ""
 
@@ -589,29 +594,28 @@ export async function askDecisionSupport(input: {
         {
           role: "system",
           content:
-            "Du bist ein klinisches Entscheidungsunterstützungssystem für Hausärztinnen und Hausärzte. " +
-            "Beantworte die Frage AUSSCHLIESSLICH auf Basis der bereitgestellten Leitlinien-Auszüge (KONTEXT). " +
-            "Zitiere die genutzten Auszüge im Text mit [1], [2] usw. (passend zur Nummerierung im KONTEXT). " +
-            "Wenn der KONTEXT keine Auszüge enthält, verwende KEINE Quellenangaben [n]. " +
-            "Berücksichtige den PATIENTENKONTEXT (Alter, Allergien, Vorerkrankungen, Dauermedikation, Vitalwerte, " +
-            "frühere Besuche und Verlauf) und gib fallbezogene, konkrete Empfehlungen. Beziehe relevante Vorbefunde " +
-            "und den bisherigen Verlauf in deine Einschätzung ein. Weise aktiv auf mögliche Sicherheitsprobleme hin " +
-            "(Allergien, Kontraindikationen, Wechselwirkungen), wenn der Kontext sie nahelegt. " +
-            "Wenn der KONTEXT die Frage nicht oder nur teilweise beantwortet, sage das ausdrücklich und rate nicht; " +
-            "erfinde nichts. Triff KEINE endgültige Diagnose- oder Therapieentscheidung — du unterstützt nur; " +
-            "die Entscheidung trifft die Ärztin oder der Arzt. Antworte fachlich, strukturiert und knapp. " +
-            "Antworte in der SPRACHE DER FRAGE: Wird die Frage auf Englisch gestellt, antworte auf Englisch und " +
-            "übersetze die deutschen Leitlinieninhalte sinngemäß (Fachbegriffe präzise halten).",
+            "You are a clinical decision-support system for general practitioners. " +
+            "Answer the question EXCLUSIVELY on the basis of the provided guideline excerpts (CONTEXT). " +
+            "Cite the excerpts you use in the text with [1], [2] etc. (matching the numbering in the CONTEXT). " +
+            "If the CONTEXT contains no excerpts, do NOT use any source markers [n]. " +
+            "Take the PATIENT CONTEXT into account (age, allergies, pre-existing conditions, long-term medication, " +
+            "vitals, previous visits and course) and give case-specific, concrete recommendations. Factor relevant " +
+            "prior findings and the course so far into your assessment. Actively point out possible safety issues " +
+            "(allergies, contraindications, interactions) when the context suggests them. " +
+            "If the CONTEXT does not answer the question, or only partially, say so explicitly and do not guess; " +
+            "invent nothing. Make NO final diagnostic or therapeutic decision — you only support; " +
+            "the decision is the doctor's. Answer professionally, in a structured and concise way. " +
+            languageDirective(),
         },
         ...recent,
         {
           role: "user",
           content:
-            `Frage: ${input.question}\n\n` +
+            `Question: ${input.question}\n\n` +
             (patientBlock ? `${patientBlock}\n\n` : "") +
-            (input.diagnosis?.trim() ? `Arbeitsdiagnose: ${input.diagnosis}\n` : "") +
-            (input.notes?.trim() ? `Konsultationsnotizen:\n${input.notes.slice(0, 2000)}\n` : "") +
-            `\nKONTEXT (Leitlinien-Auszüge):\n${context}`,
+            (input.diagnosis?.trim() ? `Working diagnosis: ${input.diagnosis}\n` : "") +
+            (input.notes?.trim() ? `Consultation notes:\n${input.notes.slice(0, 2000)}\n` : "") +
+            `\nCONTEXT (guideline excerpts):\n${context}`,
         },
       ],
       { temperature: 0.2 },
@@ -740,17 +744,17 @@ export async function askPatientRecordsQA(input: {
       return ok({ answer: "There are no records on file for this patient yet.", sources: [], grounded: false })
     }
 
-    const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE")
+    const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB")
     const used = reports.slice(0, 12)
     const sources: RecordSource[] = used.map((r, i) => ({
       id: r.id,
-      label: `[${i + 1}] Bericht vom ${fmtDate(r.created_at)}${r.diagnosis ? ` — ${r.diagnosis}` : ""}`,
+      label: `[${i + 1}] Report of ${fmtDate(r.created_at)}${r.diagnosis ? ` — ${r.diagnosis}` : ""}`,
     }))
     const reportContext = used
       .map((r, i) => {
         const body = (r.formatted_report || r.raw_notes || "").slice(0, 1000)
         const rx = (r.prescriptions ?? []).map((p) => `${p.medication} ${p.dosage ?? ""} ${p.frequency ?? ""}`.trim()).join("; ")
-        return `[${i + 1}] Bericht vom ${fmtDate(r.created_at)}${r.diagnosis ? ` — Diagnose: ${r.diagnosis}` : ""}\n${body}${rx ? `\nVerordnungen: ${rx}` : ""}`
+        return `[${i + 1}] Report of ${fmtDate(r.created_at)}${r.diagnosis ? ` — Diagnosis: ${r.diagnosis}` : ""}\n${body}${rx ? `\nPrescriptions: ${rx}` : ""}`
       })
       .join("\n\n")
 
@@ -760,8 +764,8 @@ export async function askPatientRecordsQA(input: {
       .map((v) => `${fmtDate(v.recorded_at)}: ${fmtVitals(v) || "—"}`)
       .join("\n")
     const context =
-      (reportContext ? `BERICHTE:\n${reportContext}` : "") +
-      (vitalsBlock ? `${reportContext ? "\n\n" : ""}VITALWERTE (Verlauf, neueste zuerst):\n${vitalsBlock}` : "")
+      (reportContext ? `REPORTS:\n${reportContext}` : "") +
+      (vitalsBlock ? `${reportContext ? "\n\n" : ""}VITALS (history, most recent first):\n${vitalsBlock}` : "")
 
     const recent = (input.history ?? []).slice(-6).map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }))
     const answer = await mistralChat(
@@ -769,15 +773,15 @@ export async function askPatientRecordsQA(input: {
         {
           role: "system",
           content:
-            "Du bist ein klinischer Recherche-Assistent für die behandelnde Ärztin oder den behandelnden Arzt. " +
-            "Beantworte die Frage AUSSCHLIESSLICH auf Basis der bereitgestellten AKTEN dieses einen Patienten (KONTEXT). " +
-            "Zitiere für jede Aussage die Quelle mit [1], [2] usw. (entsprechend den Berichten im KONTEXT). " +
-            "Wenn die Information NICHT in den Akten steht, sage ausdrücklich: dass du dazu nichts in den " +
-            "Akten dieses Patienten findest — rate oder erfinde nichts. Bleibe sachlich und knapp. " +
-            "Antworte in der Sprache der Frage (Deutsch oder Englisch).",
+            "You are a clinical research assistant for the treating doctor. " +
+            "Answer the question EXCLUSIVELY on the basis of the provided RECORDS of this one patient (CONTEXT). " +
+            "For every statement, cite the source with [1], [2] etc. (matching the reports in the CONTEXT). " +
+            "If the information is NOT in the records, say so explicitly: that nothing on this is found in this " +
+            "patient's records — do not guess or invent. Stay factual and concise. " +
+            languageDirective(),
         },
         ...recent,
-        { role: "user", content: `Frage: ${input.question}\n\nKONTEXT (Akten dieses Patienten, neueste zuerst):\n${context}` },
+        { role: "user", content: `Question: ${input.question}\n\nCONTEXT (this patient's records, most recent first):\n${context}` },
       ],
       { temperature: 0.1 },
     )
@@ -814,7 +818,7 @@ export async function askClinicFaq(
             `- If the answer is not in the facts, say you don't have that information and suggest contacting reception (${CLINIC.line2}).\n` +
             `- Never give medical advice, diagnoses, or interpret symptoms or results. For medical concerns, advise contacting the practice; in an emergency, tell them to call 112.\n` +
             `- Be concise, warm and clear. Use short sentences and bullet points where helpful.\n` +
-            `- Reply in the SAME language as the patient's latest message.\n\n` +
+            `- ${languageDirective()}\n\n` +
             `FACTS:\n${CLINIC_FAQ}`,
         },
         ...recent,

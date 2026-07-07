@@ -31,6 +31,7 @@ export default async function PatientAppointmentsPage() {
     status: a.status,
     reason: a.reason,
     doctor_name: doctorNames.get(a.doctor_id) ?? "Doctor",
+    check_in_code: a.check_in_code ?? null,
   }))
 
   return <PatientAppointmentsClient appointments={view} />

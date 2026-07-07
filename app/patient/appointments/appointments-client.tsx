@@ -4,7 +4,9 @@
  * Patient appointment list with self-service cancellation (Feature 4 —
  * UC-PAT-03). Cancellation calls `cancelAppointment` with the 24-hour cut-off
  * enforced server-side (REQ-MOD-05); the action also frees the slot for
- * re-booking. Rescheduling is offered via the existing booking flow.
+ * re-booking. Rescheduling reuses the booking wizard in edit mode
+ * (`/patient/appointments/new?reschedule=<id>`), which moves the existing
+ * appointment in place instead of creating a new one.
  */
 import { useState, useTransition } from "react"
 import Link from "next/link"
@@ -32,6 +34,7 @@ export interface PatientAppointmentView {
   status: AppointmentStatusDb
   reason: string | null
   doctor_name: string
+  check_in_code: string | null
 }
 
 const STATUS_VARIANT: Record<AppointmentStatusDb, "default" | "secondary" | "outline" | "destructive"> = {
@@ -59,7 +62,11 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
     .filter((a) => new Date(a.starts_at) < todayStart || a.status === "completed" || a.status === "cancelled")
     .sort((a, b) => +new Date(b.starts_at) - +new Date(a.starts_at))
 
-  /** Mirrors the server-side 24-hour rule so the UI can disable the control. */
+  /**
+   * Mirrors the server-side 24-hour rule so the UI can disable the controls.
+   * Reschedule uses the same gate as cancel — a reschedule is a cancel + re-book,
+   * so both are blocked inside the 24-hour window (call reception instead).
+   */
   const canCancel = (a: PatientAppointmentView) => {
     const hoursUntil = (new Date(a.starts_at).getTime() - Date.now()) / 3_600_000
     return hoursUntil > 24 && a.status === "scheduled"
@@ -104,6 +111,15 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
                   {time}
                 </Badge>
               </div>
+              {isUpcoming && appointment.check_in_code && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Check-in code:{" "}
+                  <span className="font-mono font-semibold tracking-widest text-foreground">
+                    {appointment.check_in_code}
+                  </span>
+                  <span className="block text-[11px] mt-0.5">Scan the clinic QR on arrival and enter this code.</span>
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -116,9 +132,13 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                    <Link href="/patient/appointments/new">Reschedule (book new)</Link>
-                  </DropdownMenuItem>
+                  {cancellable ? (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/patient/appointments/new?reschedule=${appointment.id}`}>Reschedule</Link>
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem disabled>Cannot reschedule (less than 24h)</DropdownMenuItem>
+                  )}
                   {cancellable ? (
                     <DropdownMenuItem className="text-destructive" onClick={() => setCancelId(appointment.id)}>
                       Cancel Appointment
