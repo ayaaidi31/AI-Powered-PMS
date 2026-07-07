@@ -13,6 +13,7 @@
  *                           you verify a domain.
  *   APP_URL               — base URL used to build links in the email.
  */
+import { headers } from "next/headers"
 import { Resend } from "resend"
 import { CLINIC } from "@/lib/clinic"
 
@@ -24,9 +25,35 @@ export function isEmailConfigured(): boolean {
   return Boolean(KEY)
 }
 
-/** Absolute URL of the clinic check-in page (for QR links and emails). */
-export function appUrl(path = ""): string {
-  const base = (process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")
+/**
+ * Absolute URL of the app (for QR links and emails). Resolution order:
+ *   1. APP_URL env (explicit override — set this in production if you want a
+ *      fixed canonical domain).
+ *   2. The actual request host (from headers) — works automatically on Vercel
+ *      and on the LAN, so the check-in QR always points at the domain the user
+ *      is really on.
+ *   3. VERCEL_URL (when there is no request scope, e.g. a background job).
+ *   4. localhost fallback.
+ */
+export async function appUrl(path = ""): Promise<string> {
+  let base = process.env.APP_URL
+
+  if (!base) {
+    try {
+      const h = await headers()
+      const host = h.get("x-forwarded-host") ?? h.get("host")
+      if (host) {
+        const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https")
+        base = `${proto}://${host}`
+      }
+    } catch {
+      /* no request scope (e.g. build-time or a background job) */
+    }
+  }
+
+  if (!base && process.env.VERCEL_URL) base = `https://${process.env.VERCEL_URL}`
+
+  base = (base ?? "http://localhost:3000").replace(/\/$/, "")
   return `${base}${path}`
 }
 

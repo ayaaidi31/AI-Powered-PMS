@@ -15,7 +15,7 @@ import { CLINIC } from "@/lib/clinic"
 export const dynamic = "force-dynamic"
 
 export default async function CheckInQrPage() {
-  const url = appUrl("/checkin")
+  const url = await appUrl("/checkin")
   const qr = await QRCode.toDataURL(url, { width: 360, margin: 2, errorCorrectionLevel: "M" })
 
   return (
