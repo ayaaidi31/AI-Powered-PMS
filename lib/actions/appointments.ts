@@ -324,6 +324,8 @@ export async function checkInAppointment(
     status: appt.status,
     isAppointmentToday: new Date(appt.starts_at).toDateString() === new Date().toDateString(),
     enforceSameDay: Boolean(options.enforceSameDay),
+    startsAtMs: new Date(appt.starts_at).getTime(),
+    nowMs: Date.now(),
   })
   if (decision.action === "already") return ok(appt) // idempotent (REQ-PAT-05)
   if (decision.action === "blocked") return fail(decision.reason)
@@ -374,6 +376,8 @@ export async function checkInByCode(
     status: appt.status,
     isAppointmentToday: new Date(appt.starts_at).toDateString() === new Date().toDateString(),
     enforceSameDay: true,
+    startsAtMs: new Date(appt.starts_at).getTime(),
+    nowMs: Date.now(),
   })
   if (decision.action === "already") return ok(project()) // idempotent (REQ-PAT-05)
   if (decision.action === "blocked") return fail(decision.reason)

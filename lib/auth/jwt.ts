@@ -8,7 +8,7 @@
 import { SignJWT, jwtVerify } from "jose"
 
 export const SESSION_COOKIE = "session"
-export const MAX_AGE_SECONDS = 60 * 60 * 8 // 8-hour working session
+export const MAX_AGE_SECONDS = 60 * 60 * 2 // 2-hour session (shorter = safer)
 
 export type Role = "doctor" | "receptionist" | "patient" | "admin"
 
@@ -18,6 +18,10 @@ export interface SessionPayload {
   profileId: string | null // doctor_id / receptionist_id / patient_id
   email: string
   name: string
+  /** True once this session has cleared two-factor (or the account has none). */
+  mfa?: boolean
+  /** True while the account still holds an admin-issued temporary password. */
+  mustChangePassword?: boolean
 }
 
 function secretKey(): Uint8Array {
@@ -45,7 +49,40 @@ export async function verifySession(token: string): Promise<SessionPayload | nul
       profileId: (payload.profileId as string | null) ?? null,
       email: String(payload.email),
       name: String(payload.name),
+      mfa: payload.mfa === true,
+      mustChangePassword: payload.mustChangePassword === true,
     }
+  } catch {
+    return null
+  }
+}
+
+/** Roles for which two-factor is mandatory (staff see all patient data). */
+export function twoFactorRequiredForRole(role: Role): boolean {
+  return role === "doctor" || role === "receptionist" || role === "admin"
+}
+
+const TWO_FACTOR_TICKET_TTL = "5m"
+
+/**
+ * Short-lived ticket issued after a correct password when the account has 2FA
+ * enabled. It authorises ONLY the second-factor step — it is not a session and
+ * grants no access on its own.
+ */
+export async function signTwoFactorTicket(userId: string): Promise<string> {
+  return new SignJWT({ userId, purpose: "twofa" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(TWO_FACTOR_TICKET_TTL)
+    .sign(secretKey())
+}
+
+/** Verify a 2FA ticket; returns the userId or null. */
+export async function verifyTwoFactorTicket(token: string): Promise<{ userId: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, secretKey(), { algorithms: ["HS256"] })
+    if (payload.purpose !== "twofa" || !payload.userId) return null
+    return { userId: String(payload.userId) }
   } catch {
     return null
   }
@@ -57,6 +94,6 @@ export function roleHome(role: Role): string {
     case "doctor": return "/doctor/dashboard"
     case "receptionist": return "/receptionist/dashboard"
     case "patient": return "/patient/dashboard"
-    case "admin": return "/receptionist/dashboard"
+    case "admin": return "/admin/staff"
   }
 }

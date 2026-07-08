@@ -19,7 +19,7 @@ const DEMO_PASSWORD = "demo123"
 async function upsertUser(
   email: string,
   hash: string,
-  role: "doctor" | "receptionist" | "patient",
+  role: "doctor" | "receptionist" | "patient" | "admin",
   link: { doctor_id?: string; receptionist_id?: string; patient_id?: string },
 ) {
   await pool.query(
@@ -53,6 +53,10 @@ async function main() {
   )).rows
   for (const p of patients) await upsertUser(p.email, hash, "patient", { patient_id: p.id })
   console.log(`  • patients: ${patients.length} accounts`)
+
+  // Admin account (no role profile) — can provision staff at /admin/staff.
+  await upsertUser("admin@clinic.com", hash, "admin", {})
+  console.log("  • admin: 1 account (admin@clinic.com)")
 
   console.log(`✓ Accounts seeded. Demo password for all: "${DEMO_PASSWORD}"`)
 }

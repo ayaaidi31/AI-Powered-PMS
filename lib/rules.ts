@@ -47,17 +47,38 @@ export function appointmentDeletable(input: {
  *  - "ok": transition `scheduled` → `waiting` (REQ-PAT-03 / REQ-REC-07).
  */
 export type CheckInDecision = { action: "ok" } | { action: "already" } | { action: "blocked"; reason: string }
+/** Minutes before the appointment when self check-in opens. */
+export const CHECKIN_WINDOW_MIN = 15
 export function checkInDecision(input: {
   status: string
   isAppointmentToday: boolean
   enforceSameDay: boolean
+  /** Epoch ms of the appointment start and "now" — enable the early-window gate. */
+  startsAtMs?: number
+  nowMs?: number
+  earlyWindowMin?: number
 }): CheckInDecision {
   if (input.status === "waiting") return { action: "already" }
   if (input.status !== "scheduled") {
     return { action: "blocked", reason: `Cannot check in an appointment with status "${input.status}".` }
   }
-  if (input.enforceSameDay && !input.isAppointmentToday) {
-    return { action: "blocked", reason: "Check-in is only available on the day of your appointment." }
+  // Self-service path only: same-day + opens a short window before the start, so a
+  // patient can't check in hours early (they must actually be arriving).
+  if (input.enforceSameDay) {
+    if (!input.isAppointmentToday) {
+      return { action: "blocked", reason: "Check-in is only available on the day of your appointment." }
+    }
+    if (input.startsAtMs != null && input.nowMs != null) {
+      const windowMin = input.earlyWindowMin ?? CHECKIN_WINDOW_MIN
+      const opensAt = input.startsAtMs - windowMin * 60_000
+      if (input.nowMs < opensAt) {
+        const mins = Math.ceil((opensAt - input.nowMs) / 60_000)
+        return {
+          action: "blocked",
+          reason: `Check-in opens ${windowMin} minutes before your appointment — please try again in about ${mins} minute${mins === 1 ? "" : "s"}.`,
+        }
+      }
+    }
   }
   return { action: "ok" }
 }

@@ -19,6 +19,7 @@ import type { PatientRow, VitalsRow } from "@/lib/seed-data"
 import { patientName } from "@/lib/display"
 import { updatePatient } from "@/lib/actions/patients"
 import { respondToProposal, type ProfileProposalRow } from "@/lib/actions/profile-proposals"
+import { SecurityClient } from "@/app/security/security-client"
 
 interface Alerts {
   allergies: string[]
@@ -33,12 +34,13 @@ const INSURANCE_LABEL: Record<PatientRow["insurance_type"], string> = {
 }
 
 export function ProfileClient({
-  patient, vitals, alerts, proposals,
+  patient, vitals, alerts, proposals, twoFactorEnabled,
 }: {
   patient: PatientRow
   vitals: VitalsRow | null
   alerts: Alerts
   proposals: ProfileProposalRow[]
+  twoFactorEnabled: boolean
 }) {
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
@@ -317,6 +319,9 @@ export function ProfileClient({
               </CardContent>
             </Card>
           )}
+
+          {/* Account security — two-factor authentication */}
+          <SecurityClient embedded enabled={twoFactorEnabled} required={false} home="/patient/dashboard" />
         </div>
       </div>
     </div>

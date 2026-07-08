@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { useState } from "react"
 import { FaqChat } from "@/components/faq-chat"
+import { logout } from "@/lib/actions/auth"
 
 const navItems = [
   { label: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
@@ -21,10 +22,10 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("userRole")
-    sessionStorage.removeItem("isAuthenticated")
+  const handleLogout = async () => {
+    await logout() // clears the session cookie server-side
     router.push("/")
+    router.refresh()
   }
 
   return (

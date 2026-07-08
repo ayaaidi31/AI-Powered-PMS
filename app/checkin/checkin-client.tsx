@@ -10,6 +10,7 @@
  */
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { QrCode, Check, Clock, User, KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -17,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { checkInAppointment, checkInByCode } from "@/lib/actions/appointments"
+import { logout } from "@/lib/actions/auth"
 
 export interface TodayAppointment {
   id: string
@@ -39,17 +41,29 @@ export function ClinicCheckInClient({
   loggedIn,
   firstName,
   appointments,
+  isMobile,
 }: {
   loggedIn: boolean
   firstName: string | null
   appointments: TodayAppointment[]
+  isMobile: boolean
 }) {
+  const router = useRouter()
   const hasToday = appointments.length > 0
   const [mode, setMode] = useState<"confirm" | "code">(hasToday ? "confirm" : "code")
   const [checkedIn, setCheckedIn] = useState<CheckedIn | null>(null)
   const [code, setCode] = useState("")
   const [busyId, setBusyId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+
+  async function handleSignOut() {
+    setSigningOut(true)
+    await logout()
+    setMode("code")
+    router.refresh() // re-render without the session → code path
+    setSigningOut(false)
+  }
 
   async function confirmArrival(appt: TodayAppointment) {
     setBusyId(appt.id)
@@ -91,6 +105,12 @@ export function ClinicCheckInClient({
           <h1 className="text-xl font-bold text-foreground">Clinic Check-in</h1>
           <p className="text-sm text-muted-foreground">Let the front desk know you have arrived.</p>
         </div>
+
+        {!isMobile && !checkedIn && (
+          <div className="rounded-lg border border-amber-300/60 bg-amber-50 text-amber-900 text-sm px-4 py-3 text-center dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800/60">
+            Check-in is meant to be done on your phone at the clinic — scan the reception QR code when you arrive.
+          </div>
+        )}
 
         {/* Success */}
         {checkedIn ? (
@@ -159,12 +179,29 @@ export function ClinicCheckInClient({
                   </div>
                 )
               })}
-              <button
-                onClick={() => setMode("code")}
-                className="w-full text-center text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 pt-1"
-              >
-                Not you, or here for a different visit? Enter a code instead
-              </button>
+              <div className="pt-1 text-center space-y-1.5">
+                {firstName && (
+                  <p className="text-xs text-muted-foreground">
+                    Signed in as <span className="font-medium text-foreground">{firstName}</span>
+                  </p>
+                )}
+                <div className="flex items-center justify-center gap-3 text-sm">
+                  <button
+                    onClick={() => setMode("code")}
+                    className="text-muted-foreground hover:text-foreground underline underline-offset-4"
+                  >
+                    Enter a code instead
+                  </button>
+                  <span className="text-muted-foreground/50">·</span>
+                  <button
+                    onClick={handleSignOut}
+                    disabled={signingOut}
+                    className="text-muted-foreground hover:text-foreground underline underline-offset-4"
+                  >
+                    {signingOut ? "Signing out…" : "Not you? Sign out"}
+                  </button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         ) : (

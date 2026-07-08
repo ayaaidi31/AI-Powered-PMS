@@ -9,6 +9,7 @@
  * demo-credential filling — the authoritative role comes from the account.
  */
 import { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Activity, Stethoscope, Users, HeartPulse } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -16,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { login } from "@/lib/actions/auth"
+import { login, verifyTwoFactorLogin } from "@/lib/actions/auth"
 
 type UserRole = "patient" | "doctor" | "receptionist"
 
@@ -33,12 +34,36 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [activeRole, setActiveRole] = useState<UserRole>("patient")
   const [formData, setFormData] = useState({ email: "", password: "" })
+  // Second-factor step: set once a password is accepted for a 2FA account.
+  const [twoFactorTicket, setTwoFactorTicket] = useState<string | null>(null)
+  const [twoFactorCode, setTwoFactorCode] = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
     setIsLoading(true)
     const result = await login(formData)
+    if (result.status === "ok") {
+      if (result.data.step === "twofa") {
+        setTwoFactorTicket(result.data.ticket)
+        setTwoFactorCode("")
+        setIsLoading(false)
+      } else {
+        router.push(result.data.redirect)
+        router.refresh()
+      }
+    } else {
+      setError(result.message)
+      setIsLoading(false)
+    }
+  }
+
+  async function handleVerify2fa(e: React.FormEvent) {
+    e.preventDefault()
+    if (!twoFactorTicket) return
+    setError("")
+    setIsLoading(true)
+    const result = await verifyTwoFactorLogin(twoFactorTicket, twoFactorCode)
     if (result.status === "ok") {
       router.push(result.data.redirect)
       router.refresh()
@@ -92,10 +117,47 @@ export default function LoginPage() {
           </div>
 
           <div className="text-center lg:text-left">
-            <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
-            <p className="text-muted-foreground mt-2">Sign in to access your portal</p>
+            <h2 className="text-2xl font-bold text-foreground">
+              {twoFactorTicket ? "Two-step verification" : "Welcome back"}
+            </h2>
+            <p className="text-muted-foreground mt-2">
+              {twoFactorTicket ? "Enter the 6-digit code from your authenticator app" : "Sign in to access your portal"}
+            </p>
           </div>
 
+          {twoFactorTicket ? (
+            <Card className="border-border">
+              <CardContent className="pt-6">
+                <form onSubmit={handleVerify2fa} className="space-y-4">
+                  {error && <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>}
+                  <div className="space-y-2">
+                    <Label htmlFor="twofa">Authentication code</Label>
+                    <Input
+                      id="twofa"
+                      value={twoFactorCode}
+                      onChange={(e) => setTwoFactorCode(e.target.value.replace(/\s/g, "").slice(0, 10))}
+                      placeholder="123456"
+                      inputMode="numeric"
+                      autoFocus
+                      autoComplete="one-time-code"
+                      className="text-center text-2xl font-mono tracking-[0.3em] h-14"
+                    />
+                    <p className="text-xs text-muted-foreground">Lost your device? Enter one of your backup codes.</p>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading ? "Verifying..." : "Verify & continue"}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => { setTwoFactorTicket(null); setError("") }}
+                    className="w-full text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
+                  >
+                    Back to sign in
+                  </button>
+                </form>
+              </CardContent>
+            </Card>
+          ) : (
           <Tabs value={activeRole} onValueChange={(v) => setActiveRole(v as UserRole)} className="w-full">
             <TabsList className="grid grid-cols-3 w-full">
               <TabsTrigger value="patient">Patient</TabsTrigger>
@@ -148,6 +210,13 @@ export default function LoginPage() {
                     </Button>
                   </form>
 
+                  {activeRole === "patient" && (
+                    <p className="text-sm text-muted-foreground text-center mt-4">
+                      New patient?{" "}
+                      <Link href="/register" className="text-primary underline underline-offset-4">Create an account</Link>
+                    </p>
+                  )}
+
                   <div className="mt-4 pt-4 border-t border-border">
                     <Button type="button" variant="outline" className="w-full" onClick={fillDemoCredentials}>
                       Fill Demo Credentials
@@ -160,6 +229,7 @@ export default function LoginPage() {
               </Card>
             </TabsContent>
           </Tabs>
+          )}
 
           <p className="text-center text-sm text-muted-foreground">
             By signing in, you agree to our Terms of Service and Privacy Policy

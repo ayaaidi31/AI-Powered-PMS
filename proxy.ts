@@ -11,13 +11,14 @@
  * Uses the Edge-safe routines in lib/auth/jwt.ts (no Node-only APIs).
  */
 import { NextResponse, type NextRequest } from "next/server"
-import { SESSION_COOKIE, verifySession, roleHome, type Role } from "@/lib/auth/jwt"
+import { SESSION_COOKIE, verifySession, roleHome, twoFactorRequiredForRole, type Role } from "@/lib/auth/jwt"
 
 // Maps the first path segment to the role permitted to access it.
 const AREA_ROLE: Record<string, Role> = {
   doctor: "doctor",
   receptionist: "receptionist",
   patient: "patient",
+  admin: "admin",
 }
 
 export async function proxy(request: NextRequest) {
@@ -41,9 +42,22 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL(roleHome(session.role), request.url))
   }
 
+  // Holding an admin-issued temporary password → must set a new one first.
+  // `/account/password` is unguarded, so this cannot loop.
+  if (session.mustChangePassword === true) {
+    return NextResponse.redirect(new URL("/account/password", request.url))
+  }
+
+  // Staff must have two-factor set up. Until they do (session not MFA-cleared),
+  // route every staff-area request to enrollment. `/security` is unguarded, so
+  // this cannot loop.
+  if (twoFactorRequiredForRole(session.role) && session.mfa !== true) {
+    return NextResponse.redirect(new URL("/security", request.url))
+  }
+
   return NextResponse.next()
 }
 
 export const config = {
-  matcher: ["/doctor/:path*", "/receptionist/:path*", "/patient/:path*"],
+  matcher: ["/doctor/:path*", "/receptionist/:path*", "/patient/:path*", "/admin/:path*"],
 }

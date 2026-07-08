@@ -11,6 +11,7 @@
  * The status transition is performed server-side by `checkInAppointment`
  * (session path) or `checkInByCode` (code path), both same-day enforced.
  */
+import { headers } from "next/headers"
 import { getCurrentPatient, getAppointmentsByPatient, getDoctors } from "@/lib/queries"
 import { doctorName } from "@/lib/display"
 import { ClinicCheckInClient, type TodayAppointment } from "./checkin-client"
@@ -18,6 +19,9 @@ import { ClinicCheckInClient, type TodayAppointment } from "./checkin-client"
 export const dynamic = "force-dynamic"
 
 export default async function ClinicCheckInPage() {
+  const ua = (await headers()).get("user-agent") ?? ""
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod|Windows Phone/i.test(ua)
+
   const patient = await getCurrentPatient()
 
   let todays: TodayAppointment[] = []
@@ -43,5 +47,5 @@ export default async function ClinicCheckInPage() {
       }))
   }
 
-  return <ClinicCheckInClient loggedIn={!!patient} firstName={firstName} appointments={todays} />
+  return <ClinicCheckInClient loggedIn={!!patient} firstName={firstName} appointments={todays} isMobile={isMobile} />
 }

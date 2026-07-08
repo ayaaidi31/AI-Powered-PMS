@@ -88,6 +88,75 @@ export async function sendCheckInCodeEmail(
   }
 }
 
+/** Send a newly-provisioned staff member their temporary login password. */
+export async function sendStaffCredentialsEmail(params: {
+  to: string
+  firstName: string
+  role: string
+  tempPassword: string
+  loginUrl: string
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!KEY) return { sent: false, error: "email_not_configured" }
+  if (!params.to?.trim()) return { sent: false, error: "no_recipient" }
+  try {
+    const resend = new Resend(KEY)
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: params.to,
+      subject: `Your ${CLINIC.name} staff account`,
+      text: `Hello ${params.firstName},\n\nA ${params.role} account has been created for you at ${CLINIC.name}.\n\nSign in at: ${params.loginUrl}\nEmail: ${params.to}\nTemporary password: ${params.tempPassword}\n\nYou'll be asked to set a new password and enable two-factor authentication on first login.\n\n${CLINIC.name}`,
+      html: `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
+        <div style="max-width:520px;margin:0 auto;padding:24px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:28px;">
+            <h1 style="margin:0 0 4px;font-size:18px;">${CLINIC.name}</h1>
+            <p style="font-size:15px;margin:16px 0 12px;">Hello ${escapeHtml(params.firstName)},</p>
+            <p style="font-size:15px;margin:0 0 16px;">A <strong>${escapeHtml(params.role)}</strong> account has been created for you. Use this temporary password to sign in:</p>
+            <div style="font-size:26px;font-weight:700;letter-spacing:4px;text-align:center;background:#f0f4ff;border:1px solid #dbe4ff;border-radius:12px;padding:16px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(params.tempPassword)}</div>
+            <p style="font-size:14px;margin:16px 0 8px;"><a href="${escapeHtml(params.loginUrl)}" style="color:#2563eb;">Sign in here</a> with your email (${escapeHtml(params.to)}).</p>
+            <p style="font-size:13px;color:#6b7280;margin:0;">You'll be asked to set a new password and enable two-factor authentication on first login.</p>
+          </div>
+        </div></body></html>`,
+    })
+    if (error) return { sent: false, error: error.message }
+    return { sent: true }
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : "send_failed" }
+  }
+}
+
+/** Send a signup email-verification code. Never throws — returns a result. */
+export async function sendSignupCodeEmail(params: {
+  to: string
+  firstName: string
+  code: string
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!KEY) return { sent: false, error: "email_not_configured" }
+  if (!params.to?.trim()) return { sent: false, error: "no_recipient" }
+  try {
+    const resend = new Resend(KEY)
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: params.to,
+      subject: `Your ${CLINIC.name} verification code`,
+      text: `Hello ${params.firstName},\n\nYour verification code is: ${params.code}\n\nEnter it to finish creating your account. It expires in 15 minutes.\n\nIf you didn't request this, you can ignore this email.\n\n${CLINIC.name}`,
+      html: `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
+        <div style="max-width:520px;margin:0 auto;padding:24px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:28px;">
+            <h1 style="margin:0 0 4px;font-size:18px;">${CLINIC.name}</h1>
+            <p style="font-size:15px;margin:16px 0 12px;">Hello ${escapeHtml(params.firstName)},</p>
+            <p style="font-size:15px;margin:0 0 20px;">Enter this code to finish creating your account:</p>
+            <div style="font-size:34px;font-weight:700;letter-spacing:10px;text-align:center;background:#f0f4ff;border:1px solid #dbe4ff;border-radius:12px;padding:18px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(params.code)}</div>
+            <p style="font-size:13px;color:#6b7280;margin:20px 0 0;">This code expires in 15 minutes. If you didn't request it, you can ignore this email.</p>
+          </div>
+        </div></body></html>`,
+    })
+    if (error) return { sent: false, error: error.message }
+    return { sent: true }
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : "send_failed" }
+  }
+}
+
 function renderText({ patientFirstName, code, doctorName, whenText }: CheckInEmail): string {
   return [
     `Hello ${patientFirstName},`,
