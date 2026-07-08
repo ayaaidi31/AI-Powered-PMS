@@ -10,7 +10,10 @@ vi.mock("@/lib/db", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 vi.mock("@/lib/queries", () => ({ getCurrentReceptionist: (...a: unknown[]) => h.getCurrentReceptionist(...a) }))
 
-import { cancelAppointment, deleteAppointment, checkInAppointment, revertCheckIn } from "@/lib/actions/appointments"
+import {
+  cancelAppointment, deleteAppointment, checkInAppointment, revertCheckIn,
+  reassignAppointment, reviewVoiceBooking,
+} from "@/lib/actions/appointments"
 
 beforeEach(() => { h.query.mockReset(); h.getCurrentReceptionist.mockReset() })
 
@@ -102,5 +105,64 @@ describe("revertCheckIn (Feature 6 undo)", () => {
   it("fails once the patient is no longer waiting", async () => {
     h.query.mockResolvedValueOnce({ rows: [], rowCount: 0 }) // WHERE status='waiting' matched nothing
     expect((await revertCheckIn("a1")).status).toBe("error")
+  })
+})
+
+describe("reassignAppointment (Feature 8/18 — move to another doctor)", () => {
+  it("fails when the appointment does not exist", async () => {
+    h.query.mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SELECT current
+    expect((await reassignAppointment("a1", "docB")).status).toBe("error")
+  })
+
+  it("is a no-op (ok) when already assigned to that doctor", async () => {
+    h.query.mockResolvedValueOnce({ rows: [appt({ doctor_id: "docB" })], rowCount: 1 })
+    const r = await reassignAppointment("a1", "docB")
+    expect(r.status).toBe("ok")
+    expect(h.query).toHaveBeenCalledTimes(1) // no lock / clash / update
+  })
+
+  it("returns a conflict when the target doctor is already booked", async () => {
+    h.query.mockResolvedValueOnce({ rows: [appt({ doctor_id: "docA" })], rowCount: 1 }) // SELECT
+    h.query.mockResolvedValueOnce({ rowCount: 0 }) // advisory lock
+    h.query.mockResolvedValueOnce({ rows: [{ id: "other" }], rowCount: 1 }) // clash found
+    const r = await reassignAppointment("a1", "docB")
+    expect(r.status).toBe("conflict")
+    expect(h.query).toHaveBeenCalledTimes(3) // UPDATE not reached
+  })
+
+  it("moves the appointment when the target slot is free", async () => {
+    h.query.mockResolvedValueOnce({ rows: [appt({ doctor_id: "docA" })], rowCount: 1 }) // SELECT
+    h.query.mockResolvedValueOnce({ rowCount: 0 }) // advisory lock
+    h.query.mockResolvedValueOnce({ rows: [], rowCount: 0 }) // no clash
+    h.query.mockResolvedValueOnce({ rows: [appt({ doctor_id: "docB" })], rowCount: 1 }) // UPDATE
+    const r = await reassignAppointment("a1", "docB")
+    expect(r.status).toBe("ok")
+    expect(h.query).toHaveBeenCalledTimes(4)
+  })
+})
+
+describe("reviewVoiceBooking (Feature 11 — receptionist review of AI bookings)", () => {
+  it("requires a receptionist session", async () => {
+    h.getCurrentReceptionist.mockResolvedValue(null)
+    expect((await reviewVoiceBooking("a1", "confirmed")).status).toBe("error")
+    expect(h.query).not.toHaveBeenCalled()
+  })
+
+  it("rejects an invalid review status", async () => {
+    h.getCurrentReceptionist.mockResolvedValue({ id: "rec1" })
+    expect((await reviewVoiceBooking("a1", "banana" as "confirmed")).status).toBe("error")
+    expect(h.query).not.toHaveBeenCalled()
+  })
+
+  it("fails when the appointment is not an AI booking", async () => {
+    h.getCurrentReceptionist.mockResolvedValue({ id: "rec1" })
+    h.query.mockResolvedValueOnce({ rowCount: 0 }) // UPDATE matched nothing (source <> 'ai_voice')
+    expect((await reviewVoiceBooking("a1", "flagged")).status).toBe("error")
+  })
+
+  it("marks a genuine AI booking as confirmed", async () => {
+    h.getCurrentReceptionist.mockResolvedValue({ id: "rec1" })
+    h.query.mockResolvedValueOnce({ rowCount: 1 }) // UPDATE matched
+    expect((await reviewVoiceBooking("a1", "confirmed")).status).toBe("ok")
   })
 })
