@@ -45,6 +45,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS backup_codes text[];
 -- must replace on first login (enforced in app logic / proxy).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
 
+-- The set of notification ids this user has already seen (server-side, so the
+-- bell's unread badge clears consistently across all their devices).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_seen_ids text[];
+
 -- Email verification codes (e.g. patient sign-up). The pending signup payload is
 -- held here until the emailed code is confirmed, then the account is created and
 -- the row deleted. Short-lived; safe to purge expired rows at any time.

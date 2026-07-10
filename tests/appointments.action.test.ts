@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-const h = vi.hoisted(() => ({ query: vi.fn(), getCurrentReceptionist: vi.fn() }))
+const h = vi.hoisted(() => ({
+  query: vi.fn(), getCurrentReceptionist: vi.fn(), getAppointmentsByDoctor: vi.fn(),
+  requireSession: vi.fn(), requireStaff: vi.fn(), requireSessionScoped: vi.fn(),
+}))
 vi.mock("@/lib/db", () => ({
   query: (...a: unknown[]) => h.query(...a),
   sql: vi.fn(),
@@ -8,14 +11,30 @@ vi.mock("@/lib/db", () => ({
   pool: {},
 }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
-vi.mock("@/lib/queries", () => ({ getCurrentReceptionist: (...a: unknown[]) => h.getCurrentReceptionist(...a) }))
+vi.mock("@/lib/queries", () => ({
+  getCurrentReceptionist: (...a: unknown[]) => h.getCurrentReceptionist(...a),
+  getAppointmentsByDoctor: (...a: unknown[]) => h.getAppointmentsByDoctor(...a),
+}))
+vi.mock("@/lib/auth/guard", () => ({
+  requireSession: (...a: unknown[]) => h.requireSession(...a),
+  requireStaff: (...a: unknown[]) => h.requireStaff(...a),
+  requireSessionScoped: (...a: unknown[]) => h.requireSessionScoped(...a),
+}))
 
 import {
   cancelAppointment, deleteAppointment, checkInAppointment, revertCheckIn,
-  reassignAppointment, reviewVoiceBooking,
+  reassignAppointment, reviewVoiceBooking, getDoctorDayAvailability,
 } from "@/lib/actions/appointments"
 
-beforeEach(() => { h.query.mockReset(); h.getCurrentReceptionist.mockReset() })
+// Default: an authorized staff caller (so business-logic tests focus on behaviour;
+// authz denials are exercised explicitly below).
+const STAFF = { userId: "u1", role: "receptionist", profileId: "rec1", email: "r@c.de", name: "Rec" }
+beforeEach(() => {
+  h.query.mockReset(); h.getCurrentReceptionist.mockReset()
+  h.requireSession.mockResolvedValue({ ok: true, value: STAFF })
+  h.requireStaff.mockResolvedValue({ ok: true, value: STAFF })
+  h.requireSessionScoped.mockResolvedValue({ ok: true, value: { session: STAFF, isStaff: true, patientId: null } })
+})
 
 const inHours = (hrs: number) => new Date(Date.now() + hrs * 3_600_000).toISOString()
 const appt = (over: Record<string, unknown>) => ({ id: "a1", status: "scheduled", starts_at: inHours(48), duration_min: 30, ...over })
@@ -141,6 +160,30 @@ describe("reassignAppointment (Feature 8/18 — move to another doctor)", () => 
   })
 })
 
+describe("authorization (defence-in-depth)", () => {
+  const denied = { ok: false, error: { status: "error", message: "Please sign in." } }
+
+  it("cancelAppointment refuses an unauthenticated caller (no DB touched)", async () => {
+    h.requireSessionScoped.mockResolvedValue(denied)
+    expect((await cancelAppointment("a1")).status).toBe("error")
+    expect(h.query).not.toHaveBeenCalled()
+  })
+
+  it("cancelAppointment refuses a patient acting on someone else's appointment", async () => {
+    h.requireSessionScoped.mockResolvedValue({ ok: true, value: { session: {}, isStaff: false, patientId: "patA" } })
+    h.query.mockResolvedValueOnce({ rows: [appt({ patient_id: "patB" })], rowCount: 1 }) // SELECT — not theirs
+    const r = await cancelAppointment("a1", { enforce24hWindow: true })
+    expect(r.status).toBe("error")
+    expect(h.query).toHaveBeenCalledTimes(1) // UPDATE never reached
+  })
+
+  it("reassignAppointment refuses a non-staff caller", async () => {
+    h.requireStaff.mockResolvedValue(denied)
+    expect((await reassignAppointment("a1", "docB")).status).toBe("error")
+    expect(h.query).not.toHaveBeenCalled()
+  })
+})
+
 describe("reviewVoiceBooking (Feature 11 — receptionist review of AI bookings)", () => {
   it("requires a receptionist session", async () => {
     h.getCurrentReceptionist.mockResolvedValue(null)
@@ -164,5 +207,56 @@ describe("reviewVoiceBooking (Feature 11 — receptionist review of AI bookings)
     h.getCurrentReceptionist.mockResolvedValue({ id: "rec1" })
     h.query.mockResolvedValueOnce({ rowCount: 1 }) // UPDATE matched
     expect((await reviewVoiceBooking("a1", "confirmed")).status).toBe("ok")
+  })
+})
+
+describe("getDoctorDayAvailability (booking-form slot grid)", () => {
+  // A weekday about five weeks out, so no slot trips the past/too-soon/weekend rules.
+  const future = (() => {
+    const d = new Date(Date.now() + 35 * 86_400_000)
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+    return d
+  })()
+  const dateStr = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, "0")}-${String(future.getDate()).padStart(2, "0")}`
+
+  it("returns the full clinic grid, all free when the doctor has no appointments", async () => {
+    h.getAppointmentsByDoctor.mockResolvedValue([])
+    const r = await getDoctorDayAvailability("docA", dateStr)
+    expect(r.status).toBe("ok")
+    if (r.status !== "ok") return
+    expect(r.data).toHaveLength(18) // every clinic start time is present...
+    expect(r.data.every((s) => s.available)).toBe(true) // ...and open
+  })
+
+  it("marks a slot taken by an active appointment as unavailable", async () => {
+    const startsAt = new Date(`${dateStr}T09:00:00`).toISOString()
+    h.getAppointmentsByDoctor.mockResolvedValue([
+      { id: "x", doctor_id: "docA", starts_at: startsAt, duration_min: 30, status: "scheduled" },
+    ])
+    const r = await getDoctorDayAvailability("docA", dateStr)
+    expect(r.status).toBe("ok")
+    if (r.status !== "ok") return
+    expect(r.data.find((s) => s.time === "09:00")?.available).toBe(false)
+    expect(r.data.find((s) => s.time === "09:30")?.available).toBe(true)
+  })
+
+  it("excludes the appointment being rescheduled so its own slot stays open", async () => {
+    const startsAt = new Date(`${dateStr}T09:00:00`).toISOString()
+    h.getAppointmentsByDoctor.mockResolvedValue([
+      { id: "self", doctor_id: "docA", starts_at: startsAt, duration_min: 30, status: "scheduled" },
+    ])
+    const r = await getDoctorDayAvailability("docA", dateStr, "self")
+    expect(r.status).toBe("ok")
+    if (r.status !== "ok") return
+    expect(r.data.find((s) => s.time === "09:00")?.available).toBe(true)
+  })
+
+  it("refuses an unauthenticated caller", async () => {
+    h.requireSession.mockResolvedValue({ ok: false, error: { status: "error", message: "Please sign in." } })
+    expect((await getDoctorDayAvailability("docA", dateStr)).status).toBe("error")
+  })
+
+  it("rejects a malformed date", async () => {
+    expect((await getDoctorDayAvailability("docA", "07/31/2026")).status).toBe("error")
   })
 })

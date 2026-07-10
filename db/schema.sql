@@ -160,6 +160,11 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS ai_review_status text;
 -- the visit is past.
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS check_in_code text;
 
+-- Set when STAFF change an appointment (reschedule / reassign / cancel), so the
+-- patient can be notified that the clinic modified their visit. NULL for
+-- patient-initiated changes (they already know).
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS staff_modified_at timestamptz;
+
 -- vitals: per-visit time series. "Current vitals" = latest recorded_at.
 CREATE TABLE IF NOT EXISTS vitals (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),

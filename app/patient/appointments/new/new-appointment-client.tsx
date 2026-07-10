@@ -10,10 +10,10 @@
  * existing appointment: the doctor is locked, and submission calls
  * `rescheduleAppointment` to move the slot in place rather than creating a new one.
  */
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ChevronLeft, ChevronRight, Check, Calendar, Clock, User, AlertCircle } from "lucide-react"
+import { ChevronLeft, ChevronRight, Check, Calendar, Clock, User, AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -23,10 +23,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
 import type { DoctorRow } from "@/lib/seed-data"
 import { doctorName } from "@/lib/display"
-import { bookAppointment, rescheduleAppointment } from "@/lib/actions/appointments"
+import { bookAppointment, rescheduleAppointment, getDoctorDayAvailability, type DaySlot } from "@/lib/actions/appointments"
 
 const daysOfWeek = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
-const timeSlots = ["09:00", "09:30", "10:00", "10:30", "11:00", "14:00", "14:30", "15:00", "15:30"]
 
 /** When set, the wizard edits an existing appointment (same doctor) instead of booking a new one. */
 export interface RescheduleContext {
@@ -52,8 +51,33 @@ export function NewAppointmentClient({
   const [reason, setReason] = useState(reschedule?.reason ?? "")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [daySlots, setDaySlots] = useState<DaySlot[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
 
   const doctor = doctors.find((d) => d.id === selectedDoctor)
+
+  // Load the doctor's real availability for the chosen day. The full clinic grid
+  // is shown with taken or too-soon slots disabled, so the patient sees every
+  // time and picks only from what is genuinely open (no surprise at submit).
+  useEffect(() => {
+    if (!selectedDoctor || !selectedDate) {
+      setDaySlots([])
+      return
+    }
+    const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`
+    let cancelled = false
+    setLoadingSlots(true)
+    getDoctorDayAvailability(selectedDoctor, dateStr, reschedule?.id)
+      .then((res) => {
+        if (cancelled) return
+        const slots = res.status === "ok" ? res.data : []
+        setDaySlots(slots)
+        // Drop a previously chosen time if it is no longer bookable.
+        setSelectedTime((t) => (t && slots.some((s) => s.time === t && s.available) ? t : ""))
+      })
+      .finally(() => { if (!cancelled) setLoadingSlots(false) })
+    return () => { cancelled = true }
+  }, [selectedDoctor, selectedDate, reschedule?.id])
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -255,20 +279,37 @@ export function NewAppointmentClient({
                 {selectedDate && (
                   <div>
                     <Label className="mb-3 block">Available Times</Label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {timeSlots.map((time) => (
-                        <button
-                          key={time}
-                          onClick={() => setSelectedTime(time)}
-                          className={`p-3 text-sm rounded-md border transition-colors ${
-                            selectedTime === time ? "bg-primary text-primary-foreground border-primary"
-                              : "border-border hover:border-primary hover:bg-accent"
-                          }`}
-                        >
-                          {time}
-                        </button>
-                      ))}
-                    </div>
+                    {loadingSlots ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                        <Loader2 className="w-4 h-4 animate-spin" /> Checking availability…
+                      </div>
+                    ) : daySlots.length === 0 ? (
+                      <p className="text-sm text-muted-foreground py-4">
+                        No times could be loaded for this day. Please choose another date.
+                      </p>
+                    ) : daySlots.every((s) => !s.available) ? (
+                      <p className="text-sm text-muted-foreground py-4">
+                        This day is fully booked. Please choose another date.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {daySlots.map(({ time, available }) => (
+                          <button
+                            key={time}
+                            onClick={() => available && setSelectedTime(time)}
+                            disabled={!available}
+                            title={available ? undefined : "Not available"}
+                            className={`p-3 text-sm rounded-md border transition-colors ${
+                              selectedTime === time ? "bg-primary text-primary-foreground border-primary"
+                                : !available ? "border-border bg-muted text-muted-foreground/50 line-through cursor-not-allowed"
+                                : "border-border hover:border-primary hover:bg-accent"
+                            }`}
+                          >
+                            {time}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

@@ -8,6 +8,10 @@ vi.mock("@/lib/db", () => ({
   withTransaction: async (fn: (c: { query: typeof h.query }) => unknown) => fn({ query: h.query }),
   pool: {},
 }))
+vi.mock("@/lib/email", () => ({ isEmailConfigured: () => false, sendInvoiceReadyEmail: vi.fn(), appUrl: async () => "http://localhost:3000/" }))
+vi.mock("@/lib/auth/guard", () => ({
+  requireReceptionist: async () => ({ ok: true, value: { userId: "u1", role: "receptionist", profileId: "rec1", email: "r@c.de", name: "Rec" } }),
+}))
 
 import { generateInvoice } from "@/lib/actions/invoices"
 

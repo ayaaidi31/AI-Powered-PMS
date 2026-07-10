@@ -22,6 +22,7 @@ import { revalidatePath } from "next/cache"
 import { sql, query } from "@/lib/db"
 import { patientSchema, orNull, type PatientInput } from "@/lib/validation"
 import { isPortalEligible } from "@/lib/rules"
+import { requireReceptionist, requireStaff, requireSessionScoped } from "@/lib/auth/guard"
 import type { PatientRow } from "@/lib/seed-data"
 import { ok, fail, conflict, type ActionResult } from "./types"
 
@@ -38,6 +39,8 @@ export async function registerPatient(
   input: PatientInput,
   allowDuplicate = false,
 ): Promise<ActionResult<PatientRow>> {
+  const g = await requireReceptionist()
+  if (!g.ok) return g.error
   const parsed = patientSchema.safeParse(input)
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {}
@@ -93,8 +96,16 @@ export async function registerPatient(
 export async function updatePatient(
   id: string,
   input: Partial<PatientInput>,
-  updatedBy = "User: Reception",
+  updatedBy?: string,
 ): Promise<ActionResult<PatientRow>> {
+  const g = await requireSessionScoped()
+  if (!g.ok) return g.error
+  // A patient may only edit their own profile; staff may edit any patient.
+  if (!g.value.isStaff && id !== g.value.patientId) {
+    return fail("You can only update your own profile.")
+  }
+  const actor = updatedBy ?? (g.value.isStaff ? "User: Reception" : "User: Patient")
+
   const parsed = patientSchema.partial().safeParse(input)
   if (!parsed.success) {
     return fail("Invalid update payload.")
@@ -110,7 +121,7 @@ export async function updatePatient(
     values.push(orNull(value as string))
     sets.push(`${column} = $${values.length}`)
   }
-  values.push(updatedBy)
+  values.push(actor)
   sets.push(`last_updated_by = $${values.length}`)
   values.push(id)
 
@@ -133,6 +144,8 @@ export async function updatePatient(
  * listings by setting `deleted_at`.
  */
 export async function deactivatePatient(id: string): Promise<ActionResult> {
+  const g = await requireStaff()
+  if (!g.ok) return g.error
   const result = await query(
     `UPDATE patients SET deleted_at = now(), last_updated_by = 'User: Reception'
      WHERE id = $1 AND deleted_at IS NULL`,

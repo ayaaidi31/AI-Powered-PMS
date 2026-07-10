@@ -22,8 +22,9 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { query, withTransaction } from "@/lib/db"
-import { getCurrentReceptionist, getDoctorById, getPatientById, type AppointmentWithNames } from "@/lib/queries"
-import { cancellationCheck, rescheduleCheck, appointmentDeletable, checkInDecision, doctorAvailableOn } from "@/lib/rules"
+import { getCurrentReceptionist, getDoctorById, getPatientById, getAppointmentsByDoctor, type AppointmentWithNames } from "@/lib/queries"
+import { cancellationCheck, rescheduleCheck, appointmentDeletable, checkInDecision, doctorAvailableOn, officeHoursViolation, CLINIC_SLOT_TIMES, MIN_BOOKING_LEAD_MIN } from "@/lib/rules"
+import { requireSession, requireStaff, requireSessionScoped } from "@/lib/auth/guard"
 import { generateCheckInCode, normalizeCheckInCode } from "@/lib/check-in-code"
 import { isEmailConfigured, sendCheckInCodeEmail } from "@/lib/email"
 import type { AppointmentRow } from "@/lib/seed-data"
@@ -49,6 +50,50 @@ function revalidateSchedules() {
   revalidatePath("/doctor")
 }
 
+export interface DaySlot {
+  time: string // local "HH:mm"
+  available: boolean
+}
+
+/**
+ * Per-slot availability for one doctor on a given date, so the booking form can
+ * present the full grid of clinic times and disable the ones that are taken or
+ * too close to start, rather than silently omitting them. A slot is available
+ * when it falls within office hours and the minimum booking notice, and no
+ * active appointment of that doctor overlaps it. `dateStr` is a local
+ * 'YYYY-MM-DD'; `excludeAppointmentId` skips the appointment being rescheduled so
+ * its own slot is not shown as taken.
+ */
+export async function getDoctorDayAvailability(
+  doctorId: string,
+  dateStr: string,
+  excludeAppointmentId?: string,
+): Promise<ActionResult<DaySlot[]>> {
+  const g = await requireSession()
+  if (!g.ok) return g.error
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return fail("Invalid date.")
+  try {
+    const busy = (await getAppointmentsByDoctor(doctorId))
+      .filter((a) => ACTIVE_STATES.includes(a.status) && a.id !== excludeAppointmentId)
+      .map((a) => {
+        const start = Date.parse(a.starts_at)
+        return { start, end: start + (a.duration_min ?? 30) * 60_000 }
+      })
+    const nowMs = Date.now()
+    const slots: DaySlot[] = CLINIC_SLOT_TIMES.map((time) => {
+      const iso = `${dateStr}T${time}:00`
+      const start = new Date(iso).getTime()
+      const end = start + 30 * 60_000
+      const withinRules = officeHoursViolation(iso, nowMs, MIN_BOOKING_LEAD_MIN) === null
+      const free = !busy.some((b) => b.start < end && b.end > start)
+      return { time, available: withinRules && free }
+    })
+    return ok(slots)
+  } catch {
+    return fail("Could not load availability. Please try again.")
+  }
+}
+
 /**
  * Book a new appointment.
  *
@@ -60,13 +105,28 @@ function revalidateSchedules() {
 export async function bookAppointment(
   input: BookingInput,
 ): Promise<ActionResult<AppointmentRow>> {
+  const g = await requireSession()
+  if (!g.ok) return g.error
   const parsed = bookingSchema.safeParse(input)
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {}
     for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message
     return fail("Please correct the highlighted fields.", fieldErrors)
   }
-  const { patient_id, doctor_id, starts_at, duration_min, reason, source } = parsed.data
+  const { doctor_id, starts_at, duration_min, reason, source } = parsed.data
+  // A patient may only book for themselves — never trust a client-supplied id.
+  if (g.value.role === "patient" && !g.value.profileId) return fail("No patient profile on this account.")
+  const patient_id = g.value.role === "patient" ? g.value.profileId! : parsed.data.patient_id
+
+  // Self-service bookings must respect office hours and the minimum notice; staff
+  // may still book walk-ins at any time. This backstops the client-side checks.
+  if (g.value.role === "patient") {
+    const issue = officeHoursViolation(starts_at, Date.now(), MIN_BOOKING_LEAD_MIN)
+    if (issue === "past") return fail("That time is in the past.")
+    if (issue === "too_soon") return fail(`Appointments must be booked at least ${MIN_BOOKING_LEAD_MIN} minutes in advance.`)
+    if (issue === "weekend") return fail("The clinic is closed at weekends.")
+    if (issue === "closed") return fail("That time is outside office hours (08:00–16:30).")
+  }
 
   // Reject a slot that falls inside the doctor's absence window (Feature 8 override).
   const doctor = await getDoctorById(doctor_id)
@@ -161,6 +221,10 @@ export async function rescheduleAppointment(
 ): Promise<ActionResult<AppointmentRow>> {
   if (Number.isNaN(Date.parse(newStartsAt))) return fail("Invalid date/time.")
 
+  const g = await requireSessionScoped()
+  if (!g.ok) return g.error
+  const { isStaff, patientId } = g.value
+
   const result = await withTransaction(async (client) => {
     const current = await client.query<AppointmentRow>(
       `SELECT * FROM appointments WHERE id = $1`,
@@ -169,7 +233,10 @@ export async function rescheduleAppointment(
     if (current.rowCount === 0) return "not_found" as const
     const appt = current.rows[0]
 
-    // Enforce the 24-hour cut-off against the CURRENT start time (patient path).
+    // A patient may only reschedule their own appointment.
+    if (!isStaff && appt.patient_id !== patientId) return "forbidden" as const
+
+    // Enforce the 24-hour cut-off against the current start time (patient path).
     const eligibility = rescheduleCheck(
       appt.status,
       new Date(appt.starts_at).getTime(),
@@ -194,18 +261,23 @@ export async function rescheduleAppointment(
     )
     if (clash.rowCount && clash.rowCount > 0) return "conflict" as const
 
+    // Staff-initiated changes (no 24h enforcement) mark the row so the patient
+    // can be notified the clinic moved their visit.
+    const staffStamp = options.enforce24hWindow ? null : new Date().toISOString()
     const updated = await client.query<AppointmentRow>(
       `UPDATE appointments
        SET starts_at = $2::timestamptz, duration_min = $3, status = 'scheduled',
-           reason_for_change = COALESCE($4, reason_for_change)
+           reason_for_change = COALESCE($4, reason_for_change),
+           staff_modified_at = COALESCE($5::timestamptz, staff_modified_at)
        WHERE id = $1
        RETURNING *`,
-      [appointmentId, newStartsAt, duration, options.reasonForChange ?? null],
+      [appointmentId, newStartsAt, duration, options.reasonForChange ?? null, staffStamp],
     )
     return updated.rows[0]
   })
 
   if (result === "not_found") return fail("Appointment not found.")
+  if (result === "forbidden") return fail("You can only change your own appointments.")
   if (result === "conflict") {
     return conflict("The chosen time is no longer available. Please select another.")
   }
@@ -226,6 +298,8 @@ export async function reassignAppointment(
   newDoctorId: string,
   options: { reasonForChange?: string } = {},
 ): Promise<ActionResult<AppointmentRow>> {
+  const g = await requireStaff()
+  if (!g.ok) return g.error
   const result = await withTransaction(async (client) => {
     const current = await client.query<AppointmentRow>(`SELECT * FROM appointments WHERE id = $1`, [appointmentId])
     if (current.rowCount === 0) return "not_found" as const
@@ -248,7 +322,8 @@ export async function reassignAppointment(
 
     const updated = await client.query<AppointmentRow>(
       `UPDATE appointments
-       SET doctor_id = $2, reason_for_change = COALESCE($3, reason_for_change)
+       SET doctor_id = $2, reason_for_change = COALESCE($3, reason_for_change),
+           staff_modified_at = now()
        WHERE id = $1
        RETURNING *`,
       [appointmentId, newDoctorId, options.reasonForChange ?? null],
@@ -274,12 +349,18 @@ export async function cancelAppointment(
   appointmentId: string,
   options: { reasonForChange?: string; enforce24hWindow?: boolean } = {},
 ): Promise<ActionResult<AppointmentRow>> {
+  const g = await requireSessionScoped()
+  if (!g.ok) return g.error
   const current = await query<AppointmentRow>(
     `SELECT * FROM appointments WHERE id = $1`,
     [appointmentId],
   )
   if (current.rowCount === 0) return fail("Appointment not found.")
   const appt = current.rows[0]
+  // A patient may only cancel their own appointment.
+  if (!g.value.isStaff && appt.patient_id !== g.value.patientId) {
+    return fail("You can only cancel your own appointments.")
+  }
 
   const check = cancellationCheck(
     appt.status,
@@ -289,12 +370,14 @@ export async function cancelAppointment(
   )
   if (!check.ok) return fail(check.reason!)
 
+  const staffStamp = options.enforce24hWindow ? null : new Date().toISOString()
   const updated = await query<AppointmentRow>(
     `UPDATE appointments
-     SET status = 'cancelled', reason_for_change = COALESCE($2, reason_for_change)
+     SET status = 'cancelled', reason_for_change = COALESCE($2, reason_for_change),
+         staff_modified_at = COALESCE($3::timestamptz, staff_modified_at)
      WHERE id = $1
      RETURNING *`,
-    [appointmentId, options.reasonForChange ?? null],
+    [appointmentId, options.reasonForChange ?? null, staffStamp],
   )
   revalidateSchedules()
   return ok(updated.rows[0])
@@ -313,12 +396,18 @@ export async function checkInAppointment(
   appointmentId: string,
   options: { enforceSameDay?: boolean } = {},
 ): Promise<ActionResult<AppointmentRow>> {
+  const g = await requireSessionScoped()
+  if (!g.ok) return g.error
   const current = await query<AppointmentRow>(
     `SELECT * FROM appointments WHERE id = $1`,
     [appointmentId],
   )
   if (current.rowCount === 0) return fail("Appointment not found.")
   const appt = current.rows[0]
+  // A patient may only check in to their own appointment.
+  if (!g.value.isStaff && appt.patient_id !== g.value.patientId) {
+    return fail("You can only check in to your own appointment.")
+  }
 
   const decision = checkInDecision({
     status: appt.status,
@@ -396,6 +485,8 @@ export async function checkInByCode(
  * once the consultation has started (`in_progress`) it can no longer be undone.
  */
 export async function revertCheckIn(appointmentId: string): Promise<ActionResult<AppointmentRow>> {
+  const g = await requireStaff()
+  if (!g.ok) return g.error
   const updated = await query<AppointmentRow>(
     `UPDATE appointments SET status = 'scheduled', check_in_at = NULL
      WHERE id = $1 AND status = 'waiting'
@@ -417,6 +508,8 @@ export async function setAppointmentStatus(
   appointmentId: string,
   status: AppointmentRow["status"],
 ): Promise<ActionResult<AppointmentRow>> {
+  const g = await requireStaff()
+  if (!g.ok) return g.error
   const updated = await query<AppointmentRow>(
     `UPDATE appointments SET status = $2 WHERE id = $1 RETURNING *`,
     [appointmentId, status],

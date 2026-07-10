@@ -15,12 +15,15 @@ import { query } from "@/lib/db"
 import { getCurrentDoctor, getAppointmentsByDoctor, getReportsByDoctor } from "@/lib/queries"
 import type { DoctorRow } from "@/lib/seed-data"
 import { doctorSchema } from "@/lib/validation"
+import { requireStaff } from "@/lib/auth/guard"
 import { ok, fail, type ActionResult } from "./types"
 
 export async function updateDoctor(
   id: string,
   input: z.input<typeof doctorSchema>,
 ): Promise<ActionResult<DoctorRow>> {
+  const g = await requireStaff()
+  if (!g.ok) return g.error
   const parsed = doctorSchema.safeParse(input)
   if (!parsed.success) {
     return fail(parsed.error.issues[0]?.message ?? "Invalid input.")
@@ -51,6 +54,8 @@ export async function setDoctorAvailability(
   isAvailable: boolean,
   range?: { from?: string | null; until?: string | null },
 ): Promise<ActionResult<DoctorRow>> {
+  const g = await requireStaff()
+  if (!g.ok) return g.error
   const today = new Date()
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
   const from = isAvailable ? null : (range?.from || todayStr)

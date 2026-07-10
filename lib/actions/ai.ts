@@ -33,6 +33,7 @@ export type { SafetyAlert } from "@/lib/clinical-safety"
 import { ok, fail, type ActionResult } from "./types"
 import type { CodeSuggestion } from "./codes"
 import { languageDirective } from "@/lib/ai-language"
+import { requireDoctor, requireStaff, requireSession } from "@/lib/auth/guard"
 
 /** Format a vitals row into a compact clinical string (German units). */
 function fmtVitals(v: VitalsRow): string {
@@ -56,6 +57,8 @@ interface ReportInput {
 export async function generateConsultationReport(
   input: ReportInput,
 ): Promise<ActionResult<{ report: string }>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }
@@ -110,6 +113,8 @@ export async function suggestBillingCodes(
   reportText: string,
   insuranceType: "gkv" | "pkv" | "selbstzahler",
 ): Promise<ActionResult<CodeSuggestion[]>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }
@@ -169,6 +174,8 @@ export async function extractPrescriptions(
   text: string,
   currentMedications: string[] = [],
 ): Promise<ActionResult<{ medication: string; dosage: string; frequency: string }[]>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }
@@ -223,6 +230,8 @@ interface ExtractedVitals {
 
 /** Extract vital signs (BP, pulse, temperature, weight, height) from the notes. */
 export async function extractVitals(text: string): Promise<ActionResult<ExtractedVitals>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }
@@ -268,6 +277,8 @@ export async function extractVitals(text: string): Promise<ActionResult<Extracte
  * explanatory — it must not invent findings, diagnoses or recommendations.
  */
 export async function simplifyReport(reportText: string): Promise<ActionResult<{ summary: string }>> {
+  const g = await requireSession()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }
@@ -305,6 +316,8 @@ export async function diarizeTranscript(
   rawTranscript: string,
   lang: "de" | "en" = "de",
 ): Promise<ActionResult<{ transcript: string }>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }
@@ -356,6 +369,8 @@ export async function classifyUrgency(
 ): Promise<Record<string, UrgencyLevel>> {
   const result: Record<string, UrgencyLevel> = {}
   for (const it of items) result[it.id] = "medium"
+  const g = await requireStaff()
+  if (!g.ok) return result // non-staff get the safe default; no LLM call
   if (!isLlmConfigured() || items.length === 0) return result
   try {
     const list = items.map((it) => `(${it.id}) ${it.reason?.trim() || "—"}`).join("\n")
@@ -397,6 +412,8 @@ export async function summarizePatientHistory(input: {
   vitals?: string | null
   visits: { date: string; reason: string | null; status: string; diagnosis: string | null }[]
 }): Promise<ActionResult<{ summary: string }>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }
@@ -469,6 +486,8 @@ export async function suggestProfileUpdates(input: {
     allergies?: string[]; conditions?: string[]
   }
 }): Promise<ActionResult<{ suggestions: ProfileUpdateSuggestion[] }>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   const text = `${input.reportText ?? ""}\n${input.notes ?? ""}`.trim()
   if (!isLlmConfigured()) return ok({ suggestions: [] })
   if (!text) return ok({ suggestions: [] })
@@ -561,6 +580,8 @@ export async function askDecisionSupport(input: {
   patient?: PatientContext
   history?: { role: "user" | "assistant"; content: string }[]
 }): Promise<ActionResult<{ answer: string; sources: DecisionSource[]; via: string; grounded: boolean }>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }
@@ -656,6 +677,8 @@ export async function checkPrescriptionSafety(input: {
   prescriptions: { medication: string; dosage?: string; frequency?: string }[]
   diagnosis?: string
 }): Promise<ActionResult<{ alerts: SafetyAlert[] }>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   const rx = input.prescriptions.filter((p) => p.medication.trim())
   if (rx.length === 0 && !input.diagnosis?.trim()) return ok({ alerts: [] })
 
@@ -715,7 +738,7 @@ export async function checkPrescriptionSafety(input: {
 }
 
 /**
- * Doctor on-demand Q&A over the patient's OWN records (Feature 17). A
+ * Doctor on-demand Q&A over the patient's own records (Feature 17). A
  * conversational RAG, STRICTLY sandboxed to the active patient (REQ-DQ-02): it
  * answers only from that patient's past consultation reports, cites the source
  * report for every assertion (REQ-DQ-04), keeps session context (REQ-DQ-01), and
@@ -729,6 +752,9 @@ export async function askPatientRecordsQA(input: {
   question: string
   history?: { role: "user" | "assistant"; content: string }[]
 }): Promise<ActionResult<{ answer: string; sources: RecordSource[]; grounded: boolean }>> {
+  // Doctor-only clinical tool — a patient must never read another patient's records.
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }
@@ -801,6 +827,8 @@ export async function askClinicFaq(
   question: string,
   history: { role: "user" | "assistant"; content: string }[] = [],
 ): Promise<ActionResult<{ answer: string }>> {
+  const g = await requireSession()
+  if (!g.ok) return g.error
   if (!isLlmConfigured()) {
     return fail("No AI model configured. Add MISTRAL_API_KEY to .env.local.")
   }

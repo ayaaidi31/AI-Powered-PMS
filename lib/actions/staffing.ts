@@ -12,6 +12,7 @@ import { doctorName } from "@/lib/display"
 import { buildRecoveryPlan, type RecoveryItem, type RecoveryCandidate } from "@/lib/recovery-plan"
 import { reassignAppointment, cancelAppointment } from "./appointments"
 import { classifyUrgency } from "./ai"
+import { requireStaff } from "@/lib/auth/guard"
 import { ok, fail, type ActionResult } from "./types"
 
 const ACTIVE = new Set(["scheduled", "waiting", "in_progress"])
@@ -31,6 +32,8 @@ export interface RecoveryPlan {
 
 /** Build an optimized recovery plan for an unavailable doctor's appointments. */
 export async function proposeRecoveryPlan(doctorId: string): Promise<ActionResult<RecoveryPlan>> {
+  const g = await requireStaff()
+  if (!g.ok) return g.error
   const [appointments, doctors] = await Promise.all([getAppointments(), getDoctors()])
   const sick = doctors.find((d) => d.id === doctorId)
   if (!sick) return fail("Doctor not found.")
@@ -90,6 +93,8 @@ export async function proposeRecoveryPlan(doctorId: string): Promise<ActionResul
 export async function executeRecoveryPlan(
   items: { appointmentId: string; action: "reassign" | "cancel"; targetDoctorId: string | null }[],
 ): Promise<ActionResult<{ reassigned: number; cancelled: number; failed: number }>> {
+  const g = await requireStaff()
+  if (!g.ok) return g.error
   let reassigned = 0, cancelled = 0, failed = 0
   for (const it of items) {
     if (it.action === "reassign" && it.targetDoctorId) {

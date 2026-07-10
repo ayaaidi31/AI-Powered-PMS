@@ -9,6 +9,10 @@ vi.mock("@/lib/db", () => ({
 }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
 vi.mock("@/lib/queries", () => ({ getCurrentDoctor: (...a: unknown[]) => h.getCurrentDoctor(...a) }))
+vi.mock("@/lib/email", () => ({ isEmailConfigured: () => false, sendReportReadyEmail: vi.fn(), appUrl: async () => "http://localhost:3000/" }))
+vi.mock("@/lib/auth/guard", () => ({
+  requireDoctor: async () => ({ ok: true, value: { userId: "u1", role: "doctor", profileId: "doc1", email: "d@c.de", name: "Doc" } }),
+}))
 
 import { deleteReport } from "@/lib/actions/reports"
 

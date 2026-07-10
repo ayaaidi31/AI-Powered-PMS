@@ -20,6 +20,8 @@
 import { revalidatePath } from "next/cache"
 import type { PoolClient } from "pg"
 import { query, withTransaction } from "@/lib/db"
+import { isEmailConfigured, sendInvoiceReadyEmail, appUrl } from "@/lib/email"
+import { requireReceptionist } from "@/lib/auth/guard"
 import type { InvoiceRow } from "@/lib/seed-data"
 import { ok, fail, type ActionResult } from "./types"
 
@@ -57,6 +59,8 @@ async function allocateInvoiceNumber(client: PoolClient): Promise<string> {
 export async function generateInvoice(
   appointmentId: string,
 ): Promise<ActionResult<InvoiceRow>> {
+  const g = await requireReceptionist()
+  if (!g.ok) return g.error
   const outcome = await withTransaction(async (client) => {
     // Resolve the appointment, its status, and the patient's insurance type.
     const appt = await client.query<{
@@ -144,13 +148,41 @@ export async function generateInvoice(
           : "Private/self-pay patients must be billed with GOÄ codes, not EBM.",
       )
   }
+  // Email payable (private/self-pay) invoices to the patient (best-effort).
+  if (outcome.invoice.status === "pending_payment" && isEmailConfigured()) {
+    try {
+      const p = await query<{ email: string | null; first_name: string }>(
+        `SELECT email, first_name FROM patients WHERE id = $1`,
+        [outcome.invoice.patient_id],
+      )
+      const patient = p.rows[0]
+      if (patient?.email) {
+        const amountText = outcome.invoice.total_cents == null
+          ? "your recent visit"
+          : (outcome.invoice.total_cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })
+        await sendInvoiceReadyEmail({
+          to: patient.email,
+          firstName: patient.first_name,
+          amountText,
+          dueText: outcome.invoice.due_date
+            ? new Date(outcome.invoice.due_date).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+            : null,
+          portalUrl: await appUrl("/patient/invoices"),
+        })
+      }
+    } catch { /* email is best-effort */ }
+  }
+
   revalidatePath("/receptionist/billing")
   revalidatePath("/receptionist")
+  revalidatePath("/patient/invoices")
   return ok(outcome.invoice)
 }
 
 /** Mark a private/self-pay invoice as sent to the patient. */
 export async function markInvoiceSent(id: string): Promise<ActionResult<InvoiceRow>> {
+  const g = await requireReceptionist()
+  if (!g.ok) return g.error
   const r = await query<InvoiceRow>(
     `UPDATE invoices SET status = 'sent'
      WHERE id = $1 AND status = 'pending_payment' RETURNING *`,
@@ -163,6 +195,8 @@ export async function markInvoiceSent(id: string): Promise<ActionResult<InvoiceR
 
 /** Record payment of an invoice. */
 export async function markInvoicePaid(id: string): Promise<ActionResult<InvoiceRow>> {
+  const g = await requireReceptionist()
+  if (!g.ok) return g.error
   const r = await query<InvoiceRow>(
     `UPDATE invoices SET status = 'paid'
      WHERE id = $1 AND status IN ('sent', 'pending_payment') RETURNING *`,
@@ -179,6 +213,8 @@ export async function markInvoicePaid(id: string): Promise<ActionResult<InvoiceR
  * invoice reverses the amount and links back via `storno_of`.
  */
 export async function stornoInvoice(originalId: string): Promise<ActionResult<InvoiceRow>> {
+  const g = await requireReceptionist()
+  if (!g.ok) return g.error
   const outcome = await withTransaction(async (client) => {
     const orig = await client.query<InvoiceRow>(`SELECT * FROM invoices WHERE id = $1`, [originalId])
     if (orig.rowCount === 0) return { kind: "not_found" as const }

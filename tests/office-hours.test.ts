@@ -32,4 +32,14 @@ describe("officeHoursViolation", () => {
   it("rejects an unparseable date", () => {
     expect(officeHoursViolation("not-a-date", now)).toBe("invalid")
   })
+
+  it("rejects a slot that is sooner than the minimum notice", () => {
+    // Now = Thu 2026-07-02, 12:28; a 12:30 start is only two minutes away.
+    const at1228 = new Date(2026, 6, 2, 12, 28, 0).getTime()
+    expect(officeHoursViolation("2026-07-02T12:30:00", at1228, 60)).toBe("too_soon")
+    // A slot beyond the notice window on the same day is fine.
+    expect(officeHoursViolation("2026-07-02T14:00:00", at1228, 60)).toBeNull()
+    // With no minimum notice the two-minute slot is allowed again.
+    expect(officeHoursViolation("2026-07-02T12:30:00", at1228)).toBeNull()
+  })
 })

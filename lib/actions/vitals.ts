@@ -11,6 +11,7 @@
 import { z } from "zod"
 import { revalidatePath } from "next/cache"
 import { query } from "@/lib/db"
+import { requireDoctor } from "@/lib/auth/guard"
 import type { VitalsRow } from "@/lib/seed-data"
 import { ok, fail, type ActionResult } from "./types"
 
@@ -31,6 +32,8 @@ export type VitalsInput = z.infer<typeof vitalsSchema>
 export async function saveAppointmentVitals(
   input: VitalsInput,
 ): Promise<ActionResult<VitalsRow | null>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   const parsed = vitalsSchema.safeParse(input)
   if (!parsed.success) return fail("Invalid vitals payload.")
   const d = parsed.data

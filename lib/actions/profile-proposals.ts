@@ -10,6 +10,7 @@
  */
 import { query, withTransaction } from "@/lib/db"
 import { revalidatePath } from "next/cache"
+import { requireDoctor, requirePatient, requireSessionScoped } from "@/lib/auth/guard"
 import { ok, fail, type ActionResult } from "./types"
 import type { ProfileUpdateSuggestion } from "./ai"
 
@@ -37,6 +38,8 @@ export async function createProfileProposals(
   appointmentId: string | null,
   items: ProfileUpdateSuggestion[],
 ): Promise<ActionResult<{ count: number }>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   if (!patientId) return fail("Missing patient.")
   const valid = items.filter(
     (i) => i.proposedValue?.trim() && (PATIENT_COLUMNS.has(i.field) || i.field === "allergy" || i.field === "condition"),
@@ -59,6 +62,10 @@ export async function createProfileProposals(
 
 /** Pending proposals shown to the patient on their profile. */
 export async function getPendingProfileProposals(patientId: string): Promise<ProfileProposalRow[]> {
+  // A patient may only read their own proposals; staff may read any.
+  const g = await requireSessionScoped()
+  if (!g.ok) return []
+  if (!g.value.isStaff && patientId !== g.value.patientId) return []
   const res = await query<ProfileProposalRow>(
     `SELECT * FROM profile_change_proposals
       WHERE patient_id = $1 AND status = 'pending_patient'
@@ -70,12 +77,16 @@ export async function getPendingProfileProposals(patientId: string): Promise<Pro
 
 /** Patient accepts (apply + mark accepted) or rejects a proposed change. */
 export async function respondToProposal(proposalId: string, accept: boolean): Promise<ActionResult<null>> {
+  const g = await requirePatient()
+  if (!g.ok) return g.error
   const res = await query<ProfileProposalRow>(
     `SELECT * FROM profile_change_proposals WHERE id = $1`,
     [proposalId],
   )
   const p = res.rows[0]
   if (!p) return fail("Proposal not found.")
+  // A patient may only respond to their own proposals.
+  if (p.patient_id !== g.value.patientId) return fail("Proposal not found.")
   if (p.status !== "pending_patient") return fail("This change has already been handled.")
 
   if (!accept) {

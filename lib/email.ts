@@ -124,6 +124,95 @@ export async function sendStaffCredentialsEmail(params: {
   }
 }
 
+/** Notify a patient that a new consultation report is available. Best-effort. */
+export async function sendReportReadyEmail(params: {
+  to: string
+  firstName: string
+  portalUrl: string
+}): Promise<{ sent: boolean; error?: string }> {
+  return simpleEmail({
+    to: params.to,
+    subject: `Your ${CLINIC.name} report is ready`,
+    heading: `Hello ${params.firstName},`,
+    body: "Your consultation report is now available in your patient portal.",
+    ctaLabel: "View my report",
+    ctaUrl: params.portalUrl,
+  })
+}
+
+/** Notify a patient that an invoice is ready and payable. Best-effort. */
+export async function sendInvoiceReadyEmail(params: {
+  to: string
+  firstName: string
+  amountText: string
+  dueText: string | null
+  portalUrl: string
+}): Promise<{ sent: boolean; error?: string }> {
+  return simpleEmail({
+    to: params.to,
+    subject: `Your ${CLINIC.name} invoice`,
+    heading: `Hello ${params.firstName},`,
+    body: `Your invoice for ${params.amountText} is ready.${params.dueText ? ` Payment is due by ${params.dueText}.` : ""} You can view and download it in your patient portal.`,
+    ctaLabel: "View my invoice",
+    ctaUrl: params.portalUrl,
+  })
+}
+
+/** Remind a patient of an upcoming appointment (day-before). Best-effort. */
+export async function sendAppointmentReminderEmail(params: {
+  to: string
+  firstName: string
+  whenText: string
+  portalUrl: string
+}): Promise<{ sent: boolean; error?: string }> {
+  return simpleEmail({
+    to: params.to,
+    subject: `Reminder: your ${CLINIC.name} appointment`,
+    heading: `Hello ${params.firstName},`,
+    body: `This is a reminder of your upcoming appointment on ${params.whenText}. Please arrive about 10 minutes early and bring your insurance card.`,
+    ctaLabel: "View my appointments",
+    ctaUrl: params.portalUrl,
+  })
+}
+
+/** Small shared transactional email (heading + body + optional button). */
+async function simpleEmail(params: {
+  to: string
+  subject: string
+  heading: string
+  body: string
+  ctaLabel?: string
+  ctaUrl?: string
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!KEY) return { sent: false, error: "email_not_configured" }
+  if (!params.to?.trim()) return { sent: false, error: "no_recipient" }
+  const button = params.ctaLabel && params.ctaUrl
+    ? `<p style="margin:22px 0 0;"><a href="${escapeHtml(params.ctaUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px;">${escapeHtml(params.ctaLabel)}</a></p>`
+    : ""
+  try {
+    const resend = new Resend(KEY)
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to: params.to,
+      subject: params.subject,
+      text: `${params.heading}\n\n${params.body}${params.ctaUrl ? `\n\n${params.ctaLabel}: ${params.ctaUrl}` : ""}\n\n${CLINIC.name}`,
+      html: `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
+        <div style="max-width:520px;margin:0 auto;padding:24px;">
+          <div style="background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:28px;">
+            <h1 style="margin:0 0 4px;font-size:18px;">${CLINIC.name}</h1>
+            <p style="font-size:15px;margin:16px 0 12px;">${escapeHtml(params.heading)}</p>
+            <p style="font-size:15px;margin:0;">${escapeHtml(params.body)}</p>
+            ${button}
+          </div>
+        </div></body></html>`,
+    })
+    if (error) return { sent: false, error: error.message }
+    return { sent: true }
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : "send_failed" }
+  }
+}
+
 /** Send a signup email-verification code. Never throws — returns a result. */
 export async function sendSignupCodeEmail(params: {
   to: string

@@ -326,6 +326,8 @@ export interface AppointmentRow {
   ai_review_status?: string | null
   /** Self check-in code (Feature 3): short code issued at booking, entered at the clinic. */
   check_in_code?: string | null
+  /** Set when STAFF change the appointment, so the patient can be notified. */
+  staff_modified_at?: string | null
 }
 export const appointments: AppointmentRow[] = [
   { id: "apt-1", patient_id: "pat-1", doctor_id: "doc-1", starts_at: "2024-01-15T09:00:00Z", duration_min: 30, status: "scheduled", reason: "General checkup", reason_for_change: null, check_in_at: null, doctor_notes: null, created_at: "2024-01-10T00:00:00Z" },

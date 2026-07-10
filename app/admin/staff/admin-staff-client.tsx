@@ -87,7 +87,7 @@ export function AdminStaffClient() {
             </CardHeader>
             <CardContent className="space-y-3">
               {created.emailed ? (
-                <p className="text-sm text-foreground">✉️ Sent to <span className="font-medium">{created.email}</span>.</p>
+                <p className="text-sm text-foreground">The temporary password was sent to <span className="font-medium">{created.email}</span>.</p>
               ) : (
                 <>
                   <div className="flex items-center gap-3">

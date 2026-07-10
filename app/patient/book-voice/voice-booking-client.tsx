@@ -18,11 +18,45 @@ import {
   executeVoiceAction,
   type VoiceMsg,
   type VoiceLang,
-  type VoiceReply,
+  type VoiceAction,
 } from "@/lib/actions/voice"
 
 type Status = "idle" | "thinking" | "speaking" | "listening" | "ended"
 interface Bubble { role: "assistant" | "user"; text: string }
+
+/** Format a local YYYY-MM-DDTHH:mm stamp for the spoken confirmation. */
+const fmtLocal = (dt: string, lang: VoiceLang) => {
+  const d = new Date(dt)
+  if (Number.isNaN(d.getTime())) return dt
+  return d.toLocaleString(lang === "de" ? "de-DE" : "en-GB", {
+    weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+  })
+}
+
+/**
+ * The single confirmation the patient hears before anything is written. Built on
+ * the client from the action the model proposed, so a booking can never happen
+ * without an explicit spoken "yes" — regardless of what the model claims.
+ */
+function confirmText(a: VoiceAction, lang: VoiceLang): string {
+  const de = lang === "de"
+  const suffix = de ? " Soll ich das durchführen? Bitte sagen Sie ja oder nein." : " Shall I go ahead? Please say yes or no."
+  if (a.type === "cancel") {
+    const when = a.target_datetime ? fmtLocal(a.target_datetime, lang) : ""
+    return (de ? `Ich storniere Ihren Termin${when ? ` am ${when}` : ""}.` : `I'll cancel your appointment${when ? ` on ${when}` : ""}.`) + suffix
+  }
+  const when = a.datetime ? fmtLocal(a.datetime, lang) : ""
+  if (a.type === "reschedule") {
+    return (de ? `Ich verschiebe Ihren Termin auf ${when}.` : `I'll move your appointment to ${when}.`) + suffix
+  }
+  const doc = a.doctor_name?.trim() ? ` ${de ? "bei" : "with"} Dr. ${a.doctor_name.replace(/^dr\.?\s*/i, "")}` : ""
+  return (de ? `Ich buche einen Termin am ${when}${doc}.` : `I'll book an appointment on ${when}${doc}.`) + suffix
+}
+
+const isAffirmative = (t: string) =>
+  /\b(yes|yeah|yep|yup|sure|correct|right|okay|ok|please|confirm|go ahead|do it|ja|jawohl|genau|richtig|bitte|stimmt|passt)\b/i.test(t)
+const isNegative = (t: string) =>
+  /\b(no|nope|nah|don'?t|do not|stop|nicht|nein|falsch|abbrechen)\b/i.test(t)
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const getSR = () =>
@@ -61,6 +95,9 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recogRef = useRef<any>(null)
   const resolveListenRef = useRef<((t: string) => void) | null>(null)
+  // Whether the last listen actually picked up any speech (vs. pure silence), so
+  // we only ask the patient to repeat when they spoke but weren't understood.
+  const heardSpeechRef = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const voicesRef = useRef<SpeechSynthesisVoice[]>([])
 
@@ -111,9 +148,11 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
       r.lang = langRef.current === "de" ? "de-DE" : "en-US"
       r.continuous = false
       r.interimResults = true
+      heardSpeechRef.current = false
       let finalText = ""
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       r.onresult = (e: any) => {
+        heardSpeechRef.current = true
         let live = ""
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const t = e.results[i][0].transcript
@@ -134,28 +173,28 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
       try { r.start() } catch { /* already started */ }
     }), [])
 
-  const agentTurn = useCallback(async (reply: VoiceReply) => {
-    if (reply.say) {
-      pushAssistant(reply.say)
-      setStatus("speaking")
-      await speak(reply.say)
-    }
-    if (reply.action) {
-      setStatus("thinking")
-      let outcome: string
-      try {
-        const ex = await executeVoiceAction(reply.action, langRef.current)
-        outcome = ex.status === "ok" ? ex.data.say : ex.message
-      } catch {
-        outcome = langRef.current === "de"
-          ? "Es gab gerade ein technisches Problem. Können wir es noch einmal versuchen?"
-          : "Something went wrong on our side just now. Shall we try that again?"
-      }
-      pushAssistant(outcome)
-      setStatus("speaking")
-      await speak(outcome)
-    }
+  // Speak a plain (no-action) reply.
+  const sayReply = useCallback(async (text: string) => {
+    if (!text) return
+    pushAssistant(text)
+    setStatus("speaking")
+    await speak(text)
   }, [speak])
+
+  // Commit a confirmed action and speak its real outcome.
+  const execAction = useCallback(async (action: VoiceAction) => {
+    setStatus("thinking")
+    let outcome: string
+    try {
+      const ex = await executeVoiceAction(action, langRef.current)
+      outcome = ex.status === "ok" ? ex.data.say : ex.message
+    } catch {
+      outcome = langRef.current === "de"
+        ? "Es gab gerade ein technisches Problem. Können wir es noch einmal versuchen?"
+        : "Something went wrong on our side just now. Shall we try that again?"
+    }
+    await sayReply(outcome)
+  }, [sayReply])
 
   const endCall = useCallback(() => {
     activeRef.current = false
@@ -199,26 +238,87 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
       activeRef.current = false
       return
     }
-    await agentTurn(greeting.data)
+    await sayReply(greeting.data.say)
+    if (greeting.data.endCall) { endCall(); return }
+
+    let repeatCount = 0 // consecutive turns where speech was heard but not understood
+    let silenceCount = 0 // consecutive fully silent turns
+    // When set, this text is processed as the next patient turn without listening
+    // again — used when a confirmation answer is really a correction.
+    let pending: string | null = null
 
     while (activeRef.current) {
-      setStatus("listening")
-      const said = await listen()
-      if (!activeRef.current) break
-      if (!said.trim()) continue
+      let said: string
+      if (pending !== null) {
+        said = pending
+        pending = null
+      } else {
+        setStatus("listening")
+        said = await listen()
+        if (!activeRef.current) break
+        if (!said.trim()) {
+          if (heardSpeechRef.current) {
+            // The patient spoke but it couldn't be transcribed — ask once or twice.
+            repeatCount += 1
+            silenceCount = 0
+            if (repeatCount <= 2) {
+              await sayReply(langRef.current === "de"
+                ? "Entschuldigung, das habe ich nicht verstanden. Können Sie das bitte wiederholen?"
+                : "Sorry, I didn't catch that. Could you please repeat?")
+            }
+          } else {
+            // Pure silence — wait quietly and re-open the mic, without nagging.
+            silenceCount += 1
+            if (silenceCount >= 4) {
+              await sayReply(langRef.current === "de"
+                ? "Ich beende das Gespräch vorerst. Starten Sie es jederzeit neu, wenn Sie möchten."
+                : "I'll end the call for now. Start it again anytime you like.")
+              endCall()
+              break
+            }
+          }
+          continue
+        }
+      }
+      repeatCount = 0
+      silenceCount = 0
       pushUser(said)
       setStatus("thinking")
       const reply = await safeReply(messagesRef.current)
       if (!activeRef.current) break
       if (reply.status !== "ok") {
-        pushAssistant(reply.message)
-        setStatus("speaking")
-        await speak(reply.message)
+        await sayReply(reply.message)
         continue
       }
-      await agentTurn(reply.data)
+
+      if (reply.data.action) {
+        // Never act on the model's word alone: read the details back and require
+        // an explicit spoken "yes" before writing anything.
+        await sayReply(confirmText(reply.data.action, langRef.current))
+        setStatus("listening")
+        const answer = await listen()
+        if (!activeRef.current) break
+        if (isAffirmative(answer) && !isNegative(answer)) {
+          pushUser(answer)
+          await execAction(reply.data.action)
+        } else if (isNegative(answer) || !answer.trim()) {
+          if (answer.trim()) pushUser(answer)
+          await sayReply(langRef.current === "de"
+            ? "In Ordnung, das mache ich nicht. Kann ich sonst noch helfen?"
+            : "Alright, I won't do that. Anything else?")
+        } else {
+          // Not a clear yes or no — treat it as a fresh instruction/correction,
+          // which the main loop records and sends to the assistant next.
+          pending = answer
+        }
+        continue
+      }
+
+      await sayReply(reply.data.say)
+      // The patient signalled they're done — the closing line was just spoken, hang up.
+      if (reply.data.endCall) { endCall(); break }
     }
-  }, [agentTurn, listen, speak, safeReply])
+  }, [sayReply, execAction, listen, safeReply, endCall])
 
   const submitText = (e: React.FormEvent) => {
     e.preventDefault()

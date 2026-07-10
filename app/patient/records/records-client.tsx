@@ -71,6 +71,9 @@ export function RecordsClient({ reports }: { reports: ReportListItem[] }) {
                               {new Date(report.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                             </Badge>
                             <Badge variant="secondary" className="text-xs">{report.status}</Badge>
+                            {Date.now() - new Date(report.date).getTime() < 7 * 86_400_000 && (
+                              <Badge className="text-xs bg-primary/10 text-primary border border-primary/20">New</Badge>
+                            )}
                           </div>
                         </div>
                       </div>

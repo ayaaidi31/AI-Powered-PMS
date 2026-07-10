@@ -118,20 +118,62 @@ export function doctorAvailableOn(
 }
 
 /**
+ * Minimum notice for a self-service booking. A patient cannot grab a slot that
+ * starts within the next hour: there must be enough lead time to travel in and
+ * for the front desk to prepare, so an appointment two minutes away is refused.
+ */
+export const MIN_BOOKING_LEAD_MIN = 60
+
+/**
  * Office-hours check for the voice booking assistant (Feature 11). Returns the
  * reason a requested slot is not bookable, or null when it is fine. Hours are
- * Monday–Friday, 08:00–16:30 (last 30-minute start).
+ * Monday–Friday, 08:00–16:30 (last 30-minute start). `minLeadMin` enforces a
+ * minimum notice before the start (0 disables it).
  */
-export type OfficeHoursViolation = "invalid" | "past" | "weekend" | "closed"
-export function officeHoursViolation(dateISO: string, nowMs: number): OfficeHoursViolation | null {
+export type OfficeHoursViolation = "invalid" | "past" | "too_soon" | "weekend" | "closed"
+export function officeHoursViolation(dateISO: string, nowMs: number, minLeadMin = 0): OfficeHoursViolation | null {
   const d = new Date(dateISO)
   if (Number.isNaN(d.getTime())) return "invalid"
-  if (d.getTime() < nowMs) return "past"
+  const startMs = d.getTime()
+  if (startMs < nowMs) return "past"
+  if (minLeadMin > 0 && startMs < nowMs + minLeadMin * 60_000) return "too_soon"
   const weekday = d.getDay() // 0 Sun … 6 Sat
   if (weekday === 0 || weekday === 6) return "weekend"
   const minutes = d.getHours() * 60 + d.getMinutes()
   if (minutes < 8 * 60 || minutes > 16 * 60 + 30) return "closed"
   return null
+}
+
+/** Bookable 30-minute start times within office hours (last start 16:30). */
+export const CLINIC_SLOT_TIMES = [
+  "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+] as const
+
+const isWeekendDate = (d: Date): boolean => d.getDay() === 0 || d.getDay() === 6
+
+/**
+ * Start times still bookable on `now`'s date — used to keep the voice assistant
+ * from proposing slots that have already passed. Empty on weekends or once the
+ * day's last slot is gone.
+ */
+export function remainingClinicSlots(now: Date, minLeadMin = 0): string[] {
+  if (isWeekendDate(now)) return []
+  const earliest = now.getTime() + minLeadMin * 60_000
+  return CLINIC_SLOT_TIMES.filter((s) => {
+    const [h, m] = s.split(":").map(Number)
+    const at = new Date(now)
+    at.setHours(h, m, 0, 0)
+    return at.getTime() >= earliest
+  })
+}
+
+/** The next Monday–Friday date strictly after `now`. */
+export function nextWorkingDay(now: Date): Date {
+  const d = new Date(now)
+  d.setHours(0, 0, 0, 0)
+  do { d.setDate(d.getDate() + 1) } while (isWeekendDate(d))
+  return d
 }
 
 /**

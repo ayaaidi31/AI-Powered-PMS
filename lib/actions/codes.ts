@@ -10,6 +10,7 @@
  */
 import { sql } from "@/lib/db"
 import { searchEbmCodes } from "@/lib/codes/ebm"
+import { requireStaff } from "@/lib/auth/guard"
 import { ok, type ActionResult } from "./types"
 
 export interface CodeSuggestion {
@@ -28,6 +29,8 @@ export async function searchBillingCodes(
   catalog: "EBM" | "GOAE",
   query: string,
 ): Promise<ActionResult<CodeSuggestion[]>> {
+  const g = await requireStaff()
+  if (!g.ok) return g.error
   const q = query.trim()
   if (q.length < 2) return ok([])
 

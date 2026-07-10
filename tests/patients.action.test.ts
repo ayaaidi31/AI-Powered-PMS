@@ -8,6 +8,14 @@ vi.mock("@/lib/db", () => ({
   pool: {},
 }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))
+vi.mock("@/lib/auth/guard", () => {
+  const okStaff = { ok: true, value: { userId: "u1", role: "receptionist", profileId: "rec1", email: "r@c.de", name: "Rec" } }
+  return {
+    requireReceptionist: async () => okStaff,
+    requireStaff: async () => okStaff,
+    requireSessionScoped: async () => ({ ok: true, value: { session: okStaff.value, isStaff: true, patientId: null } }),
+  }
+})
 
 import { registerPatient, updatePatient, deactivatePatient } from "@/lib/actions/patients"
 

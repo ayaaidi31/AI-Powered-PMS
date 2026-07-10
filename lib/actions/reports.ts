@@ -20,6 +20,8 @@ import { z } from "zod"
 import { query, withTransaction } from "@/lib/db"
 import { getCurrentDoctor } from "@/lib/queries"
 import { reportRemovalMode } from "@/lib/rules"
+import { isEmailConfigured, sendReportReadyEmail, appUrl } from "@/lib/email"
+import { requireDoctor } from "@/lib/auth/guard"
 import type { MedicalReportRow, ReportBillingCodeRow } from "@/lib/seed-data"
 import { ok, fail, type ActionResult } from "./types"
 
@@ -51,10 +53,13 @@ export type CreateReportInput = z.infer<typeof createSchema>
 export async function createReport(
   input: CreateReportInput,
 ): Promise<ActionResult<MedicalReportRow>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   const parsed = createSchema.safeParse(input)
   if (!parsed.success) return fail("Invalid report payload.")
   const d = parsed.data
 
+  // The author is taken from the signed-in doctor, not from the request payload.
   const result = await query<MedicalReportRow>(
     `INSERT INTO medical_reports
        (appointment_id, patient_id, doctor_id, diagnosis, raw_notes,
@@ -62,7 +67,7 @@ export async function createReport(
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
      RETURNING *`,
     [
-      d.appointment_id, d.patient_id, d.doctor_id,
+      d.appointment_id, d.patient_id, g.value.profileId,
       d.diagnosis ?? null, d.raw_notes ?? null, d.formatted_report ?? null,
       d.internal_notes ?? null,
       d.prescriptions ? JSON.stringify(d.prescriptions) : null,
@@ -90,6 +95,8 @@ export async function updateReport(
   id: string,
   input: z.infer<typeof updateSchema>,
 ): Promise<ActionResult<MedicalReportRow>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   const parsed = updateSchema.safeParse(input)
   if (!parsed.success) return fail("Invalid update payload.")
 
@@ -108,16 +115,20 @@ export async function updateReport(
     }
   }
   values.push(id)
+  const idParam = values.length
+  values.push(g.value.profileId)
+  const doctorParam = values.length
 
-  // The WHERE clause enforces immutability: approved rows are never matched.
+  // The WHERE clause enforces immutability (approved rows never match) AND
+  // authorship (a doctor can only edit their own reports).
   const result = await query<MedicalReportRow>(
     `UPDATE medical_reports SET ${sets.join(", ")}
-     WHERE id = $${values.length} AND status <> 'approved'
+     WHERE id = $${idParam} AND doctor_id = $${doctorParam} AND status <> 'approved'
      RETURNING *`,
     values,
   )
   if (result.rowCount === 0) {
-    return fail("Report not found, or it has already been approved and is locked.")
+    return fail("Report not found, not yours, or it has already been approved and is locked.")
   }
   revalidatePath("/doctor")
   return ok(result.rows[0])
@@ -128,15 +139,35 @@ export async function updateReport(
  * approval time, after which the record becomes immutable.
  */
 export async function approveReport(id: string): Promise<ActionResult<MedicalReportRow>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   const result = await query<MedicalReportRow>(
     `UPDATE medical_reports
      SET status = 'approved', approved_at = now()
-     WHERE id = $1 AND status <> 'approved'
+     WHERE id = $1 AND doctor_id = $2 AND status <> 'approved'
      RETURNING *`,
-    [id],
+    [id, g.value.profileId],
   )
-  if (result.rowCount === 0) return fail("Report not found or already approved.")
+  if (result.rowCount === 0) return fail("Report not found, not yours, or already approved.")
+
+  // Let the patient know a new report is available (best-effort; never blocks).
+  if (isEmailConfigured()) {
+    try {
+      const p = await query<{ email: string | null; first_name: string }>(
+        `SELECT email, first_name FROM patients WHERE id = $1`,
+        [result.rows[0].patient_id],
+      )
+      const patient = p.rows[0]
+      if (patient?.email) {
+        await sendReportReadyEmail({
+          to: patient.email, firstName: patient.first_name, portalUrl: await appUrl("/patient/records"),
+        })
+      }
+    } catch { /* email is best-effort */ }
+  }
+
   revalidatePath("/doctor")
+  revalidatePath("/patient/records")
   return ok(result.rows[0])
 }
 
@@ -155,8 +186,14 @@ export async function setReportBillingCodes(
   reportId: string,
   codes: z.infer<typeof billingCodeSchema>[],
 ): Promise<ActionResult<ReportBillingCodeRow[]>> {
+  const g = await requireDoctor()
+  if (!g.ok) return g.error
   const parsed = z.array(billingCodeSchema).safeParse(codes)
   if (!parsed.success) return fail("Invalid billing codes.")
+
+  // Only the authoring doctor may attach codes to their own report.
+  const owns = await query(`SELECT 1 FROM medical_reports WHERE id = $1 AND doctor_id = $2`, [reportId, g.value.profileId])
+  if (owns.rowCount === 0) return fail("Report not found or not yours.")
 
   const saved = await withTransaction(async (client) => {
     await client.query(`DELETE FROM report_billing_codes WHERE report_id = $1`, [reportId])
