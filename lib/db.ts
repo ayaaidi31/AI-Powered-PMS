@@ -17,13 +17,29 @@ import { Pool, types, type PoolClient, type QueryResultRow } from "pg"
 // keeping the default Date object breaks date inputs and string validation.
 types.setTypeParser(1082, (value) => value)
 
-const connectionString = process.env.DATABASE_URL
+const rawConnectionString = process.env.DATABASE_URL
 
-if (!connectionString) {
+if (!rawConnectionString) {
   throw new Error(
     "DATABASE_URL is not set. Add it to .env.local (Neon connection string).",
   )
 }
+
+// SSL is configured explicitly below via the `ssl` option, so the sslmode query
+// parameter is redundant. Recent versions of pg warn that the 'require' /
+// 'prefer' / 'verify-ca' modes will change meaning in a future major release;
+// dropping the parameter avoids that warning without altering behaviour.
+function stripSslMode(raw: string): string {
+  try {
+    const url = new URL(raw)
+    url.searchParams.delete("sslmode")
+    return url.toString()
+  } catch {
+    return raw
+  }
+}
+
+const connectionString = stripSslMode(rawConnectionString)
 
 // Reuse the pool across hot reloads in development.
 const globalForDb = globalThis as unknown as { __pgPool?: Pool }

@@ -46,16 +46,16 @@ async function main() {
 
   const backupPath = join(process.cwd(), "db", "_backup-fhir-legacy.json")
   writeFileSync(backupPath, JSON.stringify(backup, null, 2), "utf8")
-  console.log(`✓ Backup written to ${backupPath}`)
+  console.log(`[OK] Backup written to ${backupPath}`)
 
   // ── 2. Drop in dependency order ──
   for (const t of LEGACY_TABLES) {
     await pool.query(`DROP TABLE IF EXISTS "${t}"`)
     console.log(`  dropped ${t}`)
   }
-  console.log("✓ Legacy FHIR tables removed.")
+  console.log("[OK] Legacy FHIR tables removed.")
 }
 
 main()
-  .catch((e) => { console.error("✖ Failed:", e); process.exitCode = 1 })
+  .catch((e) => { console.error("[FAIL] Failed:", e); process.exitCode = 1 })
   .finally(() => pool.end())

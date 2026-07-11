@@ -42,7 +42,7 @@ export interface VoiceMsg {
 }
 
 export interface VoiceAction {
-  type: "book" | "reschedule" | "cancel"
+  type: "book" | "reschedule" | "cancel" | "change_doctor"
   doctor_name?: string
   /** Type of doctor implied by the patient's concern, when they gave no name. */
   specialty?: string
@@ -138,7 +138,7 @@ function systemPrompt(
     `- Our doctors are: ${doctorList}.`,
     `- If the patient describes a health concern, briefly say which kind of doctor or specialty is appropriate (for example a general practitioner or a dermatologist), without diagnosing, and record it in "specialty". The practice then assigns a suitable available doctor, whose name the patient is told once the booking is made.`,
     `- If the patient asks for one of our doctors by name, put that name in "doctor_name" and proceed — the system checks that doctor's availability when booking. If they ask for a doctor who is not in the list above, tell them who is available instead.`,
-    `- Changing the doctor of an existing appointment is handled by reception. Do not claim to change it; offer to cancel it and book a new appointment instead.`,
+    `- If the patient wants a DIFFERENT doctor for an appointment they already have, use the "change_doctor" action: set "target_datetime" to that appointment, and "doctor_name" (or "specialty") for the new doctor. Set "datetime" only if the time also changes; otherwise the current time is kept. The system books the new doctor and releases the old appointment.`,
     ``,
     `${patientName}'s upcoming appointments (identify one by its exact date and time):`,
     upcoming || "  none",
@@ -147,6 +147,7 @@ function systemPrompt(
     `- Book: settle on a free time from the availability and, from the patient's concern, the kind of doctor needed, then return the "book" action.`,
     `- Reschedule: work out which existing appointment (by its date and time) and the new free time, then return the "reschedule" action with "target_datetime" set to the existing appointment's start.`,
     `- Cancel: work out which existing appointment, then return the "cancel" action with "target_datetime" set.`,
+    `- Change doctor: identify the existing appointment and the new doctor, then return the "change_doctor" action with "target_datetime" set (and "datetime" only if the time also changes).`,
     `- Important: do NOT ask the patient "is that correct?" yourself, and NEVER say a booking is done. Once you have the needed details, return the action with a short neutral "say" such as "One moment." The system then reads the details back to the patient, asks them to confirm, and carries it out. A question from the patient (for example "is it free?") is never a confirmation.`,
     `- Whenever you offer or discuss a specific time, copy that exact time into "proposed_datetime" so it can be checked against the live schedule.`,
     `- When the patient signals they are finished (for example "that's all", "no, thank you", "goodbye", "done"), give a brief professional closing and set "endCall" to true.`,
@@ -156,7 +157,7 @@ function systemPrompt(
     `  "say": "<your next sentence to the patient>",`,
     `  "proposed_datetime": "<the specific time you are offering or confirming this turn, YYYY-MM-DDTHH:mm, or empty>",`,
     `  "action": null OR {`,
-    `     "type": "book" | "reschedule" | "cancel",`,
+    `     "type": "book" | "reschedule" | "cancel" | "change_doctor",`,
     `     "specialty": "<kind of doctor implied by the concern, or empty>",`,
     `     "doctor_name": "<only if the patient named a specific doctor, else empty>",`,
     `     "datetime": "<new/booking time YYYY-MM-DDTHH:mm, empty for cancel>",`,
@@ -495,6 +496,48 @@ export async function executeVoiceAction(
         return ok({ done: false, say: de ? `Das Stornieren hat nicht geklappt: ${res.message}` : `I couldn't cancel that: ${res.message}` })
       }
       return ok({ done: true, say: de ? `Ihr Termin am ${fmt(target.starts_at, lang)} Uhr ist storniert. Kann ich sonst noch helfen?` : `Your appointment on ${fmt(target.starts_at, lang)} is cancelled. Anything else?` })
+    }
+
+    // ── Change doctor — book the new doctor, then release the old appointment ──
+    // Booking first means that if the new doctor is not free, the original
+    // appointment is left untouched rather than being cancelled into a gap.
+    if (action.type === "change_doctor") {
+      const newStartIso = action.datetime && !Number.isNaN(Date.parse(action.datetime))
+        ? new Date(action.datetime).toISOString()
+        : target.starts_at
+      const hoursIssue = officeHoursIssue(newStartIso, de)
+      if (hoursIssue) return ok({ done: false, say: hoursIssue })
+
+      const doctor = patientNamedDoctor(action.doctor_name)
+        ? matchDoctor(await getDoctors(), action.doctor_name)
+        : await assignFreeDoctor(Date.parse(newStartIso), action.specialty)
+      if (!doctor) {
+        return ok({ done: false, say: patientNamedDoctor(action.doctor_name)
+          ? (de ? "Diese Ärztin oder diesen Arzt finde ich leider nicht. Wen möchten Sie?" : "I can't find that doctor. Who would you like to see?")
+          : (de ? "Zu dieser Uhrzeit ist leider kein Arzt frei. Möchten Sie eine andere Uhrzeit?" : "No doctor is free at that time. Would you like a different time?") })
+      }
+      if (doctor.id === target.doctor_id && newStartIso === target.starts_at) {
+        return ok({ done: false, say: de ? "Dieser Termin ist bereits bei dieser Ärztin oder diesem Arzt. Möchten Sie jemand anderen?" : "That appointment is already with this doctor. Would you like someone else?" })
+      }
+
+      const booked = await bookAppointment({
+        patient_id: patient.id,
+        doctor_id: doctor.id,
+        starts_at: newStartIso,
+        duration_min: 30,
+        reason: target.reason ?? (de ? "Arztwechsel per KI-Assistent" : "Doctor change via AI assistant"),
+        source: "ai_voice",
+      })
+      if (booked.status === "conflict") {
+        return ok({ done: false, say: de ? `Dr. ${doctor.last_name} ist zu dieser Zeit leider nicht frei. Möchten Sie eine andere Uhrzeit?` : `Dr. ${doctor.last_name} isn't free at that time. Would you like another time?` })
+      }
+      if (booked.status !== "ok") {
+        return ok({ done: false, say: de ? `Das hat nicht geklappt: ${booked.message}` : `That didn't work: ${booked.message}` })
+      }
+      await cancelAppointment(target.id, { reasonForChange: VOICE_MARK })
+      return ok({ done: true, say: de
+        ? `Erledigt. Ihr Termin ist jetzt bei Dr. ${doctor.last_name} am ${fmt(newStartIso, lang)} Uhr. Die Praxis prüft die Änderung noch kurz. Kann ich sonst noch helfen?`
+        : `Done. Your appointment is now with Dr. ${doctor.last_name} on ${fmt(newStartIso, lang)}. Reception will quickly review it. Anything else?` })
     }
 
     // reschedule

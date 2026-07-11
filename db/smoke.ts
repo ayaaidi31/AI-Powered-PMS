@@ -28,7 +28,7 @@ async function main() {
              && tstzrange($3::timestamptz, $3::timestamptz + ($4 || ' minutes')::interval)`,
       [appt.doctor_id, ACTIVE, appt.starts_at, appt.duration_min],
     )
-    console.log(`1) Overlap detection (expect ≥1): ${clash.rows[0].n} ✓`)
+    console.log(`1) Overlap detection (expect ≥1): ${clash.rows[0].n} [OK]`)
 
     // 1b) A far-future slot must be free.
     const free = await client.query(
@@ -38,7 +38,7 @@ async function main() {
              && tstzrange('2099-01-01T09:00:00Z'::timestamptz, '2099-01-01T09:30:00Z'::timestamptz)`,
       [appt.doctor_id, ACTIVE],
     )
-    console.log(`1b) Free future slot (expect 0): ${free.rows[0].n} ${free.rows[0].n === 0 ? "✓" : "✗"}`)
+    console.log(`1b) Free future slot (expect 0): ${free.rows[0].n} ${free.rows[0].n === 0 ? "[OK]" : "[FAIL]"}`)
 
     // 2) Invoice numbering: next number is gap-free for the current year.
     await client.query(`SELECT pg_advisory_xact_lock(778899)`)
@@ -48,7 +48,7 @@ async function main() {
       [`${year}-%`],
     )
     const seq = last.rowCount ? parseInt(last.rows[0].invoice_number.split("-")[1], 10) : 0
-    console.log(`2) Next invoice number: ${year}-${String(seq + 1).padStart(4, "0")} ✓`)
+    console.log(`2) Next invoice number: ${year}-${String(seq + 1).padStart(4, "0")} [OK]`)
 
     // 3) Immutability: an approved report cannot be updated.
     const upd = await client.query(
@@ -57,10 +57,10 @@ async function main() {
          AND status <> 'approved'
        RETURNING id`,
     )
-    console.log(`3) Update on approved report (expect 0 rows): ${upd.rowCount} ${upd.rowCount === 0 ? "✓" : "✗"}`)
+    console.log(`3) Update on approved report (expect 0 rows): ${upd.rowCount} ${upd.rowCount === 0 ? "[OK]" : "[FAIL]"}`)
 
     await client.query("ROLLBACK")
-    console.log("\n✓ Smoke test passed (transaction rolled back — no data changed).")
+    console.log("\n[OK] Smoke test passed (transaction rolled back — no data changed).")
   } catch (e) {
     await client.query("ROLLBACK")
     throw e
@@ -70,5 +70,5 @@ async function main() {
 }
 
 main()
-  .catch((e) => { console.error("✖ Smoke test failed:", e); process.exitCode = 1 })
+  .catch((e) => { console.error("[FAIL] Smoke test failed:", e); process.exitCode = 1 })
   .finally(() => pool.end())

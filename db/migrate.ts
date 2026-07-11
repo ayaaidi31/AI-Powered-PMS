@@ -16,12 +16,12 @@ async function main() {
     console.log(`→ Applying db/${file} …`)
     await pool.query(sql)
   }
-  console.log("✓ Schema applied (tables created if not already present).")
+  console.log("[OK] Schema applied (tables created if not already present).")
 }
 
 main()
   .catch((err) => {
-    console.error("✖ Migration failed:", err)
+    console.error("[FAIL] Migration failed:", err)
     process.exitCode = 1
   })
   .finally(() => pool.end())

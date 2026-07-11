@@ -50,6 +50,13 @@ function confirmText(a: VoiceAction, lang: VoiceLang): string {
     return (de ? `Ich verschiebe Ihren Termin auf ${when}.` : `I'll move your appointment to ${when}.`) + suffix
   }
   const doc = a.doctor_name?.trim() ? ` ${de ? "bei" : "with"} Dr. ${a.doctor_name.replace(/^dr\.?\s*/i, "")}` : ""
+  if (a.type === "change_doctor") {
+    const toDoc = a.doctor_name?.trim()
+      ? ` ${de ? "zu" : "to"} Dr. ${a.doctor_name.replace(/^dr\.?\s*/i, "")}`
+      : (de ? " zu einer anderen Ärztin oder einem anderen Arzt" : " to a different doctor")
+    const atWhen = when ? (de ? ` am ${when}` : ` on ${when}`) : ""
+    return (de ? `Ich ändere Ihren Termin${toDoc}${atWhen}.` : `I'll change your appointment${toDoc}${atWhen}.`) + suffix
+  }
   return (de ? `Ich buche einen Termin am ${when}${doc}.` : `I'll book an appointment on ${when}${doc}.`) + suffix
 }
 

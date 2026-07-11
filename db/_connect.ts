@@ -10,13 +10,26 @@ import { Pool } from "pg"
 config({ path: ".env.local" })
 config()
 
-const connectionString = process.env.DATABASE_URL
-if (!connectionString) {
-  console.error("✖ DATABASE_URL is not set in .env.local")
+const rawConnectionString = process.env.DATABASE_URL
+if (!rawConnectionString) {
+  console.error("[FAIL] DATABASE_URL is not set in .env.local")
   process.exit(1)
 }
 
+// SSL is set explicitly below, so the sslmode query parameter is redundant.
+// Dropping it avoids the pg deprecation warning about sslmode semantics changing
+// in a future major release, without altering the connection behaviour.
+function stripSslMode(raw: string): string {
+  try {
+    const url = new URL(raw)
+    url.searchParams.delete("sslmode")
+    return url.toString()
+  } catch {
+    return raw
+  }
+}
+
 export const pool = new Pool({
-  connectionString,
+  connectionString: stripSslMode(rawConnectionString),
   ssl: { rejectUnauthorized: false },
 })

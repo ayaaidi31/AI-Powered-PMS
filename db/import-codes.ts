@@ -55,9 +55,9 @@ async function main() {
   console.log("→ Importing GOÄ catalog from data/codes/goae.csv …")
   const goae = await importGoae()
   console.log(`  • goae_catalog: ${goae} codes`)
-  console.log("✓ Code import complete. (ICD-10-GM + EBM are file-based — see header.)")
+  console.log("[OK] Code import complete. (ICD-10-GM + EBM are file-based — see header.)")
 }
 
 main()
-  .catch((e) => { console.error("✖ Import failed:", e); process.exitCode = 1 })
+  .catch((e) => { console.error("[FAIL] Import failed:", e); process.exitCode = 1 })
   .finally(() => pool.end())

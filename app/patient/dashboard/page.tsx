@@ -8,7 +8,7 @@
 import Link from "next/link"
 import {
   Calendar, FileText, Clock, ArrowRight, Smartphone, CalendarPlus,
-  Heart, ChevronRight, MapPin, User, Shield, Pill, AlertCircle,
+  ChevronRight, MapPin, User, Shield, Pill, AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -89,20 +89,7 @@ export default async function PatientDashboard() {
           <StatCard label="Upcoming" value={upcoming.length} sub="appointments" icon={<Calendar className="w-6 h-6 text-primary" />} highlight />
           <StatCard label="Records" value={reports.length} sub="health reports" icon={<FileText className="w-6 h-6 text-muted-foreground" />} />
           <StatCard label="Medications" value={clinical.medications.length} sub="active prescriptions" icon={<Pill className="w-6 h-6 text-muted-foreground" />} />
-          <Card className="border-emerald-200 bg-emerald-50/30">
-            <CardContent className="p-4 sm:p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-emerald-700 uppercase tracking-wide">Health Score</p>
-                  <p className="text-2xl sm:text-3xl font-bold text-emerald-800 mt-1">Good</p>
-                  <p className="text-xs text-emerald-600 mt-1">keep it up!</p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-100 flex items-center justify-center">
-                  <Heart className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <StatCard label="Allergies" value={clinical.allergies.length} sub="on record" icon={<AlertCircle className="w-6 h-6 text-muted-foreground" />} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">

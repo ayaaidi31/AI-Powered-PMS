@@ -58,9 +58,9 @@ async function main() {
   await upsertUser("admin@clinic.com", hash, "admin", {})
   console.log("  • admin: 1 account (admin@clinic.com)")
 
-  console.log(`✓ Accounts seeded. Demo password for all: "${DEMO_PASSWORD}"`)
+  console.log(`[OK] Accounts seeded. Demo password for all: "${DEMO_PASSWORD}"`)
 }
 
 main()
-  .catch((e) => { console.error("✖ Seed-users failed:", e); process.exitCode = 1 })
+  .catch((e) => { console.error("[FAIL] Seed-users failed:", e); process.exitCode = 1 })
   .finally(() => pool.end())

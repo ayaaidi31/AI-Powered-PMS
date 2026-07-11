@@ -423,7 +423,7 @@ Your HbA1c (a measure of blood sugar over time) went from 7.2% to 6.8%, which is
 - Stay active with regular exercise
 - Come back in 3 months for your next check-up
 
-**Questions?** Feel free to ask our AI assistant or contact the clinic.
+**Questions?** Please ask our AI assistant or contact the clinic.
     `,
     billingCodes: [
       { code: "03000", type: "EBM", description: "Versichertenpauschale" },

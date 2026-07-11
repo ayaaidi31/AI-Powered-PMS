@@ -187,7 +187,7 @@ async function main() {
     )
 
     await pool.query("COMMIT")
-    console.log("✓ Seed complete.")
+    console.log("[OK] Seed complete.")
   } catch (err) {
     await pool.query("ROLLBACK")
     throw err
@@ -196,7 +196,7 @@ async function main() {
 
 main()
   .catch((err) => {
-    console.error("✖ Seed failed:", err)
+    console.error("[FAIL] Seed failed:", err)
     process.exitCode = 1
   })
   .finally(() => pool.end())

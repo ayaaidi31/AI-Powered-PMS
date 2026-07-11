@@ -6,9 +6,12 @@
  */
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { HeartPulse, LayoutDashboard, Calendar, Users, LogOut, Menu, Clock, Search, Receipt, Settings, Stethoscope, PhoneCall } from "lucide-react"
+import { HeartPulse, LayoutDashboard, Calendar, Users, LogOut, Menu, Clock, Search, Receipt, Settings, Stethoscope, PhoneCall, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
@@ -87,8 +90,8 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
 
         <nav className="flex-1 p-4 space-y-1"><NavLinks /></nav>
 
-        {/* User Section */}
-        <div className="p-4 border-t border-border space-y-3">
+        {/* Identity — account actions live in the top-bar avatar menu. */}
+        <div className="p-4 border-t border-border">
           <div className="flex items-center gap-3">
             <Avatar className="w-9 h-9">
               <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">{profile.initials}</AvatarFallback>
@@ -98,12 +101,6 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
               <p className="text-xs text-muted-foreground truncate">{profile.department}</p>
             </div>
           </div>
-          <Button asChild variant="ghost" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
-            <Link href="/receptionist/settings"><Settings className="w-4 h-4" /> Settings</Link>
-          </Button>
-          <Button variant="outline" className="w-full" onClick={handleLogout}>
-            <LogOut className="w-4 h-4 mr-2" /> Logout
-          </Button>
         </div>
       </aside>
 
@@ -123,6 +120,37 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
 
           <div className="flex items-center gap-2">
             <NotificationBell loader={getReceptionistNotifications} />
+
+            {/* Account menu — mirrors the doctor and patient shells. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="gap-2 pl-1.5 pr-2 h-10">
+                  <Avatar className="w-8 h-8">
+                    <AvatarFallback className="bg-primary/10 text-primary text-sm">{profile.initials}</AvatarFallback>
+                  </Avatar>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>
+                  <p className="font-medium text-foreground truncate">{profile.name}</p>
+                  <p className="text-xs font-normal text-muted-foreground truncate">{profile.department}</p>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/receptionist/settings" className="cursor-pointer">
+                    <Settings className="w-4 h-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive cursor-pointer">
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="lg:hidden">
@@ -142,14 +170,6 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
                     </div>
                   </div>
                   <nav className="flex-1 p-4 space-y-1"><NavLinks onNavigate={() => setIsMobileMenuOpen(false)} /></nav>
-                  <div className="p-4 border-t border-border space-y-2">
-                    <Button asChild variant="ghost" className="w-full justify-start gap-2 text-muted-foreground">
-                      <Link href="/receptionist/settings" onClick={() => setIsMobileMenuOpen(false)}><Settings className="w-4 h-4" /> Settings</Link>
-                    </Button>
-                    <Button variant="outline" className="w-full" onClick={handleLogout}>
-                      <LogOut className="w-4 h-4 mr-2" /> Logout
-                    </Button>
-                  </div>
                 </div>
               </SheetContent>
             </Sheet>
