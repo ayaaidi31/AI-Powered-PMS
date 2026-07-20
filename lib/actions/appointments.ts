@@ -217,7 +217,16 @@ export async function bookAppointment(
 export async function rescheduleAppointment(
   appointmentId: string,
   newStartsAt: string,
-  options: { durationMin?: number; reasonForChange?: string; enforce24hWindow?: boolean } = {},
+  options: {
+    durationMin?: number
+    reasonForChange?: string
+    enforce24hWindow?: boolean
+    // Patient self-service edit may also move the appointment to a different
+    // doctor and update the reason for visit; both are optional and default to
+    // leaving the existing values unchanged.
+    newDoctorId?: string
+    reason?: string
+  } = {},
 ): Promise<ActionResult<AppointmentRow>> {
   if (Number.isNaN(Date.parse(newStartsAt))) return fail("Invalid date/time.")
 
@@ -246,8 +255,33 @@ export async function rescheduleAppointment(
     if (!eligibility.ok) return { blocked: eligibility.reason! } as const
 
     const duration = options.durationMin ?? appt.duration_min
+    const targetDoctorId = options.newDoctorId ?? appt.doctor_id
 
-    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [appt.doctor_id])
+    // Patient self-service backstops (mirror bookAppointment): the new time must
+    // be within office hours and meet the minimum notice, and the target doctor
+    // must not be on absence for that date. Staff overrides skip these.
+    if (options.enforce24hWindow) {
+      const issue = officeHoursViolation(newStartsAt, Date.now(), MIN_BOOKING_LEAD_MIN)
+      if (issue === "past") return { blocked: "That time is in the past." } as const
+      if (issue === "too_soon") return { blocked: `Appointments must be booked at least ${MIN_BOOKING_LEAD_MIN} minutes in advance.` } as const
+      if (issue === "weekend") return { blocked: "The clinic is closed at weekends." } as const
+      if (issue === "closed") return { blocked: "That time is outside office hours (08:00–16:30)." } as const
+
+      const doc = await client.query<{ is_available: boolean; unavailable_from: string | null; unavailable_until: string | null; last_name: string }>(
+        `SELECT is_available, unavailable_from, unavailable_until, last_name FROM doctors WHERE id = $1`,
+        [targetDoctorId],
+      )
+      if (doc.rowCount === 0) return "not_found" as const
+      const d = doc.rows[0]
+      if (!doctorAvailableOn(
+        { isAvailable: d.is_available, unavailableFrom: d.unavailable_from, unavailableUntil: d.unavailable_until },
+        newStartsAt,
+      )) {
+        return { blocked: `Dr. ${d.last_name} is not available on the selected date.` } as const
+      }
+    }
+
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [targetDoctorId])
 
     const clash = await client.query(
       `SELECT id FROM appointments
@@ -257,7 +291,7 @@ export async function rescheduleAppointment(
          AND tstzrange(starts_at, starts_at + (duration_min || ' minutes')::interval)
              && tstzrange($4::timestamptz, $4::timestamptz + ($5 || ' minutes')::interval)
        LIMIT 1`,
-      [appt.doctor_id, appointmentId, ACTIVE_STATES, newStartsAt, duration],
+      [targetDoctorId, appointmentId, ACTIVE_STATES, newStartsAt, duration],
     )
     if (clash.rowCount && clash.rowCount > 0) return "conflict" as const
 
@@ -267,11 +301,13 @@ export async function rescheduleAppointment(
     const updated = await client.query<AppointmentRow>(
       `UPDATE appointments
        SET starts_at = $2::timestamptz, duration_min = $3, status = 'scheduled',
+           doctor_id = $6,
+           reason = COALESCE($7, reason),
            reason_for_change = COALESCE($4, reason_for_change),
            staff_modified_at = COALESCE($5::timestamptz, staff_modified_at)
        WHERE id = $1
        RETURNING *`,
-      [appointmentId, newStartsAt, duration, options.reasonForChange ?? null, staffStamp],
+      [appointmentId, newStartsAt, duration, options.reasonForChange ?? null, staffStamp, targetDoctorId, options.reason ?? null],
     )
     return updated.rows[0]
   })

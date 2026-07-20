@@ -40,6 +40,8 @@ import { toast } from "sonner"
 import type { PatientRow } from "@/lib/seed-data"
 import { patientName, initials, insuranceLabel, insuranceVariant } from "@/lib/display"
 import { registerPatient, updatePatient, deactivatePatient, type PatientInput } from "@/lib/actions/patients"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 const EMPTY_FORM: PatientInput = {
   first_name: "", last_name: "", birth_date: "", insurance_type: "gkv",
@@ -49,6 +51,8 @@ const EMPTY_FORM: PatientInput = {
 
 export function PatientsClient({ initialPatients }: { initialPatients: PatientRow[] }) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
   const [isPending, startTransition] = useTransition()
 
   const [searchQuery, setSearchQuery] = useState("")
@@ -102,7 +106,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
         : await registerPatient(form, allowDuplicate)
 
       if (result.status === "ok") {
-        toast.success(editingId ? "Patient updated." : "Patient registered.")
+        toast.success(editingId ? t("receptionMgmt.patientUpdatedToast") : t("receptionMgmt.patientRegisteredToast"))
         setFormOpen(false)
         router.refresh()
         return
@@ -110,7 +114,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
       if (result.status === "conflict") {
         // Duplicate patient (REQ-REC-11) — let the receptionist decide.
         toast.warning(result.message, {
-          action: { label: "Create anyway", onClick: () => submit(true) },
+          action: { label: t("receptionMgmt.createAnyway"), onClick: () => submit(true) },
         })
         return
       }
@@ -124,7 +128,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
     startTransition(async () => {
       const result = await deactivatePatient(deleteTarget.id)
       if (result.status === "ok") {
-        toast.success("Patient deactivated.")
+        toast.success(t("receptionMgmt.patientDeactivatedToast"))
         router.refresh()
       } else {
         toast.error(result.message)
@@ -138,12 +142,12 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Patients</h1>
-          <p className="text-muted-foreground">Manage patient records and information</p>
+          <h1 className="text-2xl font-bold text-foreground">{t("receptionMgmt.patientsTitle")}</h1>
+          <p className="text-muted-foreground">{t("receptionMgmt.patientsSubtitle")}</p>
         </div>
         <Button className="gap-2" onClick={openCreate}>
           <UserPlus className="w-4 h-4" />
-          Register New Patient
+          {t("receptionMgmt.registerNewPatient")}
         </Button>
       </div>
 
@@ -154,7 +158,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or email..."
+                placeholder={t("receptionMgmt.searchPlaceholder")}
                 className="pl-10"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -163,13 +167,13 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
             <Select value={insuranceFilter} onValueChange={setInsuranceFilter}>
               <SelectTrigger className="w-[180px]">
                 <Filter className="w-4 h-4 mr-2" />
-                <SelectValue placeholder="Insurance Type" />
+                <SelectValue placeholder={t("receptionMgmt.insuranceTypePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Insurance</SelectItem>
-                <SelectItem value="gkv">Public (GKV)</SelectItem>
-                <SelectItem value="pkv">Private (PKV)</SelectItem>
-                <SelectItem value="selbstzahler">Self-Pay</SelectItem>
+                <SelectItem value="all">{t("receptionMgmt.allInsurance")}</SelectItem>
+                <SelectItem value="gkv">{t("receptionMgmt.insuranceGkv")}</SelectItem>
+                <SelectItem value="pkv">{t("receptionMgmt.insurancePkv")}</SelectItem>
+                <SelectItem value="selbstzahler">{t("receptionMgmt.insuranceSelfPay")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -179,9 +183,11 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
       {/* Patients List */}
       <Card>
         <CardHeader>
-          <CardTitle>Patient Records</CardTitle>
+          <CardTitle>{t("receptionMgmt.patientRecords")}</CardTitle>
           <CardDescription>
-            {filtered.length} patient{filtered.length !== 1 ? "s" : ""} found
+            {filtered.length === 1
+              ? t("receptionMgmt.patientFound", { count: filtered.length })
+              : t("receptionMgmt.patientsFound", { count: filtered.length })}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -209,7 +215,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
                         {insuranceLabel(patient.insurance_type)}
                       </Badge>
                       {!patient.is_digital_active && (
-                        <Badge variant="outline" className="text-muted-foreground">Analog</Badge>
+                        <Badge variant="outline" className="text-muted-foreground">{t("receptionMgmt.analog")}</Badge>
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
@@ -227,7 +233,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
                       )}
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        DOB: {new Date(patient.birth_date).toLocaleDateString()}
+                        {t("receptionMgmt.dob")}: {new Date(patient.birth_date).toLocaleDateString(INTL_LOCALE[locale])}
                       </span>
                     </div>
                   </div>
@@ -236,7 +242,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" className="hidden sm:flex gap-1" onClick={() => openEdit(patient)}>
                       <Pencil className="w-4 h-4" />
-                      Edit
+                      {t("receptionMgmt.edit")}
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -247,14 +253,14 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => openEdit(patient)}>
                           <Pencil className="w-4 h-4 mr-2" />
-                          Edit Profile
+                          {t("receptionMgmt.editProfile")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-destructive"
                           onClick={() => setDeleteTarget(patient)}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
-                          Deactivate
+                          {t("receptionMgmt.deactivate")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -265,7 +271,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No patients found matching your search</p>
+              <p>{t("receptionMgmt.noPatientsFound")}</p>
             </div>
           )}
         </CardContent>
@@ -275,71 +281,71 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? "Edit Patient" : "Register New Patient"}</DialogTitle>
+            <DialogTitle>{editingId ? t("receptionMgmt.editPatient") : t("receptionMgmt.registerNewPatient")}</DialogTitle>
             <DialogDescription>
               {editingId
-                ? "Update the patient's profile details."
-                : "Name and date of birth are required. Email/phone are optional — provide them to enable portal access."}
+                ? t("receptionMgmt.editPatientDesc")
+                : t("receptionMgmt.registerPatientDesc")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="First Name" error={fieldErrors.first_name}>
+              <Field label={t("receptionMgmt.labelFirstName")} error={fieldErrors.first_name}>
                 <Input value={form.first_name} onChange={(e) => set("first_name", e.target.value)} />
               </Field>
-              <Field label="Last Name" error={fieldErrors.last_name}>
+              <Field label={t("receptionMgmt.labelLastName")} error={fieldErrors.last_name}>
                 <Input value={form.last_name} onChange={(e) => set("last_name", e.target.value)} />
               </Field>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Date of Birth" error={fieldErrors.birth_date}>
+              <Field label={t("receptionMgmt.labelBirthDate")} error={fieldErrors.birth_date}>
                 <Input type="date" value={form.birth_date} onChange={(e) => set("birth_date", e.target.value)} />
               </Field>
-              <Field label="Insurance Type">
+              <Field label={t("receptionMgmt.labelInsuranceType")}>
                 <Select value={form.insurance_type} onValueChange={(v) => set("insurance_type", v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="gkv">Public (GKV)</SelectItem>
-                    <SelectItem value="pkv">Private (PKV)</SelectItem>
-                    <SelectItem value="selbstzahler">Self-Pay</SelectItem>
+                    <SelectItem value="gkv">{t("receptionMgmt.insuranceGkv")}</SelectItem>
+                    <SelectItem value="pkv">{t("receptionMgmt.insurancePkv")}</SelectItem>
+                    <SelectItem value="selbstzahler">{t("receptionMgmt.insuranceSelfPay")}</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Email (optional)" error={fieldErrors.email}>
+              <Field label={t("receptionMgmt.labelEmail")} error={fieldErrors.email}>
                 <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
               </Field>
-              <Field label="Phone (optional)">
+              <Field label={t("receptionMgmt.labelPhone")}>
                 <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} />
               </Field>
             </div>
             {form.insurance_type === "gkv" && (
-              <Field label="Insurance Number (KVNR)">
+              <Field label={t("receptionMgmt.labelKvnr")}>
                 <Input value={form.versicherten_id} onChange={(e) => set("versicherten_id", e.target.value)} />
               </Field>
             )}
-            <Field label="Street">
+            <Field label={t("receptionMgmt.labelStreet")}>
               <Input value={form.street} onChange={(e) => set("street", e.target.value)} />
             </Field>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <Field label="Postal Code">
+              <Field label={t("receptionMgmt.labelPostalCode")}>
                 <Input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value)} />
               </Field>
-              <Field label="City">
+              <Field label={t("receptionMgmt.labelCity")}>
                 <Input value={form.city} onChange={(e) => set("city", e.target.value)} />
               </Field>
-              <Field label="Country">
+              <Field label={t("receptionMgmt.labelCountry")}>
                 <Input value={form.country} onChange={(e) => set("country", e.target.value)} />
               </Field>
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)} disabled={isPending}>Cancel</Button>
+            <Button variant="outline" onClick={() => setFormOpen(false)} disabled={isPending}>{t("common.cancel")}</Button>
             <Button onClick={() => submit()} disabled={isPending}>
-              {isPending ? "Saving…" : editingId ? "Save Changes" : "Register Patient"}
+              {isPending ? t("receptionMgmt.saving") : editingId ? t("receptionMgmt.saveChanges") : t("receptionMgmt.registerPatient")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -349,20 +355,20 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Deactivate patient?</AlertDialogTitle>
+            <AlertDialogTitle>{t("receptionMgmt.deactivateDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteTarget && `${patientName(deleteTarget)} will be hidden from active lists. `}
-              The record and its clinical history are retained for the statutory retention period (§630f BGB).
+              {deleteTarget && `${t("receptionMgmt.deactivateDescLead", { name: patientName(deleteTarget) })} `}
+              {t("receptionMgmt.deactivateDescTail")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Keep Active</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t("receptionMgmt.keepActive")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDeactivate}
               disabled={isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Deactivate
+              {t("receptionMgmt.deactivate")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

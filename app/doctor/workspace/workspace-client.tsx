@@ -36,7 +36,10 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
-import { initials, insuranceLabel, formatCents, statusLabel, type InsuranceType, type AppointmentStatusDb } from "@/lib/display"
+import { initials, insuranceLabel, formatCents, type InsuranceType } from "@/lib/display"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 import { createReport, updateReport, approveReport, setReportBillingCodes } from "@/lib/actions/reports"
 import { setAppointmentStatus } from "@/lib/actions/appointments"
 import { searchBillingCodes, type CodeSuggestion } from "@/lib/actions/codes"
@@ -120,8 +123,13 @@ export interface QueueEntry {
 
 export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: QueueEntry[] }) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
   const [currentIndex, setCurrentIndex] = useState(0)
   const recording = useRecording()
+  // The language the generated report is written in — independent of the spoken
+  // (recognition) language; defaults to the interface language.
+  const [reportLang, setReportLang] = useState<"de" | "en">(locale)
   const [isSaving, setIsSaving] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [recordsOpen, setRecordsOpen] = useState(false)
@@ -324,6 +332,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       medications: current.medications.map((m) => `${m.name} ${m.dosage}`.trim()),
       vitals: vitalsFormSummary(vitalsForm) ?? formatVitalsSummary(current.vitals),
       visits: current.history.map((h) => ({ date: h.date, reason: h.reason, status: h.status, diagnosis: h.diagnosis })),
+      lang: locale,
     })
     setSummarizingHistory(false)
     if (result.status === "ok") setHistorySummary(result.data.summary)
@@ -383,7 +392,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
   async function handleSaveDraft() {
     if (!current) return
     if (!notes.trim() && !diagnosis.trim()) {
-      toast.error("Enter at least some notes or a diagnosis before saving.")
+      toast.error(t("workspace.saveNotesFirst"))
       return
     }
     setIsSaving(true)
@@ -392,14 +401,14 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     await saveCodes(rid)
     await saveVitals()
     setIsSaving(false)
-    toast.success("Draft saved. It will reload when you reopen this patient.")
+    toast.success(t("workspace.draftSaved"))
     router.refresh()
   }
 
   async function handleComplete() {
     if (!current) return
     if (!diagnosis.trim()) {
-      toast.error("A diagnosis is required to complete the consultation.")
+      toast.error(t("workspace.diagnosisRequired"))
       return
     }
     setIsSaving(true)
@@ -447,7 +456,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       setProposalApptId(finishedId)
       setProposalDialogOpen(true)
     }
-    toast.success("Consultation completed and report approved.")
+    toast.success(t("workspace.consultationCompleted"))
     setCurrentIndex(0)
     router.refresh()
   }
@@ -468,7 +477,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     setScanningProfile(false)
     if (scan.status !== "ok") { toast.error(scan.message); return }
     if (scan.data.suggestions.length === 0) {
-      toast.info("No profile updates detected in the notes/report.")
+      toast.info(t("workspace.noProfileUpdates"))
       return
     }
     setProfileSuggestions(scan.data.suggestions)
@@ -484,7 +493,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     if (chosen.length === 0) { setProposalDialogOpen(false); return }
     const r = await createProfileProposals(proposalPatientId, proposalApptId, chosen)
     if (r.status === "ok") {
-      toast.success(`${r.data.count} change(s) sent to the patient for approval.`)
+      toast.success(t("workspace.changesSent", { count: r.data.count }))
     } else {
       toast.error(r.message)
     }
@@ -504,6 +513,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
         medications: current.medications.map((m) => `${m.name} ${m.dosage}`),
         vitals: vitalsFormSummary(vitalsForm),
       },
+      lang: reportLang,
     })
     if (result.status !== "ok") {
       setGeneratingReport(false)
@@ -519,7 +529,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     await saveVitals()
     setGeneratingReport(false)
     router.refresh()
-    toast.success("Report generated and saved as draft. Review and edit before completing.")
+    toast.success(t("workspace.reportGenerated"))
   }
 
   /** Ask the model for billing codes, grounded in the real catalog (Feature 14). */
@@ -537,7 +547,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
         multiplier: s.catalog === "GOAE" ? s.defaultMultiplier ?? 2.3 : null,
       }))
     setBillingCodes([...billingCodes, ...toAdd])
-    toast.success(toAdd.length ? `${toAdd.length} code(s) suggested.` : "No new valid codes found.")
+    toast.success(toAdd.length ? t("workspace.codesSuggested", { count: toAdd.length }) : t("workspace.noNewCodes"))
   }
 
   // Live search: as the doctor types, fetch matching catalog codes (debounced,
@@ -565,11 +575,11 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     setSearchingCodes(false)
     if (result.status !== "ok") { toast.error(result.message); return }
     const exact = result.data.find((r) => r.code.toLowerCase() === code.toLowerCase())
-    if (!exact) { toast.error(`Code "${code}" not found in ${billingCatalog}.`); return }
+    if (!exact) { toast.error(t("workspace.codeNotFound", { code, catalog: billingCatalog })); return }
     addCode(exact)
     setCodeQuery("")
     setCodeResults([])
-    toast.success(`Added ${exact.code}.`)
+    toast.success(t("workspace.codeAdded", { code: exact.code }))
   }
 
   function addCode(s: CodeSuggestion) {
@@ -612,7 +622,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     await saveVitals(vitalsForm)
     setIsSaving(false)
     router.refresh()
-    toast.success("Vitals saved.")
+    toast.success(t("workspace.vitalsSaved"))
   }
 
   /** Persist this consultation's vitals (one row per appointment). */
@@ -659,7 +669,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     await saveVitals(newForm)
     setExtractingVitals(false)
     router.refresh()
-    toast.success("Vitals extracted and saved.")
+    toast.success(t("workspace.vitalsExtractedSaved"))
   }
 
   /** Extract medication / dosage / frequency from the notes (AI). */
@@ -676,11 +686,11 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     const existing = new Set(prescriptions.map((p) => p.medication.trim().toLowerCase()))
     const toAdd = result.data.filter((p) => !existing.has(p.medication.toLowerCase()))
     setPrescriptions([...prescriptions.filter((p) => p.medication.trim()), ...toAdd])
-    toast.success(toAdd.length ? `${toAdd.length} medication(s) extracted.` : "No new medications found.")
+    toast.success(toAdd.length ? t("workspace.medicationsExtracted", { count: toAdd.length }) : t("workspace.noNewMedications"))
   }
 
   const formatTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+    new Date(iso).toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" })
 
   function calculateAge(birthDate: string | null) {
     if (!birthDate) return null
@@ -699,12 +709,12 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
           <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-muted flex items-center justify-center">
             <Stethoscope className="w-12 h-12 text-muted-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">No Patients in Queue</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-2">{t("workspace.emptyTitle")}</h1>
           <p className="text-muted-foreground mb-6">
-            No checked-in patients right now. Patients appear here once reception checks them in.
+            {t("workspace.emptyBody")}
           </p>
           <Link href="/doctor/dashboard">
-            <Button className="gap-2">View Dashboard <ArrowRight className="w-4 h-4" /></Button>
+            <Button className="gap-2">{t("workspace.viewDashboard")} <ArrowRight className="w-4 h-4" /></Button>
           </Link>
         </div>
       </div>
@@ -720,9 +730,9 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold text-foreground flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-primary" />
-            Patient Queue
+            {t("workspace.patientQueue")}
           </h2>
-          <p className="text-sm text-muted-foreground">{queue.length} patients remaining</p>
+          <p className="text-sm text-muted-foreground">{t("workspace.patientsRemaining", { count: queue.length })}</p>
         </div>
         <ScrollArea className="h-48 lg:h-auto lg:flex-1">
           <div className="p-2 space-y-2">
@@ -750,12 +760,12 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                         </span>
                         {(entry.status === "waiting" || entry.status === "in_progress") && (
                           <Badge variant="secondary" className={`text-xs h-5 ${isActive ? "bg-primary-foreground/20 text-primary-foreground" : entry.status === "in_progress" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
-                            {entry.status === "in_progress" ? "With Doctor" : "Waiting"}
+                            {entry.status === "in_progress" ? t("workspace.withDoctor") : t("workspace.waitingLabel")}
                           </Badge>
                         )}
                         {entry.existingReport?.status === "draft" && (
                           <Badge variant="outline" className={`text-xs h-5 ${isActive ? "border-primary-foreground/40 text-primary-foreground" : ""}`}>
-                            Draft
+                            {t("workspace.draftBadge")}
                           </Badge>
                         )}
                         {entry.allergies.length > 0 && !isActive && (
@@ -786,11 +796,11 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl font-bold text-foreground">{current.patientName}</h1>
                   <Badge variant="outline" className="text-xs">
-                    {current.status === "in_progress" ? "With Doctor" : "Waiting"}
+                    {current.status === "in_progress" ? t("workspace.withDoctor") : t("workspace.waitingLabel")}
                   </Badge>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-muted-foreground">
-                  {age !== null && <><span>{age} years old</span><span>•</span></>}
+                  {age !== null && <><span>{t("workspace.yearsOld", { age })}</span><span>•</span></>}
                   <span>{insuranceLabel(current.insuranceType)}</span>
                   {current.reason && <><span>•</span><span>{current.reason}</span></>}
                 </div>
@@ -829,31 +839,31 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Activity className="w-4 h-4 text-primary" />
-                      Vitals
+                      {t("workspace.vitals")}
                     </CardTitle>
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="sm" className="h-7 px-2 gap-1 text-xs" onClick={handleExtractVitals} disabled={extractingVitals || isSaving}>
                         <Sparkles className="w-3.5 h-3.5" />
-                        {extractingVitals ? "…" : "Extract"}
+                        {extractingVitals ? "…" : t("workspace.extract")}
                       </Button>
                       <Button variant="outline" size="sm" className="h-7 px-2 gap-1 text-xs" onClick={handleSaveVitals} disabled={isSaving || extractingVitals}>
                         <Save className="w-3.5 h-3.5" />
-                        Save
+                        {t("common.save")}
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-3">
-                    <VitalInput icon={<Activity className="w-3.5 h-3.5" />} label="Systolic" unit="mmHg" value={vitalsForm.systolic} onChange={(v) => setVital("systolic", v)} />
-                    <VitalInput icon={<Activity className="w-3.5 h-3.5" />} label="Diastolic" unit="mmHg" value={vitalsForm.diastolic} onChange={(v) => setVital("diastolic", v)} />
-                    <VitalInput icon={<Heart className="w-3.5 h-3.5" />} label="Heart Rate" unit="bpm" value={vitalsForm.heart_rate} onChange={(v) => setVital("heart_rate", v)} />
-                    <VitalInput icon={<Thermometer className="w-3.5 h-3.5" />} label="Temp" unit="°C" value={vitalsForm.temperature_c} onChange={(v) => setVital("temperature_c", v)} />
-                    <VitalInput icon={<User className="w-3.5 h-3.5" />} label="Weight" unit="kg" value={vitalsForm.weight_kg} onChange={(v) => setVital("weight_kg", v)} />
-                    <VitalInput icon={<User className="w-3.5 h-3.5" />} label="Height" unit="cm" value={vitalsForm.height_cm} onChange={(v) => setVital("height_cm", v)} />
+                    <VitalInput icon={<Activity className="w-3.5 h-3.5" />} label={t("workspace.systolic")} unit="mmHg" value={vitalsForm.systolic} onChange={(v) => setVital("systolic", v)} />
+                    <VitalInput icon={<Activity className="w-3.5 h-3.5" />} label={t("workspace.diastolic")} unit="mmHg" value={vitalsForm.diastolic} onChange={(v) => setVital("diastolic", v)} />
+                    <VitalInput icon={<Heart className="w-3.5 h-3.5" />} label={t("workspace.heartRate")} unit="bpm" value={vitalsForm.heart_rate} onChange={(v) => setVital("heart_rate", v)} />
+                    <VitalInput icon={<Thermometer className="w-3.5 h-3.5" />} label={t("workspace.temp")} unit="°C" value={vitalsForm.temperature_c} onChange={(v) => setVital("temperature_c", v)} />
+                    <VitalInput icon={<User className="w-3.5 h-3.5" />} label={t("workspace.weight")} unit="kg" value={vitalsForm.weight_kg} onChange={(v) => setVital("weight_kg", v)} />
+                    <VitalInput icon={<User className="w-3.5 h-3.5" />} label={t("workspace.height")} unit="cm" value={vitalsForm.height_cm} onChange={(v) => setVital("height_cm", v)} />
                   </div>
                   <p className="text-xs text-muted-foreground mt-3">
-                    Recorded for this consultation; the latest reading shows in the patient&apos;s account.
+                    {t("workspace.vitalsNote")}
                   </p>
                 </CardContent>
               </Card>
@@ -862,13 +872,13 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <History className="w-4 h-4 text-primary" />
-                    Medical History
+                    {t("workspace.medicalHistory")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {current.conditions.length > 0 && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-1.5">Chronic Conditions</p>
+                      <p className="text-xs text-muted-foreground mb-1.5">{t("workspace.chronicConditions")}</p>
                       <div className="flex flex-wrap gap-1.5">
                         {current.conditions.map((c, i) => <Badge key={i} variant="secondary" className="text-xs">{c}</Badge>)}
                       </div>
@@ -876,7 +886,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                   )}
                   {current.medications.length > 0 && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-1.5">Current Medications</p>
+                      <p className="text-xs text-muted-foreground mb-1.5">{t("workspace.currentMedications")}</p>
                       <div className="space-y-1.5">
                         {current.medications.map((med, i) => (
                           <div key={i} className="flex items-center gap-2 text-sm">
@@ -889,19 +899,19 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                   )}
                   {current.recentReports.length > 0 && (
                     <div>
-                      <p className="text-xs text-muted-foreground mb-1.5">Recent Reports</p>
+                      <p className="text-xs text-muted-foreground mb-1.5">{t("workspace.recentReports")}</p>
                       <div className="space-y-1.5">
                         {current.recentReports.map((report) => (
                           <div key={report.id} className="flex items-center gap-2 text-sm">
                             <FileText className="w-3.5 h-3.5 text-muted-foreground" />
-                            <span className="truncate">{report.diagnosis ?? "Report"}</span>
+                            <span className="truncate">{report.diagnosis ?? t("workspace.reportFallback")}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
                   {current.conditions.length === 0 && current.medications.length === 0 && current.recentReports.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No historical data available.</p>
+                    <p className="text-sm text-muted-foreground">{t("workspace.noHistoricalData")}</p>
                   )}
                 </CardContent>
               </Card>
@@ -925,17 +935,17 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
               {recording.result?.appointmentId === current.appointmentId && (
                 <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30 p-3">
                   <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <p className="text-sm text-emerald-800 dark:text-emerald-300 flex-1 min-w-0">Voice transcript ready for this consultation.</p>
+                  <p className="text-sm text-emerald-800 dark:text-emerald-300 flex-1 min-w-0">{t("workspace.voiceTranscriptReady")}</p>
                   <Button
                     size="sm"
                     onClick={() => {
-                      const t = recording.consumeResult()
-                      if (t) { setNotes((prev) => (prev?.trim() ? prev.trimEnd() + "\n\n" : "") + t); toast.success("Transcript added to notes.") }
+                      const transcript = recording.consumeResult()
+                      if (transcript) { setNotes((prev) => (prev?.trim() ? prev.trimEnd() + "\n\n" : "") + transcript); toast.success(t("workspace.transcriptAdded")) }
                     }}
                   >
-                    Insert into notes
+                    {t("workspace.insertIntoNotes")}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => recording.discard()}>Dismiss</Button>
+                  <Button size="sm" variant="ghost" onClick={() => recording.discard()}>{t("workspace.dismiss")}</Button>
                 </div>
               )}
               <Card className="flex flex-col flex-1 min-h-0" style={paneH ? { maxHeight: paneH } : undefined}>
@@ -943,11 +953,11 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <CardTitle className="flex items-center gap-2">
                       <ClipboardList className="w-5 h-5 text-primary" />
-                      Consultation
-                      {reportId && <Badge variant="secondary" className="text-xs">Draft saved</Badge>}
+                      {t("workspace.consultation")}
+                      {reportId && <Badge variant="secondary" className="text-xs">{t("workspace.draftSavedBadge")}</Badge>}
                     </CardTitle>
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex rounded-md border border-border overflow-hidden text-xs" title="Recognition language">
+                      <div className="inline-flex rounded-md border border-border overflow-hidden text-xs" title={t("workspace.recognitionLanguage")}>
                         {(["de-DE", "en-US"] as const).map((l) => (
                           <button
                             key={l} type="button"
@@ -966,23 +976,22 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                         className="gap-2"
                       >
                         <Mic className="w-4 h-4" />
-                        {recording.status === "recording" ? "Recording…" : recording.status === "processing" ? "Transcribing…" : "Record"}
+                        {recording.status === "recording" ? t("workspace.recording") : recording.status === "processing" ? t("workspace.transcribing") : t("workspace.record")}
                       </Button>
                       <Dialog open={aiOpen} onOpenChange={setAiOpen}>
                         <DialogTrigger asChild>
                           <Button variant="outline" size="sm" className="gap-2">
                             <Sparkles className="w-4 h-4" />
-                            AI Assist
+                            {t("workspace.aiAssist")}
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-2xl">
                           <DialogHeader>
                             <DialogTitle className="flex items-center gap-2">
-                              <Sparkles className="w-5 h-5 text-primary" /> Clinical Decision Support
+                              <Sparkles className="w-5 h-5 text-primary" /> {t("workspace.decisionSupport")}
                             </DialogTitle>
                             <DialogDescription>
-                              Guideline-grounded answers (AWMF knowledge base) for this case, with cited sources.
-                              Support only — the clinical decision remains yours.
+                              {t("workspace.decisionSupportDesc")}
                             </DialogDescription>
                           </DialogHeader>
                           <DecisionSupport
@@ -991,6 +1000,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                             patient={patientContext}
                             messages={dsMessages}
                             setMessages={setDsMessages}
+                            lang={locale}
                           />
                         </DialogContent>
                       </Dialog>
@@ -998,17 +1008,16 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                         <DialogTrigger asChild>
                           <Button variant="outline" size="sm" className="gap-2">
                             <FileSearch className="w-4 h-4" />
-                            Ask Records
+                            {t("workspace.askRecords")}
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="sm:max-w-2xl">
                           <DialogHeader>
                             <DialogTitle className="flex items-center gap-2">
-                              <FileSearch className="w-5 h-5 text-primary" /> Ask the Patient&apos;s Records
+                              <FileSearch className="w-5 h-5 text-primary" /> {t("workspace.askPatientRecords")}
                             </DialogTitle>
                             <DialogDescription>
-                              Conversational Q&amp;A over {current.patientName}&apos;s own past reports, with cited sources.
-                              Limited to this patient&apos;s records.
+                              {t("workspace.askRecordsDesc", { name: current.patientName })}
                             </DialogDescription>
                           </DialogHeader>
                           <RecordsQA
@@ -1016,6 +1025,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                             patientName={current.patientName}
                             messages={recordsMessages}
                             setMessages={setRecordsMessages}
+                            lang={locale}
                           />
                         </DialogContent>
                       </Dialog>
@@ -1036,14 +1046,14 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="font-medium capitalize">
-                              {a.category} alert{a.medication ? ` · ${a.medication}` : ""}
+                              {t("workspace.alertLabel", { category: t(`safety.cat_${a.category}` as TKey) })}{a.medication ? ` · ${a.medication}` : ""}
                             </p>
                             <p className="opacity-90">{a.message}</p>
                           </div>
                           <button
                             onClick={() => setDismissedAlerts((s) => new Set(s).add(a.message))}
                             className="shrink-0 opacity-70 hover:opacity-100"
-                            title="Dismiss (I am overriding this)"
+                            title={t("workspace.dismissOverride")}
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -1055,27 +1065,27 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                 <CardContent className="flex-1 min-h-0 flex flex-col">
                   <Tabs defaultValue="notes" className="flex-1 min-h-0 flex flex-col">
                     <TabsList className="grid w-full grid-cols-5 shrink-0">
-                      <TabsTrigger value="notes" className="text-xs sm:text-sm px-1 sm:px-3">Notes</TabsTrigger>
+                      <TabsTrigger value="notes" className="text-xs sm:text-sm px-1 sm:px-3">{t("workspace.tabNotes")}</TabsTrigger>
                       <TabsTrigger value="diagnosis" className="text-xs sm:text-sm px-1 sm:px-3">
-                        <span className="sm:hidden">Diag</span><span className="hidden sm:inline">Diagnosis</span>
+                        <span className="sm:hidden">{t("workspace.tabDiagShort")}</span><span className="hidden sm:inline">{t("workspace.tabDiagnosis")}</span>
                       </TabsTrigger>
                       <TabsTrigger value="report" className="text-xs sm:text-sm px-1 sm:px-3">
-                        <span className="sm:hidden">Report</span><span className="hidden sm:inline">AI Report</span>
+                        <span className="sm:hidden">{t("workspace.tabReportShort")}</span><span className="hidden sm:inline">{t("workspace.tabAiReport")}</span>
                       </TabsTrigger>
                       <TabsTrigger value="prescription" className="text-xs sm:text-sm px-1 sm:px-3">
-                        <span className="sm:hidden">Meds</span><span className="hidden sm:inline">Prescription</span>
+                        <span className="sm:hidden">{t("workspace.tabMedsShort")}</span><span className="hidden sm:inline">{t("workspace.tabPrescription")}</span>
                       </TabsTrigger>
-                      <TabsTrigger value="billing" className="text-xs sm:text-sm px-1 sm:px-3">Billing</TabsTrigger>
+                      <TabsTrigger value="billing" className="text-xs sm:text-sm px-1 sm:px-3">{t("workspace.tabBilling")}</TabsTrigger>
                     </TabsList>
 
                     {/* Single bounded scroll viewport: long content in any tab
                         scrolls here instead of growing the card. */}
                     <div className="flex-1 min-h-0 overflow-y-auto mt-4 pr-1">
                     <TabsContent value="notes" className="mt-0 h-full flex flex-col">
-                      <Label htmlFor="notes">Consultation Notes</Label>
+                      <Label htmlFor="notes">{t("workspace.consultationNotes")}</Label>
                       <Textarea
                         id="notes"
-                        placeholder="Enter the consultation notes — symptoms, examination findings, treatment plan…"
+                        placeholder={t("workspace.notesPlaceholder")}
                         className="mt-1.5 flex-1 min-h-[200px] resize-none field-sizing-fixed"
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
@@ -1083,10 +1093,10 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                     </TabsContent>
 
                     <TabsContent value="diagnosis" className="mt-0 h-full flex flex-col">
-                      <Label htmlFor="diagnosis">Diagnosis</Label>
+                      <Label htmlFor="diagnosis">{t("workspace.diagnosisLabel")}</Label>
                       <Textarea
                         id="diagnosis"
-                        placeholder="Enter the diagnosis…"
+                        placeholder={t("workspace.diagnosisPlaceholder")}
                         className="mt-1.5 flex-1 min-h-[200px] resize-none field-sizing-fixed"
                         value={diagnosis}
                         onChange={(e) => setDiagnosis(e.target.value)}
@@ -1096,17 +1106,32 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                     <TabsContent value="report" className="mt-0 h-full flex flex-col">
                       <div className="flex-1 min-h-0 flex flex-col gap-3">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <Label>AI-generated report</Label>
+                          <Label>{t("workspace.aiGeneratedReport")}</Label>
                           <div className="flex items-center gap-2">
                             {formattedReport && (
                               <Button variant="ghost" size="sm" className="gap-1" onClick={() => setReportPreview(!reportPreview)}>
                                 {reportPreview ? <Pencil className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                                {reportPreview ? "Edit" : "Preview"}
+                                {reportPreview ? t("workspace.edit") : t("workspace.preview")}
                               </Button>
                             )}
+                            {/* Language the report is written in — independent of the spoken language. */}
+                            <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <span className="hidden sm:inline">{t("workspace.reportLanguage")}</span>
+                              <div className="inline-flex rounded-full bg-muted/60 p-0.5">
+                                {(["de", "en"] as const).map((l) => (
+                                  <button
+                                    key={l} type="button"
+                                    onClick={() => setReportLang(l)}
+                                    className={`rounded-full px-2 py-0.5 uppercase font-medium transition-colors ${reportLang === l ? "bg-background text-foreground shadow-sm" : "hover:text-foreground"}`}
+                                  >
+                                    {l}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                             <Button variant="outline" size="sm" className="gap-2" onClick={handleGenerateReport} disabled={generatingReport}>
                               <Sparkles className="w-4 h-4" />
-                              {generatingReport ? "Generating…" : "Generate from notes"}
+                              {generatingReport ? t("workspace.generating") : t("workspace.generateFromNotes")}
                             </Button>
                           </div>
                         </div>
@@ -1116,14 +1141,14 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                           </div>
                         ) : (
                           <Textarea
-                            placeholder="Click 'Generate from notes' to draft a structured report from your notes, then edit it here…"
+                            placeholder={t("workspace.reportPlaceholder")}
                             className="flex-1 min-h-[200px] text-sm resize-none field-sizing-fixed"
                             value={formattedReport}
                             onChange={(e) => setFormattedReport(e.target.value)}
                           />
                         )}
                         <p className="text-xs text-muted-foreground">
-                          AI-generated draft — review and edit before completing. Use <strong>Preview</strong> to see the formatted report. It is saved as the formal report.
+                          {t("workspace.reportDraftHintA")} <strong>{t("workspace.preview")}</strong> {t("workspace.reportDraftHintB")}
                         </p>
                       </div>
                     </TabsContent>
@@ -1131,34 +1156,34 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                     <TabsContent value="prescription" className="mt-0">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <Label>Prescriptions</Label>
+                          <Label>{t("workspace.prescriptions")}</Label>
                           <Button variant="outline" size="sm" className="gap-2" onClick={handleExtractPrescriptions} disabled={extractingRx}>
                             <Sparkles className="w-4 h-4" />
-                            {extractingRx ? "Extracting…" : "Extract from notes"}
+                            {extractingRx ? t("workspace.extracting") : t("workspace.extractFromNotes")}
                           </Button>
                         </div>
 
                         {prescriptions.length === 0 ? (
                           <p className="text-sm text-muted-foreground">
-                            No medications yet. Add one, or extract them from the notes/report with AI.
+                            {t("workspace.noMedicationsYet")}
                           </p>
                         ) : (
                           <div className="space-y-2">
                             {prescriptions.map((rx, index) => (
                               <div key={index} className="grid grid-cols-[1.4fr_1fr_1fr_auto] gap-2 items-end p-3 rounded-lg border border-border">
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">Medication</Label>
-                                  <Input className="mt-1" placeholder="Drug / Wirkstoff" value={rx.medication}
+                                  <Label className="text-xs text-muted-foreground">{t("workspace.medication")}</Label>
+                                  <Input className="mt-1" placeholder={t("workspace.medicationPlaceholder")} value={rx.medication}
                                     onChange={(e) => updatePrescription(index, "medication", e.target.value)} />
                                 </div>
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">Dosage</Label>
-                                  <Input className="mt-1" placeholder="e.g. 500 mg" value={rx.dosage}
+                                  <Label className="text-xs text-muted-foreground">{t("workspace.dosage")}</Label>
+                                  <Input className="mt-1" placeholder={t("workspace.dosagePlaceholder")} value={rx.dosage}
                                     onChange={(e) => updatePrescription(index, "dosage", e.target.value)} />
                                 </div>
                                 <div>
-                                  <Label className="text-xs text-muted-foreground">Frequency</Label>
-                                  <Input className="mt-1" placeholder="e.g. 2x täglich" value={rx.frequency}
+                                  <Label className="text-xs text-muted-foreground">{t("workspace.frequency")}</Label>
+                                  <Input className="mt-1" placeholder={t("workspace.frequencyPlaceholder")} value={rx.frequency}
                                     onChange={(e) => updatePrescription(index, "frequency", e.target.value)} />
                                 </div>
                                 <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removePrescription(index)}>
@@ -1170,10 +1195,10 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                         )}
 
                         <Button variant="outline" onClick={() => setPrescriptions([...prescriptions, { medication: "", dosage: "", frequency: "" }])} className="w-full gap-2">
-                          <Plus className="w-4 h-4" /> Add Medication
+                          <Plus className="w-4 h-4" /> {t("workspace.addMedication")}
                         </Button>
                         <p className="text-xs text-muted-foreground">
-                          Saved with the consultation and reloaded when you reopen the patient.
+                          {t("workspace.prescriptionsNote")}
                         </p>
                       </div>
                     </TabsContent>
@@ -1182,37 +1207,37 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                       <div className="space-y-4">
                         <div className="p-3 rounded-lg bg-muted/50 flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">Insurance:</span>
+                            <span className="text-sm font-medium">{t("workspace.insurance")}</span>
                             <Badge>{insuranceLabel(current.insuranceType)}</Badge>
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            {billingCatalog === "EBM" ? "Statutory → EBM codes" : "Private / self-pay → GOÄ codes"}
+                            {billingCatalog === "EBM" ? t("workspace.ebmHint") : t("workspace.goaeHint")}
                           </span>
                         </div>
 
                         <Button variant="outline" className="w-full gap-2" onClick={handleSuggestCodes} disabled={suggestingCodes}>
                           <Sparkles className="w-4 h-4" />
-                          {suggestingCodes ? "Suggesting…" : "Suggest codes with AI"}
+                          {suggestingCodes ? t("workspace.suggesting") : t("workspace.suggestCodesAi")}
                         </Button>
 
                         {/* Add codes manually — results appear while typing;
                             click a result, or type an exact code and press Add. */}
                         <div className="flex gap-2">
                           <Input
-                            placeholder={`Search a ${billingCatalog} code or description…`}
+                            placeholder={t("workspace.codeSearchPlaceholder", { catalog: billingCatalog })}
                             value={codeQuery}
                             onChange={(e) => setCodeQuery(e.target.value)}
                             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExactCode() } }}
                           />
                           <Button variant="outline" className="gap-1" onClick={addExactCode} disabled={searchingCodes || codeQuery.trim().length < 2}>
-                            <Plus className="w-4 h-4" /> Add
+                            <Plus className="w-4 h-4" /> {t("workspace.add")}
                           </Button>
                         </div>
 
                         {codeResults.length > 0 && (
                           <div className="border border-border rounded-lg max-h-44 overflow-auto divide-y divide-border">
                             <p className="px-3 py-1.5 text-xs text-muted-foreground bg-muted/40">
-                              {searchingCodes ? "Searching…" : "Click a result to add it"}
+                              {searchingCodes ? t("workspace.searching") : t("workspace.clickResultToAdd")}
                             </p>
                             {codeResults.map((r) => (
                               <button
@@ -1230,15 +1255,15 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
                         <div>
                           <div className="flex items-center justify-between">
-                            <Label className="text-xs text-muted-foreground">Attached codes ({billingCodes.length})</Label>
+                            <Label className="text-xs text-muted-foreground">{t("workspace.attachedCodes", { count: billingCodes.length })}</Label>
                             {billingCodes.length > 0 && (
                               <Button variant="ghost" size="sm" className="h-7 text-destructive gap-1" onClick={() => setBillingCodes([])}>
-                                <Trash2 className="w-3.5 h-3.5" /> Clear all
+                                <Trash2 className="w-3.5 h-3.5" /> {t("workspace.clearAll")}
                               </Button>
                             )}
                           </div>
                           {billingCodes.length === 0 ? (
-                            <p className="text-sm text-muted-foreground mt-2">No billing codes added yet.</p>
+                            <p className="text-sm text-muted-foreground mt-2">{t("workspace.noCodesAdded")}</p>
                           ) : (
                             <>
                             <div className="mt-2 space-y-2">
@@ -1248,7 +1273,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                                     type="button"
                                     onClick={() => setDetailCode(c)}
                                     className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-80"
-                                    title="Click to view full details"
+                                    title={t("workspace.clickToViewDetails")}
                                   >
                                     <span className="font-mono text-xs text-primary shrink-0">{c.code}</span>
                                     <span className="text-sm flex-1 truncate">{c.description}</span>
@@ -1273,7 +1298,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                             </div>
                             <div className="flex items-center justify-between mt-3 pt-2 border-t border-border">
                               <span className="text-sm font-medium">
-                                {billingCatalog === "GOAE" ? "Invoice total" : "Est. KV value (points × Orientierungswert)"}
+                                {billingCatalog === "GOAE" ? t("workspace.invoiceTotal") : t("workspace.kvValue")}
                               </span>
                               <span className="text-base font-bold tabular-nums">
                                 {formatCents(billingCodes.reduce((sum, c) => sum + (codePriceCents(c) ?? 0), 0))}
@@ -1282,7 +1307,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                             </>
                           )}
                           <p className="text-xs text-muted-foreground mt-2">
-                            Click a code to read its full description. Codes are saved with the consultation, then appear on the receptionist&apos;s billing dashboard.
+                            {t("workspace.codesNote")}
                           </p>
                         </div>
 
@@ -1292,15 +1317,15 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                             <DialogHeader>
                               <DialogTitle className="font-mono">{detailCode?.code}</DialogTitle>
                               <DialogDescription>
-                                {detailCode?.catalog === "EBM" ? "EBM — statutory (GKV)" : "GOÄ — private / self-pay"}
+                                {detailCode?.catalog === "EBM" ? t("workspace.ebmDetail") : t("workspace.goaeDetail")}
                               </DialogDescription>
                             </DialogHeader>
                             <div className="space-y-3 text-sm">
                               <p className="whitespace-pre-wrap leading-relaxed">{detailCode?.description}</p>
                               <div className="flex flex-wrap gap-4 text-muted-foreground pt-3 border-t border-border">
-                                {detailCode?.points != null && <span>Punkte: <strong className="text-foreground">{detailCode.points}</strong></span>}
+                                {detailCode?.points != null && <span>{t("workspace.points")} <strong className="text-foreground">{detailCode.points}</strong></span>}
                                 {detailCode?.catalog === "GOAE" && detailCode.multiplier != null && (
-                                  <span>Steigerungssatz: <strong className="text-foreground">×{detailCode.multiplier}</strong></span>
+                                  <span>{t("workspace.multiplier")} <strong className="text-foreground">×{detailCode.multiplier}</strong></span>
                                 )}
                               </div>
                             </div>
@@ -1316,16 +1341,16 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                 <div className="p-4 border-t border-border flex flex-col sm:flex-row gap-2 sm:justify-between">
                   <Button variant="outline" className="w-full sm:w-auto gap-2" onClick={handleSaveDraft} disabled={isSaving}>
                     <Save className="w-4 h-4" />
-                    Save Draft
+                    {t("workspace.saveDraft")}
                   </Button>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Button variant="outline" className="w-full sm:w-auto gap-2" onClick={handleScanProfile} disabled={isSaving || scanningProfile}>
                       <Sparkles className="w-4 h-4" />
-                      {scanningProfile ? "Scanning…" : "Profile updates"}
+                      {scanningProfile ? t("workspace.scanning") : t("workspace.profileUpdates")}
                     </Button>
                     <Button className="w-full sm:w-auto gap-2" onClick={handleComplete} disabled={isSaving}>
                       <CheckCircle2 className="w-4 h-4" />
-                      {isSaving ? "Saving…" : "Complete Consultation"}
+                      {isSaving ? t("workspace.saving") : t("workspace.completeConsultation")}
                     </Button>
                   </div>
                 </div>
@@ -1339,7 +1364,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <ClipboardList className="w-4 h-4 text-primary" />
-                  Previous Visits &amp; History
+                  {t("workspace.previousVisits")}
                 </CardTitle>
                 <Button
                   variant="outline"
@@ -1349,7 +1374,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                   disabled={summarizingHistory || (current.history.length === 0 && current.conditions.length === 0 && current.medications.length === 0)}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  {summarizingHistory ? "Summarizing…" : historySummary ? "Regenerate briefing" : "AI Briefing"}
+                  {summarizingHistory ? t("workspace.summarizing") : historySummary ? t("workspace.regenerateBriefing") : t("workspace.aiBriefing")}
                 </Button>
               </div>
             </CardHeader>
@@ -1357,26 +1382,26 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
               <div className="grid grid-cols-1 min-w-0 lg:grid-cols-2 gap-5">
                 {/* Visit timeline */}
                 <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Timeline</p>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">{t("workspace.timeline")}</p>
                   {current.history.length > 0 ? (
                     <div className="space-y-2">
                       {current.history.map((h) => (
                         <div key={h.id} className="flex items-center gap-2 sm:gap-3 rounded-lg border border-border p-2.5">
-                          <span className="text-xs font-medium text-foreground w-16 sm:w-20 shrink-0">{new Date(h.date).toLocaleDateString("de-DE")}</span>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{statusLabel(h.status as AppointmentStatusDb)}</Badge>
+                          <span className="text-xs font-medium text-foreground w-16 sm:w-20 shrink-0">{new Date(h.date).toLocaleDateString(INTL_LOCALE[locale])}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{t(`status.${h.status}` as TKey)}</Badge>
                           <span className="text-sm text-muted-foreground truncate flex-1 min-w-0">{h.diagnosis || h.reason || "—"}</span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">No previous appointments.</p>
+                    <p className="text-sm text-muted-foreground">{t("workspace.noPreviousAppointments")}</p>
                   )}
                 </div>
 
                 {/* AI briefing */}
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-primary" /> AI Briefing
+                    <Sparkles className="w-3 h-3 text-primary" /> {t("workspace.aiBriefing")}
                   </p>
                   {historySummary ? (
                     <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 text-sm leading-relaxed [&_p]:my-1.5 [&_ul]:my-1.5 [&_li]:my-0.5 [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:mt-2">
@@ -1385,7 +1410,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                   ) : (
                     <div className="rounded-lg border border-dashed border-border p-6 h-full min-h-[8rem] flex flex-col items-center justify-center text-center gap-2">
                       <Sparkles className="w-5 h-5 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">Generate a quick AI summary of this patient&apos;s history and previous visits.</p>
+                      <p className="text-sm text-muted-foreground">{t("workspace.briefingEmpty")}</p>
                     </div>
                   )}
                 </div>
@@ -1400,11 +1425,10 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" /> Suggested profile updates
+              <Sparkles className="w-5 h-5 text-primary" /> {t("workspace.suggestedProfileUpdates")}
             </DialogTitle>
             <DialogDescription>
-              Detected in this consultation. Confirm what to send to the patient — they decide whether to
-              apply it to their profile.
+              {t("workspace.profileUpdatesDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 max-h-[50vh] overflow-y-auto">
@@ -1431,7 +1455,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                     <p className="text-sm font-medium">
                       {s.label}: <span className="text-primary">{s.proposedValue}</span>
                     </p>
-                    {s.currentValue && <p className="text-xs text-muted-foreground">Current: {s.currentValue}</p>}
+                    {s.currentValue && <p className="text-xs text-muted-foreground">{t("workspace.currentLabel", { value: s.currentValue })}</p>}
                     {s.reason && <p className="text-xs text-muted-foreground italic">{s.reason}</p>}
                   </div>
                 </button>
@@ -1439,9 +1463,9 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
             })}
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setProposalDialogOpen(false)}>Skip</Button>
+            <Button variant="outline" onClick={() => setProposalDialogOpen(false)}>{t("workspace.skip")}</Button>
             <Button onClick={confirmProfileProposals} disabled={selectedSuggestions.size === 0}>
-              Send{selectedSuggestions.size > 0 ? ` (${selectedSuggestions.size})` : ""} to patient
+              {t("workspace.sendToPatient")}{selectedSuggestions.size > 0 ? ` (${selectedSuggestions.size})` : ""}
             </Button>
           </div>
         </DialogContent>

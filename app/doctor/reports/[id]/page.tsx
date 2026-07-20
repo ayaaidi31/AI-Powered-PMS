@@ -16,6 +16,7 @@ import {
 } from "@/lib/queries"
 import { doctorName, patientName, insuranceLabel } from "@/lib/display"
 import { ConsultationRecordClient } from "./consultation-record-client"
+import { getT } from "@/lib/i18n/server"
 
 export const dynamic = "force-dynamic"
 
@@ -23,6 +24,7 @@ export default async function ConsultationRecordPage({
   params,
 }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+  const { t } = await getT()
   const doctor = await getCurrentDoctor()
   if (!doctor) return <div className="p-8 text-muted-foreground">No doctor account found.</div>
 
@@ -44,7 +46,7 @@ export default async function ConsultationRecordPage({
         href="/doctor/reports"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="w-4 h-4" /> Back to reports
+        <ArrowLeft className="w-4 h-4" /> {t("reports.backToReports")}
       </Link>
 
       <ConsultationRecordClient

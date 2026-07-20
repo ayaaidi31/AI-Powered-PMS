@@ -13,14 +13,16 @@ import {
   getPatientDocuments,
 } from "@/lib/queries"
 import { patientName } from "@/lib/display"
+import { getT } from "@/lib/i18n/server"
 import { WorkspaceClient, type QueueEntry } from "./workspace-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function DoctorWorkspace() {
+  const { t } = await getT()
   const doctor = await getCurrentDoctor()
   if (!doctor) {
-    return <div className="p-8 text-muted-foreground">No doctor account found.</div>
+    return <div className="p-8 text-muted-foreground">{t("workspace.noDoctorAccount")}</div>
   }
 
   const appointments = await getAppointmentsByDoctor(doctor.id)

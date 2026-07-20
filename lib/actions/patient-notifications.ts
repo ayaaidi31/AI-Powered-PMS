@@ -10,11 +10,13 @@ import {
 } from "@/lib/queries"
 import { getPendingProfileProposals } from "@/lib/actions/profile-proposals"
 import { buildPatientNotifications } from "@/lib/patient-notifications"
+import { getT } from "@/lib/i18n/server"
 import type { NotificationItem } from "@/components/notification-bell"
 
 export async function getPatientNotifications(): Promise<NotificationItem[]> {
   const patient = await getCurrentPatient()
   if (!patient) return []
+  const { t } = await getT()
 
   const [appointments, reports, invoices, proposals] = await Promise.all([
     getAppointmentsByPatient(patient.id),
@@ -33,5 +35,5 @@ export async function getPatientNotifications(): Promise<NotificationItem[]> {
     })),
     invoices: invoices.map((i) => ({ id: i.id, status: i.status, insurance_type: i.insurance_type })),
     pendingProposals: proposals.length,
-  })
+  }, t)
 }

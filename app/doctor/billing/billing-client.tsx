@@ -22,25 +22,29 @@ import type { InvoiceRow } from "@/lib/seed-data"
 import { insuranceLabel, insuranceVariant, formatCents } from "@/lib/display"
 import { InvoiceDocument } from "@/components/invoice-document"
 import { printReport } from "@/lib/print-element"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 export interface DoctorBillingRow extends BillingWorklistRow {
   value_cents: number
   items: BillingItem[]
 }
 
-const INVOICE_STATUS: Record<InvoiceRow["status"], string> = {
-  ready_for_kv: "Queued for KV",
-  pending_payment: "Pending Payment",
-  sent: "Sent",
-  paid: "Paid",
-  storno: "Voided",
-}
-
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE")
-
 export function DoctorBillingClient({ rows }: { rows: DoctorBillingRow[] }) {
+  const t = useT()
+  const locale = useLocale()
   const [viewing, setViewing] = useState<DoctorBillingRow | null>(null)
   const invoiceRef = useRef<HTMLDivElement>(null)
+
+  const invoiceStatusLabel: Record<InvoiceRow["status"], string> = {
+    ready_for_kv: t("billing.statusReadyForKv"),
+    pending_payment: t("billing.statusPendingPayment"),
+    sent: t("billing.statusSent"),
+    paid: t("billing.statusPaid"),
+    storno: t("billing.statusVoided"),
+  }
+
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(INTL_LOCALE[locale])
   const gkvValue = rows.filter((r) => r.insurance_type === "gkv").reduce((s, r) => s + r.value_cents, 0)
   const privateValue = rows.filter((r) => r.insurance_type !== "gkv").reduce((s, r) => s + r.value_cents, 0)
 
@@ -48,39 +52,39 @@ export function DoctorBillingClient({ rows }: { rows: DoctorBillingRow[] }) {
     <div className="p-6 lg:p-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Receipt className="w-6 h-6 text-primary" /> Billing
+          <Receipt className="w-6 h-6 text-primary" /> {t("billing.title")}
         </h1>
-        <p className="text-muted-foreground">Value of your completed consultations</p>
+        <p className="text-muted-foreground">{t("billing.subtitle")}</p>
       </div>
 
       {/* Summary */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <SummaryCard icon={<ClipboardCheck className="w-5 h-5 text-primary" />} label="Completed consultations" value={String(rows.length)} />
-        <SummaryCard icon={<Landmark className="w-5 h-5 text-primary" />} label="GKV value (KV estimate)" value={formatCents(gkvValue)} />
-        <SummaryCard icon={<Euro className="w-5 h-5 text-primary" />} label="Private (GOÄ invoiced)" value={formatCents(privateValue)} />
+        <SummaryCard icon={<ClipboardCheck className="w-5 h-5 text-primary" />} label={t("billing.completedConsultations")} value={String(rows.length)} />
+        <SummaryCard icon={<Landmark className="w-5 h-5 text-primary" />} label={t("billing.gkvValueLabel")} value={formatCents(gkvValue)} />
+        <SummaryCard icon={<Euro className="w-5 h-5 text-primary" />} label={t("billing.privateValueLabel")} value={formatCents(privateValue)} />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Consultations</CardTitle>
-          <CardDescription>{rows.length} completed · click a row to view its billing document</CardDescription>
+          <CardTitle>{t("billing.consultations")}</CardTitle>
+          <CardDescription>{t("billing.consultationsDescription", { count: rows.length })}</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {rows.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
               <Receipt className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p>No completed consultations yet.</p>
+              <p>{t("billing.emptyState")}</p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Codes</TableHead>
-                  <TableHead className="text-right">Value</TableHead>
-                  <TableHead>Billing</TableHead>
+                  <TableHead>{t("billing.columnDate")}</TableHead>
+                  <TableHead>{t("billing.columnPatient")}</TableHead>
+                  <TableHead>{t("billing.columnType")}</TableHead>
+                  <TableHead className="text-right">{t("billing.columnCodes")}</TableHead>
+                  <TableHead className="text-right">{t("billing.columnValue")}</TableHead>
+                  <TableHead>{t("billing.columnBilling")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -97,11 +101,11 @@ export function DoctorBillingClient({ rows }: { rows: DoctorBillingRow[] }) {
                     <TableCell className="text-right tabular-nums">{r.code_count > 0 ? formatCents(r.value_cents) : "—"}</TableCell>
                     <TableCell>
                       {r.code_count === 0 ? (
-                        <span className="text-xs text-destructive">No codes</span>
+                        <span className="text-xs text-destructive">{t("billing.noCodes")}</span>
                       ) : r.invoice_status ? (
-                        <Badge variant="outline">{INVOICE_STATUS[r.invoice_status]}</Badge>
+                        <Badge variant="outline">{invoiceStatusLabel[r.invoice_status]}</Badge>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Awaiting reception</span>
+                        <span className="text-xs text-muted-foreground">{t("billing.awaitingReception")}</span>
                       )}
                     </TableCell>
                   </TableRow>
@@ -113,8 +117,7 @@ export function DoctorBillingClient({ rows }: { rows: DoctorBillingRow[] }) {
       </Card>
 
       <p className="text-xs text-muted-foreground">
-        GKV values are the estimated KV settlement (EBM points × Orientierungswert); statutory patients are not
-        invoiced directly. Private/self-pay values are the GOÄ invoice amount. Reception issues the invoices.
+        {t("billing.footnote")}
       </p>
 
       {/* Billing document preview (read-only) */}
@@ -125,10 +128,10 @@ export function DoctorBillingClient({ rows }: { rows: DoctorBillingRow[] }) {
               <DialogHeader>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <DialogTitle>
-                    {viewing.insurance_type === "gkv" ? "Leistungsnachweis (GKV)" : "Billing document (§12 GOÄ)"}
+                    {viewing.insurance_type === "gkv" ? t("billing.documentTitleGkv") : t("billing.documentTitlePrivate")}
                   </DialogTitle>
                   <Button variant="outline" size="sm" className="gap-2" onClick={() => printReport(invoiceRef.current)}>
-                    <Printer className="w-4 h-4" /> Print / PDF
+                    <Printer className="w-4 h-4" /> {t("billing.printPdf")}
                   </Button>
                 </div>
                 <DialogDescription>{viewing.patient_name} · {fmtDate(viewing.starts_at)}</DialogDescription>

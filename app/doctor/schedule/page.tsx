@@ -7,14 +7,16 @@
 import {
   getCurrentDoctor, getAppointmentsByDoctor, getPatientIdsWithAllergies,
 } from "@/lib/queries"
+import { getT } from "@/lib/i18n/server"
 import { DoctorScheduleClient } from "./schedule-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function DoctorSchedulePage() {
+  const { t } = await getT()
   const doctor = await getCurrentDoctor()
   if (!doctor) {
-    return <div className="p-8 text-muted-foreground">No doctor account found.</div>
+    return <div className="p-8 text-muted-foreground">{t("schedule.noDoctorAccount")}</div>
   }
   const [appointments, allergyIds] = await Promise.all([
     getAppointmentsByDoctor(doctor.id),

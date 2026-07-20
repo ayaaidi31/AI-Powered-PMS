@@ -43,24 +43,28 @@ import {
 } from "@/lib/actions/invoices"
 import { InvoiceDocument } from "@/components/invoice-document"
 import { printReport } from "@/lib/print-element"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 
 export interface BillingRow extends BillingWorklistRow {
   items: BillingItem[]
   total_cents: number | null
 }
 
-const INVOICE_STATUS: Record<InvoiceRow["status"], { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
-  ready_for_kv: { label: "Ready for KV", variant: "secondary" },
-  pending_payment: { label: "Pending Payment", variant: "default" },
-  sent: { label: "Sent", variant: "outline" },
-  paid: { label: "Paid", variant: "default" },
-  storno: { label: "Voided", variant: "destructive" },
+const INVOICE_STATUS: Record<InvoiceRow["status"], { key: TKey; variant: "default" | "secondary" | "outline" | "destructive" }> = {
+  ready_for_kv: { key: "receptionMgmt.statusReadyForKv" as TKey, variant: "secondary" },
+  pending_payment: { key: "receptionMgmt.statusPendingPayment" as TKey, variant: "default" },
+  sent: { key: "receptionMgmt.statusSent" as TKey, variant: "outline" },
+  paid: { key: "receptionMgmt.statusPaid" as TKey, variant: "default" },
+  storno: { key: "receptionMgmt.statusVoided" as TKey, variant: "destructive" },
 }
-
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE")
 
 export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices: InvoiceListRow[] }) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(INTL_LOCALE[locale])
   const [isPending, startTransition] = useTransition()
   const [processing, setProcessing] = useState<BillingRow | null>(null)
   const [stornoTarget, setStornoTarget] = useState<InvoiceListRow | null>(null)
@@ -78,7 +82,7 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
         after?.()
         router.refresh()
       } else {
-        toast.error(result.message ?? "Action failed.")
+        toast.error(result.message ?? t("receptionMgmt.actionFailed"))
       }
     })
   }
@@ -87,22 +91,22 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
     <div className="p-6 lg:p-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Receipt className="w-6 h-6 text-primary" /> Billing
+          <Receipt className="w-6 h-6 text-primary" /> {t("receptionMgmt.billingTitle")}
         </h1>
         <p className="text-muted-foreground">
-          Finalise billing for completed consultations and manage invoices.
+          {t("receptionMgmt.billingSubtitle")}
         </p>
       </div>
 
       {/* Worklist */}
       <Card>
         <CardHeader>
-          <CardTitle>Awaiting Billing</CardTitle>
-          <CardDescription>{pending.length} completed appointment{pending.length !== 1 ? "s" : ""} to process</CardDescription>
+          <CardTitle>{t("receptionMgmt.awaitingBilling")}</CardTitle>
+          <CardDescription>{pending.length === 1 ? t("receptionMgmt.pendingCountOne", { count: pending.length }) : t("receptionMgmt.pendingCountMany", { count: pending.length })}</CardDescription>
         </CardHeader>
         <CardContent>
           {pending.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">Nothing awaiting billing.</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">{t("receptionMgmt.nothingAwaiting")}</p>
           ) : (
             <div className="space-y-3">
               {pending.map((r) => (
@@ -113,19 +117,19 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
                       <Badge variant={insuranceVariant(r.insurance_type)}>{insuranceLabel(r.insurance_type)}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {fmtDate(r.starts_at)} · {r.code_count} code{r.code_count !== 1 ? "s" : ""}
+                      {fmtDate(r.starts_at)} · {r.code_count === 1 ? t("receptionMgmt.codeCountOne", { count: r.code_count }) : t("receptionMgmt.codeCountMany", { count: r.code_count })}
                       {r.total_cents != null && <> · {formatCents(r.total_cents)}</>}
                     </p>
                   </div>
                   {r.code_count === 0 ? (
                     <div className="flex items-center gap-2 text-sm text-destructive">
                       <AlertCircle className="w-4 h-4" />
-                      No codes — request from doctor
+                      {t("receptionMgmt.noCodesRequest")}
                     </div>
                   ) : (
                     <Button onClick={() => setProcessing(r)} disabled={isPending} className="gap-2">
                       {r.insurance_type === "gkv" ? <Landmark className="w-4 h-4" /> : <Euro className="w-4 h-4" />}
-                      Process
+                      {t("receptionMgmt.process")}
                     </Button>
                   )}
                 </div>
@@ -138,22 +142,22 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
       {/* Invoice history */}
       <Card>
         <CardHeader>
-          <CardTitle>Invoices</CardTitle>
-          <CardDescription>{invoices.length} record{invoices.length !== 1 ? "s" : ""}</CardDescription>
+          <CardTitle>{t("receptionMgmt.invoicesTitle")}</CardTitle>
+          <CardDescription>{invoices.length === 1 ? t("receptionMgmt.recordCountOne", { count: invoices.length }) : t("receptionMgmt.recordCountMany", { count: invoices.length })}</CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {invoices.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">No invoices yet.</p>
+            <p className="text-sm text-muted-foreground py-6 text-center">{t("receptionMgmt.noInvoices")}</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Number</TableHead>
-                  <TableHead>Patient</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("receptionMgmt.colNumber")}</TableHead>
+                  <TableHead>{t("receptionMgmt.colPatient")}</TableHead>
+                  <TableHead>{t("receptionMgmt.colType")}</TableHead>
+                  <TableHead className="text-right">{t("receptionMgmt.colTotal")}</TableHead>
+                  <TableHead>{t("receptionMgmt.colStatus")}</TableHead>
+                  <TableHead className="text-right">{t("receptionMgmt.colActions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -163,28 +167,28 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
                     <TableCell>{inv.patient_name}</TableCell>
                     <TableCell>{insuranceLabel(inv.insurance_type)}</TableCell>
                     <TableCell className="text-right">{inv.total_cents == null ? "—" : formatCents(inv.total_cents)}</TableCell>
-                    <TableCell><Badge variant={INVOICE_STATUS[inv.status].variant}>{INVOICE_STATUS[inv.status].label}</Badge></TableCell>
+                    <TableCell><Badge variant={INVOICE_STATUS[inv.status].variant}>{t(INVOICE_STATUS[inv.status].key)}</Badge></TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         {inv.status !== "storno" && (
-                          <Button size="sm" variant="ghost" onClick={() => setViewing(inv)}>View</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setViewing(inv)}>{t("receptionMgmt.view")}</Button>
                         )}
                         {inv.status === "pending_payment" && (
                           <Button size="sm" variant="outline" className="gap-1" disabled={isPending}
-                            onClick={() => run(markInvoiceSent(inv.id), "Invoice marked as sent.")}>
-                            <Send className="w-3.5 h-3.5" /> Send
+                            onClick={() => run(markInvoiceSent(inv.id), t("receptionMgmt.invoiceSentToast"))}>
+                            <Send className="w-3.5 h-3.5" /> {t("receptionMgmt.send")}
                           </Button>
                         )}
                         {(inv.status === "sent" || inv.status === "pending_payment") && (
                           <Button size="sm" variant="outline" className="gap-1" disabled={isPending}
-                            onClick={() => run(markInvoicePaid(inv.id), "Invoice marked as paid.")}>
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Paid
+                            onClick={() => run(markInvoicePaid(inv.id), t("receptionMgmt.invoicePaidToast"))}>
+                            <CheckCircle2 className="w-3.5 h-3.5" /> {t("receptionMgmt.markPaidBtn")}
                           </Button>
                         )}
                         {inv.status !== "storno" && (
                           <Button size="sm" variant="ghost" className="text-destructive gap-1" disabled={isPending}
                             onClick={() => setStornoTarget(inv)}>
-                            <Ban className="w-3.5 h-3.5" /> Void
+                            <Ban className="w-3.5 h-3.5" /> {t("receptionMgmt.voidBtn")}
                           </Button>
                         )}
                       </div>
@@ -204,10 +208,10 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
             <>
               <DialogHeader>
                 <DialogTitle>
-                  {processing.insurance_type === "gkv" ? "Approve for KV — preview" : "Invoice preview (§12 GOÄ)"}
+                  {processing.insurance_type === "gkv" ? t("receptionMgmt.approveKvPreview") : t("receptionMgmt.invoicePreviewGoae")}
                 </DialogTitle>
                 <DialogDescription>
-                  {processing.patient_name} · {fmtDate(processing.starts_at)} · draft preview
+                  {processing.patient_name} · {fmtDate(processing.starts_at)} · {t("receptionMgmt.draftPreview")}
                 </DialogDescription>
               </DialogHeader>
               <InvoiceDocument
@@ -222,18 +226,18 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
             </>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setProcessing(null)} disabled={isPending}>Cancel</Button>
+            <Button variant="outline" onClick={() => setProcessing(null)} disabled={isPending}>{t("common.cancel")}</Button>
             <Button
               disabled={isPending}
               onClick={() => processing && run(
                 generateInvoice(processing.appointment_id),
                 processing.insurance_type === "gkv"
-                  ? "Approved for KV (queued for Quartalsabrechnung)."
-                  : "Invoice generated.",
+                  ? t("receptionMgmt.approvedKvToast")
+                  : t("receptionMgmt.invoiceGeneratedToast"),
                 () => setProcessing(null),
               )}
             >
-              {processing?.insurance_type === "gkv" ? "Approve for KV" : "Generate Invoice"}
+              {processing?.insurance_type === "gkv" ? t("receptionMgmt.approveKv") : t("receptionMgmt.generateInvoice")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -247,10 +251,10 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
               <DialogHeader>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <DialogTitle>
-                    {viewing.insurance_type === "gkv" ? "Leistungsnachweis (GKV)" : `Invoice ${viewing.invoice_number}`}
+                    {viewing.insurance_type === "gkv" ? t("receptionMgmt.documentTitleGkv") : t("receptionMgmt.documentTitlePrivate", { number: viewing.invoice_number ?? "" })}
                   </DialogTitle>
                   <Button variant="outline" size="sm" className="gap-2" onClick={() => printReport(invoiceRef.current)}>
-                    <Printer className="w-4 h-4" /> Print / PDF
+                    <Printer className="w-4 h-4" /> {t("receptionMgmt.printPdf")}
                   </Button>
                 </div>
                 <DialogDescription>{viewing.patient_name} · {fmtDate(viewing.starts_at)}</DialogDescription>
@@ -275,21 +279,20 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
       <AlertDialog open={stornoTarget !== null} onOpenChange={(o) => !o && setStornoTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Void this invoice?</AlertDialogTitle>
+            <AlertDialogTitle>{t("receptionMgmt.voidDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {stornoTarget && `Invoice ${stornoTarget.invoice_number} for ${stornoTarget.patient_name} will be reversed. `}
-              The original is never deleted — a separate reversal invoice is issued for the audit trail
-              (§14 UStG / GoBD). This cannot be undone.
+              {stornoTarget && `${t("receptionMgmt.voidDescLead", { number: stornoTarget.invoice_number ?? "", patient: stornoTarget.patient_name })} `}
+              {t("receptionMgmt.voidDescTail")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Keep Invoice</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t("receptionMgmt.keepInvoice")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isPending}
-              onClick={() => stornoTarget && run(stornoInvoice(stornoTarget.id), "Reversal invoice issued.", () => setStornoTarget(null))}
+              onClick={() => stornoTarget && run(stornoInvoice(stornoTarget.id), t("receptionMgmt.reversalIssuedToast"), () => setStornoTarget(null))}
             >
-              Void Invoice
+              {t("receptionMgmt.voidInvoiceBtn")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

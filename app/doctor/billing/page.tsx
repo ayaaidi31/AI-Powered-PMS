@@ -9,6 +9,7 @@
 import {
   getCurrentDoctor, getDoctorBillingWorklist, getAppointmentBillingItems,
 } from "@/lib/queries"
+import { getT } from "@/lib/i18n/server"
 import { DoctorBillingClient, type DoctorBillingRow } from "./billing-client"
 
 export const dynamic = "force-dynamic"
@@ -17,9 +18,10 @@ export const dynamic = "force-dynamic"
 const EBM_ORIENTIERUNGSWERT_CENTS = 11.9339
 
 export default async function DoctorBillingPage() {
+  const { t } = await getT()
   const doctor = await getCurrentDoctor()
   if (!doctor) {
-    return <div className="p-8 text-muted-foreground">No doctor account found.</div>
+    return <div className="p-8 text-muted-foreground">{t("billing.noDoctorAccount")}</div>
   }
 
   const worklist = await getDoctorBillingWorklist(doctor.id)

@@ -8,6 +8,7 @@
  * independently of the database.
  */
 import type { NotificationItem } from "@/components/notification-bell"
+import type { TFunction } from "@/lib/i18n/translate"
 
 export const WINDOW_DAYS = 14
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -36,13 +37,17 @@ export interface PatientNotifInput {
   pendingProposals: number
 }
 
-/** Build the ordered notification list (most important first). */
-export function buildPatientNotifications(input: PatientNotifInput): NotificationItem[] {
+/**
+ * Build the ordered notification list (most important first). The translator is
+ * injected so the derivation stays pure and unit-testable; the caller supplies
+ * one bound to the request locale.
+ */
+export function buildPatientNotifications(input: PatientNotifInput, t: TFunction): NotificationItem[] {
   const { nowMs } = input
   const withinWindow = (iso: string | null): boolean => {
     if (!iso) return false
-    const t = new Date(iso).getTime()
-    return t <= nowMs && nowMs - t <= WINDOW_DAYS * DAY_MS
+    const ms = new Date(iso).getTime()
+    return ms <= nowMs && nowMs - ms <= WINDOW_DAYS * DAY_MS
   }
   const isSameDay = (ms: number): boolean =>
     new Date(ms).toDateString() === new Date(nowMs).toDateString()
@@ -56,16 +61,16 @@ export function buildPatientNotifications(input: PatientNotifInput): Notificatio
       items.push({
         id: `appt-cancelled-${a.id}`,
         kind: "alert",
-        title: "Appointment cancelled by the clinic",
-        description: "Tap to review and book a new time.",
+        title: t("notify.apptCancelledTitle"),
+        description: t("notify.apptCancelledDesc"),
         href: "/patient/appointments",
       })
     } else if (a.status === "scheduled") {
       items.push({
         id: `appt-updated-${a.id}`,
         kind: "alert",
-        title: "Your appointment was updated",
-        description: "The clinic changed the time or doctor for your visit.",
+        title: t("notify.apptUpdatedTitle"),
+        description: t("notify.apptUpdatedDesc"),
         href: "/patient/appointments",
       })
     }
@@ -74,22 +79,22 @@ export function buildPatientNotifications(input: PatientNotifInput): Notificatio
   // 2. Same-day check-in and next-day reminders (upcoming, scheduled only).
   for (const a of input.appointments) {
     if (a.status !== "scheduled") continue
-    const t = new Date(a.starts_at).getTime()
-    if (t < nowMs) continue
-    if (isSameDay(t)) {
+    const startMs = new Date(a.starts_at).getTime()
+    if (startMs < nowMs) continue
+    if (isSameDay(startMs)) {
       items.push({
         id: `checkin-${a.id}`,
         kind: "appointment",
-        title: "Check-in available today",
-        description: "You have a visit today — check in when you arrive.",
+        title: t("notify.checkinTodayTitle"),
+        description: t("notify.checkinTodayDesc"),
         href: "/checkin",
       })
-    } else if (t - nowMs <= SOON_MS) {
+    } else if (startMs - nowMs <= SOON_MS) {
       items.push({
         id: `soon-${a.id}`,
         kind: "appointment",
-        title: "Appointment tomorrow",
-        description: "A reminder of your upcoming visit.",
+        title: t("notify.apptTomorrowTitle"),
+        description: t("notify.apptTomorrowDesc"),
         href: "/patient/appointments",
       })
     }
@@ -102,8 +107,8 @@ export function buildPatientNotifications(input: PatientNotifInput): Notificatio
       items.push({
         id: `report-${r.id}`,
         kind: "report",
-        title: "New report available",
-        description: "Your consultation report is ready to view.",
+        title: t("notify.newReportTitle"),
+        description: t("notify.newReportDesc"),
         href: `/patient/records/${r.id}`,
       })
     }
@@ -117,8 +122,8 @@ export function buildPatientNotifications(input: PatientNotifInput): Notificatio
       items.push({
         id: `invoice-${inv.id}`,
         kind: "billing",
-        title: "Invoice ready — payment due",
-        description: "View the details and download your invoice.",
+        title: t("notify.invoiceDueTitle"),
+        description: t("notify.invoiceDueDesc"),
         href: "/patient/invoices",
       })
     }
@@ -129,8 +134,11 @@ export function buildPatientNotifications(input: PatientNotifInput): Notificatio
     items.push({
       id: "profile-proposals",
       kind: "profile",
-      title: "Confirm a profile update",
-      description: `${input.pendingProposals} suggested change${input.pendingProposals > 1 ? "s" : ""} awaiting your review.`,
+      title: t("notify.profileConfirmTitle"),
+      description:
+        input.pendingProposals > 1
+          ? t("notify.profileConfirmDescMany", { count: input.pendingProposals })
+          : t("notify.profileConfirmDescOne", { count: input.pendingProposals }),
       href: "/patient/profile",
     })
   }

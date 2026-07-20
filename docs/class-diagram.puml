@@ -1,0 +1,496 @@
+' ============================================================================
+' Practice Management App — class diagrams (PlantUML)
+' Diagram 1: domain model (persistent entities, mirrors db/schema.sql +
+'            db/auth-schema.sql).
+' Diagram 2: application / service layer (exported server actions and the
+'            swappable LLM / RAG seams).
+' ============================================================================
+
+@startuml PracticeManagement_DomainModel
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+hide empty members
+
+' ============================ ENUMERATIONS ============================
+package "Enumerations" <<Rectangle>> {
+  enum Role {
+    doctor
+    receptionist
+    patient
+    admin
+  }
+  enum InsuranceType {
+    gkv
+    pkv
+    selbstzahler
+  }
+  enum AppointmentStatus {
+    scheduled
+    waiting
+    in_progress
+    completed
+    cancelled
+    no_show
+  }
+  enum BookingSource {
+    manual
+    online
+    ai_voice
+  }
+  enum AiReviewStatus {
+    pending
+    confirmed
+    flagged
+  }
+  enum ReportStatus {
+    draft
+    pending_approval
+    approved
+  }
+  enum BillingCatalog {
+    EBM
+    GOAE
+  }
+  enum InvoiceStatus {
+    ready_for_kv
+    pending_payment
+    sent
+    paid
+    storno
+  }
+  enum ProposalStatus {
+    pending_patient
+    accepted
+    rejected
+  }
+  enum DocumentCategory {
+    xray
+    mri
+    ct
+    ultrasound
+    lab
+    prescription
+    referral
+    discharge
+    other
+  }
+}
+
+' ============================== AUTH ==============================
+package "Auth" <<Rectangle>> {
+  class User {
+    + id : uuid <<PK>>
+    + email : text <<UNIQUE>>
+    + password_hash : text
+    + role : Role
+    + doctor_id : uuid <<FK>>
+    + receptionist_id : uuid <<FK>>
+    + patient_id : uuid <<FK>>
+    + is_active : boolean
+    + two_factor_enabled : boolean
+    + totp_secret : text
+    + backup_codes : text[]
+    + must_change_password : boolean
+    + notification_seen_ids : text[]
+    + created_at : timestamptz
+  }
+  class EmailVerification {
+    + id : uuid <<PK>>
+    + email : text
+    + code_hash : text
+    + purpose : text
+    + payload : jsonb
+    + attempts : int
+    + expires_at : timestamptz
+    + created_at : timestamptz
+  }
+}
+
+' ============================= PEOPLE =============================
+package "People" <<Rectangle>> {
+  class Doctor {
+    + id : uuid <<PK>>
+    + first_name : text
+    + last_name : text
+    + email : text <<UNIQUE>>
+    + phone : text
+    + specialization : text
+    + lanr : text
+    + department : text
+    + max_daily_capacity : int
+    + is_available : boolean
+    + unavailable_from : date
+    + unavailable_until : date
+  }
+  class Receptionist {
+    + id : uuid <<PK>>
+    + first_name : text
+    + last_name : text
+    + email : text <<UNIQUE>>
+    + phone : text
+    + department : text
+  }
+  class Patient {
+    + id : uuid <<PK>>
+    + first_name : text
+    + last_name : text
+    + birth_date : date
+    + email : text
+    + phone : text
+    + insurance_type : InsuranceType
+    + versicherten_id : text <<UNIQUE>>
+    + is_digital_active : boolean
+    + guardian_contact : text
+    + street : text
+    + city : text
+    + postal_code : text
+    + country : text
+    + last_updated_by : text
+    + created_at : timestamptz
+    + deleted_at : timestamptz
+  }
+}
+
+' ====================== CLINICAL CHILD RECORDS ======================
+package "Clinical Records" <<Rectangle>> {
+  class PatientAllergy {
+    + id : uuid <<PK>>
+    + patient_id : uuid <<FK>>
+    + substance : text
+    + recorded_at : timestamptz
+  }
+  class PatientCondition {
+    + id : uuid <<PK>>
+    + patient_id : uuid <<FK>>
+    + icd10_code : text <<FK>>
+    + label : text
+    + recorded_at : timestamptz
+  }
+  class Medication {
+    + id : uuid <<PK>>
+    + patient_id : uuid <<FK>>
+    + pzn_code : text <<FK>>
+    + name : text
+    + dosage : text
+    + frequency : text
+    + start_date : date
+    + end_date : date
+  }
+  class Vitals {
+    + id : uuid <<PK>>
+    + patient_id : uuid <<FK>>
+    + appointment_id : uuid <<FK>>
+    + recorded_at : timestamptz
+    + height_cm : int
+    + weight_kg : decimal
+    + systolic : int
+    + diastolic : int
+    + heart_rate : int
+    + temperature_c : decimal
+  }
+  class MedicalReport {
+    + id : uuid <<PK>>
+    + appointment_id : uuid <<FK>>
+    + patient_id : uuid <<FK>>
+    + doctor_id : uuid <<FK>>
+    + diagnosis : text
+    + raw_notes : text
+    + formatted_report : text
+    + internal_notes : text
+    + prescriptions : jsonb
+    + status : ReportStatus
+    + approved_at : timestamptz
+    + version : int
+    + created_at : timestamptz
+    + deleted_at : timestamptz
+    + deletion_reason : text
+  }
+  class PatientDocument {
+    + id : uuid <<PK>>
+    + patient_id : uuid <<FK>>
+    + appointment_id : uuid <<FK>>
+    + title : text
+    + description : text
+    + category : DocumentCategory
+    + file_name : text
+    + mime_type : text
+    + file_size : int
+    + content : bytea
+    + uploaded_by_role : text
+    + uploaded_by_id : uuid
+    + uploaded_by_name : text
+    + created_at : timestamptz
+    + deleted_at : timestamptz
+  }
+}
+
+' =========================== SCHEDULING ===========================
+package "Scheduling" <<Rectangle>> {
+  class Appointment {
+    + id : uuid <<PK>>
+    + patient_id : uuid <<FK>>
+    + doctor_id : uuid <<FK>>
+    + starts_at : timestamptz
+    + duration_min : int
+    + status : AppointmentStatus
+    + reason : text
+    + reason_for_change : text
+    + check_in_at : timestamptz
+    + check_in_code : text
+    + staff_modified_at : timestamptz
+    + doctor_notes : text
+    + created_at : timestamptz
+    + source : BookingSource
+    + ai_review_status : AiReviewStatus
+  }
+}
+
+' ============================= BILLING =============================
+package "Billing" <<Rectangle>> {
+  class ReportBillingCode {
+    + id : uuid <<PK>>
+    + report_id : uuid <<FK>>
+    + catalog : BillingCatalog
+    + code : text
+    + multiplier : decimal
+  }
+  class Invoice {
+    + id : uuid <<PK>>
+    + invoice_number : text <<UNIQUE>>
+    + appointment_id : uuid <<FK>>
+    + patient_id : uuid <<FK>>
+    + insurance_type : InsuranceType
+    + total_cents : int
+    + status : InvoiceStatus
+    + storno_of : uuid <<FK>>
+    + due_date : date
+    + created_at : timestamptz
+  }
+}
+
+' ======================= AI / PROFILE PROPOSALS =======================
+package "AI Proposals" <<Rectangle>> {
+  class ProfileChangeProposal {
+    + id : uuid <<PK>>
+    + patient_id : uuid <<FK>>
+    + appointment_id : uuid <<FK>>
+    + field : text
+    + label : text
+    + current_value : text
+    + proposed_value : text
+    + reason : text
+    + status : ProposalStatus
+    + created_at : timestamptz
+    + resolved_at : timestamptz
+  }
+}
+
+' ====================== STATIC GERMAN RULEBOOKS ======================
+package "Rulebooks (lookup)" <<Rectangle>> {
+  class Icd10Gm {
+    + code : text <<PK>>
+    + description : text
+  }
+  class EbmCatalog {
+    + code : text <<PK>>
+    + description : text
+    + fee_in_cents : int
+  }
+  class GoaeCatalog {
+    + code : text <<PK>>
+    + description : text
+    + base_cents : int
+    + default_multiplier : decimal
+  }
+  class MedicationPzn {
+    + pzn_code : text <<PK>>
+    + name : text
+    + active_ingredient : text
+  }
+}
+
+' ============================ RELATIONSHIPS ============================
+User "0..1" --> "1" Doctor        : profile
+User "0..1" --> "1" Receptionist  : profile
+User "0..1" --> "1" Patient       : profile
+
+Patient "1" *-- "0..*" PatientAllergy        : has
+Patient "1" *-- "0..*" PatientCondition       : has
+Patient "1" *-- "0..*" Medication             : takes
+Patient "1" *-- "0..*" Appointment            : books
+Patient "1" *-- "0..*" Vitals                 : measured
+Patient "1" *-- "0..*" MedicalReport          : subject of
+Patient "1" *-- "0..*" PatientDocument        : owns
+Patient "1" *-- "0..*" Invoice                : billed
+Patient "1" *-- "0..*" ProfileChangeProposal  : target of
+
+Doctor "1" -- "0..*" Appointment   : attends
+Doctor "1" -- "0..*" MedicalReport : authors
+
+Appointment "1" o-- "0..*" Vitals                : during
+Appointment "1" -- "0..1" MedicalReport          : produces
+Appointment "0..1" -- "0..*" PatientDocument     : attached during
+Appointment "1" -- "0..*" Invoice                : billed by
+Appointment "0..1" -- "0..*" ProfileChangeProposal : triggers
+
+MedicalReport "1" *-- "0..*" ReportBillingCode : contains
+Invoice "0..1" --> "1" Invoice : storno_of
+
+PatientCondition "0..*" --> "0..1" Icd10Gm       : coded as
+Medication "0..*" --> "0..1" MedicationPzn        : product
+ReportBillingCode "0..*" ..> "1" EbmCatalog       : GKV code
+ReportBillingCode "0..*" ..> "1" GoaeCatalog      : PKV code
+@enduml
+
+
+@startuml PracticeManagement_ServiceLayer
+skinparam classAttributeIconSize 0
+hide empty fields
+
+class AuthService <<auth>> {
+  + login()
+  + verifyTwoFactorLogin()
+  + startSignup()
+  + verifySignup()
+  + getTwoFactorStatus()
+  + startTotpEnrollment()
+  + confirmTotpEnrollment()
+  + disableTwoFactor()
+  + createStaffAccount()
+  + changeOwnPassword()
+  + logout()
+  + getCurrentDoctor()
+  + getCurrentReceptionist()
+  + getCurrentPatient()
+}
+class TwoFactorAuth <<lib/auth/twofactor>> {
+  + generateTotpSecret()
+  + totpKeyUri()
+  + totpQrDataUrl()
+  + verifyTotp()
+  + generateBackupCodes()
+  + consumeBackupCode()
+}
+class PatientService <<server actions>> {
+  + registerPatient()
+  + updatePatient()
+  + deactivatePatient()
+}
+class DocumentService <<server actions>> {
+  + uploadPatientDocument()
+  + updatePatientDocument()
+  + deletePatientDocument()
+}
+class AppointmentService <<server actions>> {
+  + getDoctorDayAvailability()
+  + bookAppointment()
+  + rescheduleAppointment()
+  + reassignAppointment()
+  + cancelAppointment()
+  + checkInAppointment()
+  + checkInByCode()
+  + revertCheckIn()
+  + setAppointmentStatus()
+  + deleteAppointment()
+  + reviewVoiceBooking()
+}
+class VitalsService <<server actions>> {
+  + saveAppointmentVitals()
+}
+class ReportService <<server actions>> {
+  + createReport()
+  + updateReport()
+  + approveReport()
+  + setReportBillingCodes()
+  + deleteReport()
+}
+class InvoiceService <<server actions>> {
+  + generateInvoice()
+  + markInvoiceSent()
+  + markInvoicePaid()
+  + stornoInvoice()
+}
+class CodeService <<server actions>> {
+  + searchBillingCodes()
+}
+class DoctorService <<server actions>> {
+  + updateDoctor()
+  + setDoctorAvailability()
+  + getDoctorNotifications()
+}
+class ReceptionistService <<server actions>> {
+  + updateReceptionist()
+  + getReceptionistNotifications()
+}
+class NotificationService <<server actions>> {
+  + getPatientNotifications()
+  + getSeenNotificationIds()
+  + markNotificationsSeen()
+  + remindUpcomingAppointments()
+}
+class StaffingService <<server actions>> {
+  + proposeRecoveryPlan()
+  + executeRecoveryPlan()
+}
+class ProfileProposalService <<server actions>> {
+  + createProfileProposals()
+  + getPendingProfileProposals()
+  + respondToProposal()
+}
+class VoiceAgentService <<Feature 11>> {
+  + voiceAgentReply()
+  + executeVoiceAction()
+}
+class AIService <<ai.ts>> {
+  + generateConsultationReport()
+  + suggestBillingCodes()
+  + extractPrescriptions()
+  + extractVitals()
+  + simplifyReport()
+  + diarizeTranscript()
+  + classifyUrgency()
+  + summarizePatientHistory()
+  + suggestProfileUpdates()
+  + askDecisionSupport()
+  + checkPrescriptionSafety()
+  + askPatientRecordsQA()
+  + askClinicFaq()
+}
+class LlmClient <<swappable seam>> {
+  + mistralChat()
+  + isLlmConfigured()
+}
+class RagRetriever <<pgvector / RAG seam>> {
+  + retrieveChunks()
+}
+class EmailService <<email.ts>> {
+  + sendCheckInCodeEmail()
+  + sendStaffCredentialsEmail()
+  + sendReportReadyEmail()
+  + sendInvoiceReadyEmail()
+  + sendAppointmentReminderEmail()
+  + sendSignupCodeEmail()
+}
+class RecordingProvider <<client / scribe>> {
+  + start()
+  + stop()
+  + discard()
+  + consumeResult()
+}
+
+AuthService ..> TwoFactorAuth : enroll / verify TOTP
+AuthService ..> EmailService : signup + staff credential codes
+VoiceAgentService ..> AppointmentService : books / reschedules / cancels
+VoiceAgentService ..> LlmClient : intent + slots
+AIService ..> LlmClient : all LLM calls
+AIService ..> RagRetriever : retrieve context (decision support, code catalog)
+ReportService ..> AIService : report + code generation
+ReportService ..> EmailService : report-ready notice
+InvoiceService ..> EmailService : invoice-ready notice
+NotificationService ..> EmailService : appointment reminders
+ProfileProposalService ..> AIService : suggestProfileUpdates
+RecordingProvider ..> AIService : diarizeTranscript
+StaffingService ..> AppointmentService : reassign on absence
+AppointmentService ..> InvoiceService : completed -> billing
+AppointmentService ..> EmailService : check-in code
+@enduml

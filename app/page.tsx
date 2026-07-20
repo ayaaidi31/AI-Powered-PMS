@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { login, verifyTwoFactorLogin } from "@/lib/actions/auth"
+import { LanguageToggle } from "@/components/language-toggle"
+import { useT } from "@/lib/i18n/locale-context"
 
 type UserRole = "patient" | "doctor" | "receptionist"
 
@@ -30,6 +32,7 @@ const DEMO_CREDENTIALS: Record<UserRole, { email: string; password: string }> = 
 
 export default function LoginPage() {
   const router = useRouter()
+  const t = useT()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [activeRole, setActiveRole] = useState<UserRole>("patient")
@@ -76,7 +79,10 @@ export default function LoginPage() {
   const fillDemoCredentials = () => setFormData(DEMO_CREDENTIALS[activeRole])
 
   return (
-    <div className="min-h-screen flex">
+    <div className="relative min-h-screen flex">
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageToggle />
+      </div>
       {/* Left side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-primary p-12 flex-col justify-between">
         <div className="flex items-center gap-3">
@@ -88,22 +94,21 @@ export default function LoginPage() {
 
         <div className="space-y-8">
           <h1 className="text-4xl font-bold text-primary-foreground leading-tight text-balance">
-            AI-Powered Practice Management System
+            {t("auth.heroTitle")}
           </h1>
           <p className="text-lg text-primary-foreground/80 leading-relaxed">
-            Streamline your medical practice with intelligent appointment scheduling,
-            AI-assisted documentation, and seamless patient communication.
+            {t("auth.heroSubtitle")}
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-8">
-            <Feature icon={<Stethoscope className="w-5 h-5 text-primary-foreground" />} title="For Doctors" text="AI-assisted report generation and billing" />
-            <Feature icon={<Users className="w-5 h-5 text-primary-foreground" />} title="For Patients" text="Easy scheduling and mobile check-in" />
-            <Feature icon={<Activity className="w-5 h-5 text-primary-foreground" />} title="For Staff" text="Efficient front desk management" />
-            <Feature icon={<HeartPulse className="w-5 h-5 text-primary-foreground" />} title="GDPR Compliant" text="Secure and privacy-focused" />
+            <Feature icon={<Stethoscope className="w-5 h-5 text-primary-foreground" />} title={t("auth.forDoctors")} text={t("auth.forDoctorsText")} />
+            <Feature icon={<Users className="w-5 h-5 text-primary-foreground" />} title={t("auth.forPatients")} text={t("auth.forPatientsText")} />
+            <Feature icon={<Activity className="w-5 h-5 text-primary-foreground" />} title={t("auth.forStaff")} text={t("auth.forStaffText")} />
+            <Feature icon={<HeartPulse className="w-5 h-5 text-primary-foreground" />} title={t("auth.gdprCompliant")} text={t("auth.gdprCompliantText")} />
           </div>
         </div>
 
-        <p className="text-sm text-primary-foreground/60">Secure, GDPR-compliant healthcare platform</p>
+        <p className="text-sm text-primary-foreground/60">{t("auth.securePlatform")}</p>
       </div>
 
       {/* Right side - Login Form */}
@@ -118,10 +123,10 @@ export default function LoginPage() {
 
           <div className="text-center lg:text-left">
             <h2 className="text-2xl font-bold text-foreground">
-              {twoFactorTicket ? "Two-step verification" : "Welcome back"}
+              {twoFactorTicket ? t("auth.twoStepTitle") : t("auth.welcomeBack")}
             </h2>
             <p className="text-muted-foreground mt-2">
-              {twoFactorTicket ? "Enter the 6-digit code from your authenticator app" : "Sign in to access your portal"}
+              {twoFactorTicket ? t("auth.twoStepSubtitle") : t("auth.signInSubtitle")}
             </p>
           </div>
 
@@ -131,7 +136,7 @@ export default function LoginPage() {
                 <form onSubmit={handleVerify2fa} className="space-y-4">
                   {error && <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>}
                   <div className="space-y-2">
-                    <Label htmlFor="twofa">Authentication code</Label>
+                    <Label htmlFor="twofa">{t("auth.authCode")}</Label>
                     <Input
                       id="twofa"
                       value={twoFactorCode}
@@ -142,17 +147,17 @@ export default function LoginPage() {
                       autoComplete="one-time-code"
                       className="text-center text-2xl font-mono tracking-[0.3em] h-14"
                     />
-                    <p className="text-xs text-muted-foreground">Lost your device? Enter one of your backup codes.</p>
+                    <p className="text-xs text-muted-foreground">{t("auth.lostDevice")}</p>
                   </div>
                   <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? "Verifying..." : "Verify & continue"}
+                    {isLoading ? t("auth.verifying") : t("auth.verifyContinue")}
                   </Button>
                   <button
                     type="button"
                     onClick={() => { setTwoFactorTicket(null); setError("") }}
                     className="w-full text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
                   >
-                    Back to sign in
+                    {t("auth.backToSignIn")}
                   </button>
                 </form>
               </CardContent>
@@ -160,23 +165,23 @@ export default function LoginPage() {
           ) : (
           <Tabs value={activeRole} onValueChange={(v) => setActiveRole(v as UserRole)} className="w-full">
             <TabsList className="grid grid-cols-3 w-full">
-              <TabsTrigger value="patient">Patient</TabsTrigger>
-              <TabsTrigger value="doctor">Doctor</TabsTrigger>
-              <TabsTrigger value="receptionist">Staff</TabsTrigger>
+              <TabsTrigger value="patient">{t("auth.rolePatient")}</TabsTrigger>
+              <TabsTrigger value="doctor">{t("auth.roleDoctor")}</TabsTrigger>
+              <TabsTrigger value="receptionist">{t("auth.roleStaff")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value={activeRole} className="mt-6">
               <Card className="border-border">
                 <CardHeader className="pb-4">
                   <CardTitle className="text-lg">
-                    {activeRole === "patient" && "Patient Portal"}
-                    {activeRole === "doctor" && "Doctor Workspace"}
-                    {activeRole === "receptionist" && "Staff Portal"}
+                    {activeRole === "patient" && t("auth.patientPortal")}
+                    {activeRole === "doctor" && t("auth.doctorWorkspace")}
+                    {activeRole === "receptionist" && t("auth.staffPortal")}
                   </CardTitle>
                   <CardDescription>
-                    {activeRole === "patient" && "Book appointments and view your health records"}
-                    {activeRole === "doctor" && "Manage consultations and patient care"}
-                    {activeRole === "receptionist" && "Manage schedules and front desk operations"}
+                    {activeRole === "patient" && t("auth.patientPortalDesc")}
+                    {activeRole === "doctor" && t("auth.doctorWorkspaceDesc")}
+                    {activeRole === "receptionist" && t("auth.staffPortalDesc")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -186,9 +191,9 @@ export default function LoginPage() {
                     )}
 
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
+                      <Label htmlFor="email">{t("auth.emailLabel")}</Label>
                       <Input
-                        id="email" type="email" placeholder="Enter your email"
+                        id="email" type="email" placeholder={t("auth.emailPlaceholder")}
                         value={formData.email}
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         required autoComplete="email"
@@ -196,9 +201,9 @@ export default function LoginPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="password">Password</Label>
+                      <Label htmlFor="password">{t("auth.passwordLabel")}</Label>
                       <Input
-                        id="password" type="password" placeholder="Enter your password"
+                        id="password" type="password" placeholder={t("auth.passwordPlaceholder")}
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         required autoComplete="current-password"
@@ -206,23 +211,23 @@ export default function LoginPage() {
                     </div>
 
                     <Button type="submit" className="w-full" disabled={isLoading}>
-                      {isLoading ? "Signing in..." : "Sign In"}
+                      {isLoading ? t("auth.signingIn") : t("auth.signIn")}
                     </Button>
                   </form>
 
                   {activeRole === "patient" && (
                     <p className="text-sm text-muted-foreground text-center mt-4">
-                      New patient?{" "}
-                      <Link href="/register" className="text-primary underline underline-offset-4">Create an account</Link>
+                      {t("auth.newPatient")}{" "}
+                      <Link href="/register" className="text-primary underline underline-offset-4">{t("auth.createAccount")}</Link>
                     </p>
                   )}
 
                   <div className="mt-4 pt-4 border-t border-border">
                     <Button type="button" variant="outline" className="w-full" onClick={fillDemoCredentials}>
-                      Fill Demo Credentials
+                      {t("auth.fillDemo")}
                     </Button>
                     <p className="text-xs text-muted-foreground text-center mt-2">
-                      Demo accounts use the password <span className="font-mono">demo123</span>
+                      {t("auth.demoPasswordHint")} <span className="font-mono">demo123</span>
                     </p>
                   </div>
                 </CardContent>
@@ -232,7 +237,7 @@ export default function LoginPage() {
           )}
 
           <p className="text-center text-sm text-muted-foreground">
-            By signing in, you agree to our Terms of Service and Privacy Policy
+            {t("auth.termsNotice")}
           </p>
         </div>
       </div>

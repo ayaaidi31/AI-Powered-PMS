@@ -54,7 +54,6 @@ export interface MedicalHistory {
   allergies: string[]
   chronicConditions: string[]
   currentMedications: Medication[]
-  pastSurgeries: Surgery[]
 }
 
 export interface Medication {
@@ -63,12 +62,6 @@ export interface Medication {
   frequency: string
   startDate: Date
   endDate?: Date
-}
-
-export interface Surgery {
-  name: string
-  date: Date
-  notes?: string
 }
 
 // Appointment Types

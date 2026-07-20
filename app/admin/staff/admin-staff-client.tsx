@@ -10,12 +10,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import { createStaffAccount, logout } from "@/lib/actions/auth"
+import { useT } from "@/lib/i18n/locale-context"
 
 type StaffRole = "doctor" | "receptionist"
 interface Created { email: string; role: StaffRole; emailed: boolean; tempPassword?: string }
 
 export function AdminStaffClient() {
   const router = useRouter()
+  const t = useT()
+  const roleLabel = (r: StaffRole) => t(r === "doctor" ? "admin.roleDoctor" : "admin.roleReceptionist")
   const [form, setForm] = useState({
     role: "doctor" as StaffRole, first_name: "", last_name: "", email: "",
     phone: "", department: "", specialization: "",
@@ -64,10 +67,10 @@ export function AdminStaffClient() {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm">
             <ShieldCheck className="w-5 h-5 text-primary" />
-            <span className="font-semibold text-foreground">Admin — Staff Accounts</span>
+            <span className="font-semibold text-foreground">{t("admin.pageTitle")}</span>
           </div>
           <Button variant="ghost" size="sm" className="gap-2" onClick={signOut}>
-            <LogOut className="w-4 h-4" /> Sign out
+            <LogOut className="w-4 h-4" /> {t("common.signOut")}
           </Button>
         </div>
       </div>
@@ -77,17 +80,17 @@ export function AdminStaffClient() {
           <Card className="border-primary/40 bg-primary/5">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
-                <Check className="w-5 h-5 text-primary" /> Account created for {created.email}
+                <Check className="w-5 h-5 text-primary" /> {t("admin.accountCreatedFor", { email: created.email })}
               </CardTitle>
               <CardDescription>
                 {created.emailed
-                  ? <>The temporary password has been <span className="font-medium text-foreground">emailed</span> to the new {created.role}. They'll set a new password and enable two-factor authentication on first login.</>
-                  : <>Email couldn't be sent, so share this <span className="font-medium text-foreground">one-time temporary password</span> with the new {created.role} directly. They must change it on first login, then set up two-factor authentication.</>}
+                  ? <>{t("admin.emailedIntro")}<span className="font-medium text-foreground">{t("admin.emailedEmphasis")}</span>{t("admin.emailedRest", { role: roleLabel(created.role) })}</>
+                  : <>{t("admin.notEmailedIntro")}<span className="font-medium text-foreground">{t("admin.notEmailedEmphasis")}</span>{t("admin.notEmailedRest", { role: roleLabel(created.role) })}</>}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {created.emailed ? (
-                <p className="text-sm text-foreground">The temporary password was sent to <span className="font-medium">{created.email}</span>.</p>
+                <p className="text-sm text-foreground">{t("admin.passwordSentTo")} <span className="font-medium">{created.email}</span></p>
               ) : (
                 <>
                   <div className="flex items-center gap-3">
@@ -96,59 +99,59 @@ export function AdminStaffClient() {
                     </code>
                     <Button
                       variant="outline" className="gap-2"
-                      onClick={() => { if (created.tempPassword) { navigator.clipboard?.writeText(created.tempPassword); setCopied(true); toast.success("Copied"); setTimeout(() => setCopied(false), 1500) } }}
+                      onClick={() => { if (created.tempPassword) { navigator.clipboard?.writeText(created.tempPassword); setCopied(true); toast.success(t("admin.copied")); setTimeout(() => setCopied(false), 1500) } }}
                     >
-                      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} Copy
+                      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />} {t("admin.copy")}
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    This password is shown only once. If it's lost, create the account again or reset it.
+                    {t("admin.shownOnce")}
                   </p>
                 </>
               )}
-              <Button variant="ghost" size="sm" onClick={() => setCreated(null)}>Create another</Button>
+              <Button variant="ghost" size="sm" onClick={() => setCreated(null)}>{t("admin.createAnother")}</Button>
             </CardContent>
           </Card>
         )}
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" /> New staff account</CardTitle>
-            <CardDescription>Provision a doctor or receptionist login.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" /> {t("admin.newAccountTitle")}</CardTitle>
+            <CardDescription>{t("admin.provisionDesc")}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={submit} className="space-y-4">
               {error && <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">{error}</div>}
 
               <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
+                <Label htmlFor="role">{t("admin.role")}</Label>
                 <Select value={form.role} onValueChange={(v) => set("role")(v)}>
                   <SelectTrigger id="role" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="doctor">Doctor</SelectItem>
-                    <SelectItem value="receptionist">Receptionist</SelectItem>
+                    <SelectItem value="doctor">{t("admin.roleDoctor")}</SelectItem>
+                    <SelectItem value="receptionist">{t("admin.roleReceptionist")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field id="first_name" label="First name" value={form.first_name} onChange={set("first_name")} error={fieldErrors.first_name} required />
-                <Field id="last_name" label="Last name" value={form.last_name} onChange={set("last_name")} error={fieldErrors.last_name} required />
+                <Field id="first_name" label={t("admin.firstName")} value={form.first_name} onChange={set("first_name")} error={fieldErrors.first_name} required />
+                <Field id="last_name" label={t("admin.lastName")} value={form.last_name} onChange={set("last_name")} error={fieldErrors.last_name} required />
               </div>
 
-              <Field id="email" label="Email" type="email" value={form.email} onChange={set("email")} error={fieldErrors.email} required />
+              <Field id="email" label={t("admin.email")} type="email" value={form.email} onChange={set("email")} error={fieldErrors.email} required />
 
               <div className="grid grid-cols-2 gap-3">
-                <Field id="phone" label="Phone (optional)" value={form.phone} onChange={set("phone")} error={fieldErrors.phone} />
-                <Field id="department" label="Department (optional)" value={form.department} onChange={set("department")} error={fieldErrors.department} />
+                <Field id="phone" label={t("admin.phoneOptional")} value={form.phone} onChange={set("phone")} error={fieldErrors.phone} />
+                <Field id="department" label={t("admin.departmentOptional")} value={form.department} onChange={set("department")} error={fieldErrors.department} />
               </div>
 
               {form.role === "doctor" && (
-                <Field id="specialization" label="Specialization (optional)" value={form.specialization} onChange={set("specialization")} error={fieldErrors.specialization} />
+                <Field id="specialization" label={t("admin.specializationOptional")} value={form.specialization} onChange={set("specialization")} error={fieldErrors.specialization} />
               )}
 
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating..." : "Create account"}
+                {loading ? t("admin.creating") : t("admin.createAccount")}
               </Button>
             </form>
           </CardContent>

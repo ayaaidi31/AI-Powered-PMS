@@ -26,23 +26,29 @@ import { formatCents } from "@/lib/display"
 import { approveReport } from "@/lib/actions/reports"
 import type { MedicalReportRow, VitalsRow, InvoiceRow } from "@/lib/seed-data"
 import type { ReportBillingCodeDetail } from "@/lib/queries"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 
-const REPORT_STATUS = {
-  draft: { label: "Draft", cls: "bg-muted text-muted-foreground" },
-  pending_approval: { label: "Pending signature", cls: "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" },
-  approved: { label: "Signed", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300" },
-} as const
-
-const INVOICE_STATUS: Record<InvoiceRow["status"], string> = {
-  ready_for_kv: "Ready for KV billing (GKV)",
-  pending_payment: "Pending payment",
-  sent: "Sent",
-  paid: "Paid",
-  storno: "Cancelled",
+const REPORT_STATUS_CLS: Record<MedicalReportRow["status"], string> = {
+  draft: "bg-muted text-muted-foreground",
+  pending_approval: "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
+  approved: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+}
+const REPORT_STATUS_LABEL_KEY: Record<MedicalReportRow["status"], TKey> = {
+  draft: "reports.statusDraft",
+  pending_approval: "reports.statusPendingSignature",
+  approved: "reports.statusSigned",
 }
 
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric" })
-const fmtDateTime = (iso: string) => new Date(iso).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })
+const INVOICE_STATUS_KEY: Record<InvoiceRow["status"], TKey> = {
+  ready_for_kv: "reports.invoiceReadyForKv",
+  pending_payment: "reports.invoicePendingPayment",
+  sent: "reports.invoiceSent",
+  paid: "reports.invoicePaid",
+  storno: "reports.invoiceCancelled",
+}
+
 function ageFrom(dob: string): number | null {
   const d = new Date(dob); if (isNaN(+d)) return null
   const now = new Date(); let a = now.getFullYear() - d.getFullYear()
@@ -62,11 +68,15 @@ interface Props {
 
 export function ConsultationRecordClient({ report, patient, doctor, appointment, vitals, codes, invoice }: Props) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
   const [isPending, startTransition] = useTransition()
   const [signOpen, setSignOpen] = useState(false)
   const recordRef = useRef<HTMLDivElement>(null)
 
-  const status = REPORT_STATUS[report.status]
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(INTL_LOCALE[locale], { day: "2-digit", month: "long", year: "numeric" })
+  const fmtDateTime = (iso: string) => new Date(iso).toLocaleString(INTL_LOCALE[locale], { dateStyle: "medium", timeStyle: "short" })
+
   const signed = report.status === "approved"
   const reportText = report.formatted_report?.trim() || report.raw_notes?.trim() || null
   const rx = (report.prescriptions ?? []).filter((p) => p.medication?.trim())
@@ -76,7 +86,7 @@ export function ConsultationRecordClient({ report, patient, doctor, appointment,
     startTransition(async () => {
       const r = await approveReport(report.id)
       if (r.status === "ok") {
-        toast.success("Consultation record signed and finalised.")
+        toast.success(t("reports.recordSigned"))
         router.refresh()
       } else {
         toast.error(r.message)
@@ -92,22 +102,22 @@ export function ConsultationRecordClient({ report, patient, doctor, appointment,
       {/* Action bar — not part of the printed record */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Consultation Record</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">{t("reports.recordTitle")}</h1>
           <p className="text-sm text-muted-foreground">
             {appointment ? fmtDate(appointment.starts_at) : fmtDate(report.created_at)}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" className="gap-2" onClick={() => printReport(recordRef.current)}>
-            <Printer className="w-4 h-4" /> Print / PDF
+            <Printer className="w-4 h-4" /> {t("reports.printPdf")}
           </Button>
           {signed ? (
             <Badge className="gap-1.5 h-9 px-3 bg-emerald-600 text-white hover:bg-emerald-600">
-              <Lock className="w-3.5 h-3.5" /> Signed
+              <Lock className="w-3.5 h-3.5" /> {t("reports.statusSigned")}
             </Badge>
           ) : (
             <Button className="gap-2" onClick={() => setSignOpen(true)} disabled={isPending}>
-              <CheckCircle2 className="w-4 h-4" /> Sign &amp; finalise
+              <CheckCircle2 className="w-4 h-4" /> {t("reports.signFinalise")}
             </Button>
           )}
         </div>
@@ -120,27 +130,27 @@ export function ConsultationRecordClient({ report, patient, doctor, appointment,
           <CardContent className="p-5 sm:p-6">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0">
-                <p className="text-lg font-bold text-foreground">{patient?.name ?? "Unknown patient"}</p>
+                <p className="text-lg font-bold text-foreground">{patient?.name ?? t("reports.unknownPatient")}</p>
                 <p className="text-sm text-muted-foreground">
-                  {age !== null && <>{age} years · </>}
-                  {patient && <>geb. {fmtDate(patient.dob)} · </>}
+                  {age !== null && <>{t("reports.yearsOld", { age })} · </>}
+                  {patient && <>{t("reports.bornPrefix")} {fmtDate(patient.dob)} · </>}
                   {patient?.insurance}
                 </p>
               </div>
-              <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${status.cls}`}>{status.label}</span>
+              <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${REPORT_STATUS_CLS[report.status]}`}>{t(REPORT_STATUS_LABEL_KEY[report.status])}</span>
             </div>
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <div className="flex justify-between gap-2 border-b border-border/60 pb-1">
-                <span className="text-muted-foreground">Visit</span>
+                <span className="text-muted-foreground">{t("reports.visit")}</span>
                 <span className="text-foreground text-right">{appointment ? fmtDateTime(appointment.starts_at) : "—"}</span>
               </div>
               <div className="flex justify-between gap-2 border-b border-border/60 pb-1">
-                <span className="text-muted-foreground">Physician</span>
+                <span className="text-muted-foreground">{t("reports.physician")}</span>
                 <span className="text-foreground text-right">{doctor.name}{doctor.specialization ? ` · ${doctor.specialization}` : ""}</span>
               </div>
               {appointment?.reason && (
                 <div className="flex justify-between gap-2 border-b border-border/60 pb-1 sm:col-span-2">
-                  <span className="text-muted-foreground">Reason for visit</span>
+                  <span className="text-muted-foreground">{t("reports.reasonForVisit")}</span>
                   <span className="text-foreground text-right">{appointment.reason}</span>
                 </div>
               )}
@@ -152,7 +162,7 @@ export function ConsultationRecordClient({ report, patient, doctor, appointment,
               )}
               {signed && report.approved_at && (
                 <div className="flex justify-between gap-2 border-b border-border/60 pb-1">
-                  <span className="text-muted-foreground">Signed</span>
+                  <span className="text-muted-foreground">{t("reports.statusSigned")}</span>
                   <span className="text-foreground text-right">{fmtDateTime(report.approved_at)}</span>
                 </div>
               )}
@@ -162,34 +172,34 @@ export function ConsultationRecordClient({ report, patient, doctor, appointment,
 
         {/* Vitals */}
         {hasVitals && (
-          <Section icon={<Activity className="w-4 h-4 text-primary" />} title="Vitals">
+          <Section icon={<Activity className="w-4 h-4 text-primary" />} title={t("reports.vitals")}>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              {vitals!.systolic && vitals!.diastolic && <Vital label="Blood pressure" value={`${vitals!.systolic}/${vitals!.diastolic}`} unit="mmHg" />}
-              {vitals!.heart_rate && <Vital label="Heart rate" value={`${vitals!.heart_rate}`} unit="bpm" />}
-              {vitals!.temperature_c && <Vital label="Temperature" value={`${vitals!.temperature_c}`} unit="°C" />}
-              {vitals!.weight_kg && <Vital label="Weight" value={`${vitals!.weight_kg}`} unit="kg" />}
-              {vitals!.height_cm && <Vital label="Height" value={`${vitals!.height_cm}`} unit="cm" />}
+              {vitals!.systolic && vitals!.diastolic && <Vital label={t("reports.bloodPressure")} value={`${vitals!.systolic}/${vitals!.diastolic}`} unit="mmHg" />}
+              {vitals!.heart_rate && <Vital label={t("reports.heartRate")} value={`${vitals!.heart_rate}`} unit="bpm" />}
+              {vitals!.temperature_c && <Vital label={t("reports.temperature")} value={`${vitals!.temperature_c}`} unit="°C" />}
+              {vitals!.weight_kg && <Vital label={t("reports.weight")} value={`${vitals!.weight_kg}`} unit="kg" />}
+              {vitals!.height_cm && <Vital label={t("reports.height")} value={`${vitals!.height_cm}`} unit="cm" />}
             </div>
           </Section>
         )}
 
         {/* Diagnosis */}
-        <Section icon={<Stethoscope className="w-4 h-4 text-primary" />} title="Diagnosis">
-          <p className="text-sm text-foreground">{report.diagnosis?.trim() || <span className="text-muted-foreground">No diagnosis recorded.</span>}</p>
+        <Section icon={<Stethoscope className="w-4 h-4 text-primary" />} title={t("reports.diagnosis")}>
+          <p className="text-sm text-foreground">{report.diagnosis?.trim() || <span className="text-muted-foreground">{t("reports.noDiagnosis")}</span>}</p>
         </Section>
 
         {/* Report */}
-        <Section icon={<FileText className="w-4 h-4 text-primary" />} title="Clinical report">
+        <Section icon={<FileText className="w-4 h-4 text-primary" />} title={t("reports.clinicalReport")}>
           {reportText ? (
             <ReportContent text={reportText} className="text-sm" />
           ) : (
-            <p className="text-sm text-muted-foreground">No report written for this consultation.</p>
+            <p className="text-sm text-muted-foreground">{t("reports.noReport")}</p>
           )}
         </Section>
 
         {/* Prescriptions */}
         {rx.length > 0 && (
-          <Section icon={<Pill className="w-4 h-4 text-primary" />} title="Prescriptions">
+          <Section icon={<Pill className="w-4 h-4 text-primary" />} title={t("reports.prescriptions")}>
             <ul className="space-y-1.5">
               {rx.map((p, i) => (
                 <li key={i} className="flex items-baseline justify-between gap-3 text-sm border-b border-border/60 pb-1.5 last:border-0">
@@ -203,7 +213,7 @@ export function ConsultationRecordClient({ report, patient, doctor, appointment,
 
         {/* Billing */}
         {(codes.length > 0 || invoice) && (
-          <Section icon={<Receipt className="w-4 h-4 text-primary" />} title="Billing">
+          <Section icon={<Receipt className="w-4 h-4 text-primary" />} title={t("reports.billing")}>
             {codes.length > 0 && (
               <ul className="space-y-1.5 mb-3">
                 {codes.map((c) => (
@@ -220,19 +230,19 @@ export function ConsultationRecordClient({ report, patient, doctor, appointment,
             {invoice ? (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
-                  Invoice <span className="font-mono text-foreground">{invoice.invoice_number}</span> · {INVOICE_STATUS[invoice.status]}
+                  {t("reports.invoiceLabel")} <span className="font-mono text-foreground">{invoice.invoice_number}</span> · {t(INVOICE_STATUS_KEY[invoice.status])}
                 </span>
                 {invoice.total_cents != null && <span className="font-semibold text-foreground">{formatCents(invoice.total_cents)}</span>}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No invoice generated yet.</p>
+              <p className="text-sm text-muted-foreground">{t("reports.noInvoice")}</p>
             )}
           </Section>
         )}
 
         {/* Internal notes (doctor-only) */}
         {report.internal_notes?.trim() && (
-          <Section icon={<ClipboardList className="w-4 h-4 text-primary" />} title="Internal notes (not shared with patient)">
+          <Section icon={<ClipboardList className="w-4 h-4 text-primary" />} title={t("reports.internalNotes")}>
             <p className="text-sm text-foreground whitespace-pre-wrap">{report.internal_notes}</p>
           </Section>
         )}
@@ -242,17 +252,17 @@ export function ConsultationRecordClient({ report, patient, doctor, appointment,
       <AlertDialog open={signOpen} onOpenChange={(o) => !o && setSignOpen(false)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sign and finalise this record?</AlertDialogTitle>
+            <AlertDialogTitle>{t("reports.signConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Once signed, this consultation record becomes part of {patient?.name ?? "the patient"}&apos;s permanent
-              medical history and <strong>can no longer be edited</strong> (§630f retention). It will also be available
-              to the AI assistant for this patient&apos;s history and records search.
+              {t("reports.signConfirmDesc1", { name: patient?.name ?? t("reports.thePatient") })}
+              <strong>{t("reports.signConfirmDescStrong")}</strong>
+              {t("reports.signConfirmDesc2")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmSign} disabled={isPending}>
-              {isPending ? "Signing…" : "Sign & finalise"}
+              {isPending ? t("reports.signing") : t("reports.signFinalise")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

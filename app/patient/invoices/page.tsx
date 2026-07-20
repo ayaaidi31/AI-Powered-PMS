@@ -6,14 +6,16 @@
  * patient is not invoiced).
  */
 import { getCurrentPatient, getInvoicesByPatient } from "@/lib/queries"
+import { getT } from "@/lib/i18n/server"
 import { PatientInvoicesClient } from "./invoices-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function PatientInvoicesPage() {
+  const { t } = await getT()
   const patient = await getCurrentPatient()
   if (!patient) {
-    return <div className="p-8 text-muted-foreground">No patient account found.</div>
+    return <div className="p-8 text-muted-foreground">{t("patientRecords.noPatientAccount")}</div>
   }
   const invoices = await getInvoicesByPatient(patient.id)
   return (

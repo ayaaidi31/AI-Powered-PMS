@@ -2,8 +2,11 @@
  * Pure clinical-safety helpers. The deterministic allergy name-match is the
  * guaranteed layer behind the AI safety check (lib/actions/ai.ts) — a prescribed
  * drug whose name contains (or is contained by) a documented allergy substance.
- * Dependency-free for unit testing.
+ * Only a type is imported (erased at runtime), so it stays dependency-free for
+ * unit testing.
  */
+import type { TFunction } from "@/lib/i18n/translate"
+
 export interface SafetyAlert {
   severity: "high" | "medium" | "low"
   category: "allergy" | "interaction" | "contraindication" | "dosing" | "duplicate" | "other"
@@ -11,10 +14,15 @@ export interface SafetyAlert {
   message: string
 }
 
-/** Flag prescriptions whose name matches a documented allergy (always caught). */
+/**
+ * Flag prescriptions whose name matches a documented allergy (always caught).
+ * The translator is injected so the message is localized; the substance and
+ * medication names are shown as-is (data).
+ */
 export function matchAllergyAlerts(
   allergies: string[],
   prescriptions: { medication: string }[],
+  t: TFunction,
 ): SafetyAlert[] {
   const out: SafetyAlert[] = []
   for (const p of prescriptions) {
@@ -27,7 +35,7 @@ export function matchAllergyAlerts(
           severity: "high",
           category: "allergy",
           medication: p.medication,
-          message: `Documented allergy to ${a} — "${p.medication}" appears to match. Verify before prescribing.`,
+          message: t("safety.allergyMatch", { substance: a, medication: p.medication }),
         })
       }
     }

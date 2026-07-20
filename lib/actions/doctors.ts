@@ -16,6 +16,8 @@ import { getCurrentDoctor, getAppointmentsByDoctor, getReportsByDoctor } from "@
 import type { DoctorRow } from "@/lib/seed-data"
 import { doctorSchema } from "@/lib/validation"
 import { requireStaff } from "@/lib/auth/guard"
+import { getT } from "@/lib/i18n/server"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 import { ok, fail, type ActionResult } from "./types"
 
 export async function updateDoctor(
@@ -89,8 +91,9 @@ export async function getDoctorNotifications(): Promise<DoctorNotification[]> {
     getReportsByDoctor(doctor.id),
   ])
 
+  const { t, locale } = await getT()
   const todayStr = new Date().toDateString()
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" })
 
   const notifications: DoctorNotification[] = []
 
@@ -100,8 +103,8 @@ export async function getDoctorNotifications(): Promise<DoctorNotification[]> {
       notifications.push({
         id: `wait-${a.id}`,
         kind: "waiting",
-        title: `${a.patient_name} is waiting`,
-        description: `Checked in · ${fmtTime(a.starts_at)} appointment`,
+        title: t("notify.patientWaiting", { name: a.patient_name }),
+        description: t("notify.checkedInAppt", { time: fmtTime(a.starts_at) }),
         href: "/doctor/workspace",
       })
     }
@@ -113,7 +116,8 @@ export async function getDoctorNotifications(): Promise<DoctorNotification[]> {
       notifications.push({
         id: `report-${r.id}`,
         kind: "report",
-        title: "Report awaiting approval",
+        title: t("notify.reportAwaiting"),
+        // Patient name and diagnosis are data, shown as-is (not translated).
         description: `${r.patient_name}${r.diagnosis ? ` · ${r.diagnosis}` : ""}`,
         href: "/doctor/reports",
       })

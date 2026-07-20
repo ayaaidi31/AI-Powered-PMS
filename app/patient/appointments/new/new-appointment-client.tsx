@@ -7,8 +7,10 @@
  * check and double-booking guard (REQ-SCHED-03) before creating the record.
  *
  * With a `reschedule` context (Feature 4 — UC-PAT-03) the same wizard EDITS an
- * existing appointment: the doctor is locked, and submission calls
- * `rescheduleAppointment` to move the slot in place rather than creating a new one.
+ * existing appointment: the patient may change the doctor, the date/time and the
+ * reason for visit. Submission calls `rescheduleAppointment`, which applies all
+ * changes in one transaction (re-running the availability and double-booking
+ * guards against the chosen doctor) rather than creating a new record.
  */
 import { useEffect, useState } from "react"
 import Link from "next/link"
@@ -24,8 +26,11 @@ import { toast } from "sonner"
 import type { DoctorRow } from "@/lib/seed-data"
 import { doctorName } from "@/lib/display"
 import { bookAppointment, rescheduleAppointment, getDoctorDayAvailability, type DaySlot } from "@/lib/actions/appointments"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 
-const daysOfWeek = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+const weekdayKeys = ["su", "mo", "tu", "we", "th", "fr", "sa"] as const
 
 /** When set, the wizard edits an existing appointment (same doctor) instead of booking a new one. */
 export interface RescheduleContext {
@@ -44,6 +49,8 @@ export function NewAppointmentClient({
   reschedule?: RescheduleContext | null
 }) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
   const [step, setStep] = useState(1)
   const [selectedDoctor, setSelectedDoctor] = useState<string>(reschedule?.doctorId ?? "")
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -120,8 +127,8 @@ export function NewAppointmentClient({
   }
 
   async function handleSubmit() {
-    if (!selectedDoctor || !selectedDate || !selectedTime || (!reschedule && !reason.trim())) {
-      toast.error("Please fill in all required fields")
+    if (!selectedDoctor || !selectedDate || !selectedTime || !reason.trim()) {
+      toast.error(t("patient.fillRequired"))
       return
     }
     // Build the absolute start instant from the chosen date and time.
@@ -132,7 +139,10 @@ export function NewAppointmentClient({
 
     setIsSubmitting(true)
     const result = reschedule
-      ? await rescheduleAppointment(reschedule.id, startsAt, { durationMin: 30, enforce24hWindow: true })
+      ? await rescheduleAppointment(reschedule.id, startsAt, {
+          durationMin: 30, enforce24hWindow: true,
+          newDoctorId: selectedDoctor, reason: reason.trim(),
+        })
       : await bookAppointment({
           patient_id: patientId, doctor_id: selectedDoctor,
           starts_at: startsAt, duration_min: 30, reason, source: "online",
@@ -140,7 +150,7 @@ export function NewAppointmentClient({
     setIsSubmitting(false)
 
     if (result.status === "ok") {
-      toast.success(reschedule ? "Appointment rescheduled." : "Appointment booked successfully!")
+      toast.success(reschedule ? t("patient.appointmentUpdated") : t("patient.bookedSuccess"))
       router.push("/patient/appointments")
       router.refresh()
     } else {
@@ -154,9 +164,9 @@ export function NewAppointmentClient({
       <div className="border-b border-border bg-muted">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center gap-2 text-sm">
-            <Link href="/patient/dashboard" className="text-muted-foreground hover:text-foreground">Dashboard</Link>
+            <Link href="/patient/dashboard" className="text-muted-foreground hover:text-foreground">{t("patient.nav.dashboard")}</Link>
             <span className="text-muted-foreground">/</span>
-            <span className="font-medium text-foreground">{reschedule ? "Reschedule Appointment" : "Book New Appointment"}</span>
+            <span className="font-medium text-foreground">{reschedule ? t("patient.editAppointment") : t("patient.bookNewAppointment")}</span>
           </div>
         </div>
       </div>
@@ -185,18 +195,18 @@ export function NewAppointmentClient({
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-bold">1</div>
                 <div>
-                  <CardTitle>Select Doctor / Department</CardTitle>
+                  <CardTitle>{t("patient.selectDoctorDept")}</CardTitle>
                   <CardDescription>
-                    {reschedule ? "Rescheduling keeps the same doctor — only the time changes." : "Choose your preferred healthcare provider"}
+                    {reschedule ? t("patient.changeOrKeepDoctor") : t("patient.chooseProvider")}
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label>Healthcare Provider</Label>
-                <Select value={selectedDoctor} onValueChange={setSelectedDoctor} disabled={!!reschedule}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Select a doctor" /></SelectTrigger>
+                <Label>{t("patient.healthcareProvider")}</Label>
+                <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder={t("patient.selectADoctor")} /></SelectTrigger>
                   <SelectContent>
                     {doctors.map((doc) => (
                       <SelectItem key={doc.id} value={doc.id}>
@@ -220,7 +230,7 @@ export function NewAppointmentClient({
 
               <div className="flex justify-end">
                 <Button onClick={() => setStep(2)} disabled={!selectedDoctor}>
-                  Continue <ChevronRight className="w-4 h-4 ml-2" />
+                  {t("patient.continue")} <ChevronRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
             </CardContent>
@@ -235,8 +245,8 @@ export function NewAppointmentClient({
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-bold">2</div>
                   <div>
-                    <CardTitle>Select Date & Time</CardTitle>
-                    <CardDescription>Pick your preferred appointment slot</CardDescription>
+                    <CardTitle>{t("patient.selectDateTime")}</CardTitle>
+                    <CardDescription>{t("patient.pickSlot")}</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -244,13 +254,13 @@ export function NewAppointmentClient({
                 <div>
                   <div className="flex items-center justify-between mb-4">
                     <Button variant="ghost" size="icon" onClick={prevMonth}><ChevronLeft className="w-4 h-4" /></Button>
-                    <span className="font-medium">{currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
+                    <span className="font-medium">{currentMonth.toLocaleDateString(INTL_LOCALE[locale], { month: "long", year: "numeric" })}</span>
                     <Button variant="ghost" size="icon" onClick={nextMonth}><ChevronRight className="w-4 h-4" /></Button>
                   </div>
 
                   <div className="grid grid-cols-7 gap-1 mb-2">
-                    {daysOfWeek.map((day) => (
-                      <div key={day} className="text-center text-xs font-medium text-muted-foreground py-2">{day}</div>
+                    {weekdayKeys.map((day) => (
+                      <div key={day} className="text-center text-xs font-medium text-muted-foreground py-2">{t(`patient.weekday.${day}` as TKey)}</div>
                     ))}
                   </div>
 
@@ -278,18 +288,18 @@ export function NewAppointmentClient({
 
                 {selectedDate && (
                   <div>
-                    <Label className="mb-3 block">Available Times</Label>
+                    <Label className="mb-3 block">{t("patient.availableTimes")}</Label>
                     {loadingSlots ? (
                       <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Checking availability…
+                        <Loader2 className="w-4 h-4 animate-spin" /> {t("patient.checkingAvailability")}
                       </div>
                     ) : daySlots.length === 0 ? (
                       <p className="text-sm text-muted-foreground py-4">
-                        No times could be loaded for this day. Please choose another date.
+                        {t("patient.noTimesLoaded")}
                       </p>
                     ) : daySlots.every((s) => !s.available) ? (
                       <p className="text-sm text-muted-foreground py-4">
-                        This day is fully booked. Please choose another date.
+                        {t("patient.fullyBooked")}
                       </p>
                     ) : (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -298,7 +308,7 @@ export function NewAppointmentClient({
                             key={time}
                             onClick={() => available && setSelectedTime(time)}
                             disabled={!available}
-                            title={available ? undefined : "Not available"}
+                            title={available ? undefined : t("patient.notAvailable")}
                             className={`p-3 text-sm rounded-md border transition-colors ${
                               selectedTime === time ? "bg-primary text-primary-foreground border-primary"
                                 : !available ? "border-border bg-muted text-muted-foreground/50 line-through cursor-not-allowed"
@@ -314,16 +324,16 @@ export function NewAppointmentClient({
                 )}
 
                 <div className="flex justify-between">
-                  <Button variant="outline" onClick={() => setStep(1)}><ChevronLeft className="w-4 h-4 mr-2" />Back</Button>
+                  <Button variant="outline" onClick={() => setStep(1)}><ChevronLeft className="w-4 h-4 mr-2" />{t("patient.back")}</Button>
                   <Button onClick={() => setStep(3)} disabled={!selectedDate || !selectedTime}>
-                    Continue <ChevronRight className="w-4 h-4 ml-2" />
+                    {t("patient.continue")} <ChevronRight className="w-4 h-4 ml-2" />
                   </Button>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-lg">Appointment Summary</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-lg">{t("patient.appointmentSummary")}</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 {doctor && (
                   <div className="flex items-start gap-3">
@@ -338,7 +348,7 @@ export function NewAppointmentClient({
                   <div className="flex items-start gap-3">
                     <Calendar className="w-5 h-5 text-primary mt-0.5" />
                     <p className="font-medium">
-                      {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                      {selectedDate.toLocaleDateString(INTL_LOCALE[locale], { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
                     </p>
                   </div>
                 )}
@@ -347,7 +357,7 @@ export function NewAppointmentClient({
                     <Clock className="w-5 h-5 text-primary mt-0.5" />
                     <div>
                       <p className="font-medium">{selectedTime}</p>
-                      <p className="text-sm text-muted-foreground">30 minutes</p>
+                      <p className="text-sm text-muted-foreground">{t("patient.minutes30")}</p>
                     </div>
                   </div>
                 )}
@@ -363,8 +373,8 @@ export function NewAppointmentClient({
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-primary text-primary-foreground rounded-lg flex items-center justify-center font-bold">3</div>
                 <div>
-                  <CardTitle>{reschedule ? "Confirm Reschedule" : "Confirm Your Booking"}</CardTitle>
-                  <CardDescription>Review and confirm your appointment details</CardDescription>
+                  <CardTitle>{reschedule ? t("patient.confirmChanges") : t("patient.confirmBooking")}</CardTitle>
+                  <CardDescription>{t("patient.reviewConfirm")}</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -373,7 +383,7 @@ export function NewAppointmentClient({
                 <div className="flex items-start gap-3">
                   <User className="w-5 h-5 text-primary mt-0.5" />
                   <div>
-                    <p className="text-sm text-muted-foreground">Doctor</p>
+                    <p className="text-sm text-muted-foreground">{t("patient.doctorLabel")}</p>
                     <p className="font-medium">{doctor && doctorName(doctor)}</p>
                     <p className="text-sm text-muted-foreground">{doctor?.department}</p>
                   </div>
@@ -381,43 +391,36 @@ export function NewAppointmentClient({
                 <div className="flex items-start gap-3">
                   <Calendar className="w-5 h-5 text-primary mt-0.5" />
                   <div>
-                    <p className="text-sm text-muted-foreground">Date & Time</p>
+                    <p className="text-sm text-muted-foreground">{t("patient.dateTimeLabel")}</p>
                     <p className="font-medium">
-                      {selectedDate?.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at {selectedTime}
+                      {t("patient.dateTimeAt", { date: selectedDate?.toLocaleDateString(INTL_LOCALE[locale], { weekday: "long", month: "long", day: "numeric" }) ?? "", time: selectedTime })}
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="reason">{reschedule ? "Reason for Visit" : "Reason for Visit *"}</Label>
+                <Label htmlFor="reason">{t("patient.reasonForVisit")} *</Label>
                 <Textarea
                   id="reason"
-                  placeholder="Please briefly describe the reason for your visit..."
+                  placeholder={t("patient.reasonPlaceholder")}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   rows={4}
-                  disabled={!!reschedule}
                 />
-                {reschedule && (
-                  <p className="text-xs text-muted-foreground">
-                    Rescheduling only changes the date and time. To change the reason or doctor, cancel and book a new appointment.
-                  </p>
-                )}
               </div>
 
               <Alert>
                 <AlertCircle className="w-4 h-4" />
                 <AlertDescription>
-                  By confirming, you agree to arrive 10 minutes before your scheduled time.
-                  Cancellations must be made at least 24 hours in advance.
+                  {t("patient.confirmDisclaimer")}
                 </AlertDescription>
               </Alert>
 
               <div className="flex justify-between">
-                <Button variant="outline" onClick={() => setStep(2)}><ChevronLeft className="w-4 h-4 mr-2" />Back</Button>
-                <Button onClick={handleSubmit} disabled={(!reschedule && !reason.trim()) || isSubmitting}>
-                  {isSubmitting ? (reschedule ? "Rescheduling..." : "Booking...") : (reschedule ? "Confirm Reschedule" : "Confirm Booking")}
+                <Button variant="outline" onClick={() => setStep(2)}><ChevronLeft className="w-4 h-4 mr-2" />{t("patient.back")}</Button>
+                <Button onClick={handleSubmit} disabled={!reason.trim() || isSubmitting}>
+                  {isSubmitting ? (reschedule ? t("patient.saving") : t("patient.booking")) : (reschedule ? t("patient.saveChanges") : t("patient.confirmBookingBtn"))}
                   {!isSubmitting && <Check className="w-4 h-4 ml-2" />}
                 </Button>
               </div>

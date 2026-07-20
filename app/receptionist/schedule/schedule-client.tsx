@@ -35,10 +35,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import type { DoctorRow, PatientRow } from "@/lib/seed-data"
-import { patientName, doctorName, statusColor, statusLabel, bookingSource } from "@/lib/display"
+import { patientName, doctorName, statusColor, bookingSource } from "@/lib/display"
 import type { AppointmentWithNames } from "@/lib/queries"
 import { bookAppointment, checkInAppointment, cancelAppointment, rescheduleAppointment, revertCheckIn, reassignAppointment, deleteAppointment } from "@/lib/actions/appointments"
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 
 const TIME_SLOTS = [
   "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
@@ -54,6 +57,8 @@ interface Props {
 
 export function ScheduleClient({ appointments, doctors, patients }: Props) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
   const [isPending, startTransition] = useTransition()
 
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -119,7 +124,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
 
   function handleBook() {
     if (!form.patientId || !form.doctorId || !form.date || !form.time) {
-      toast.error("Please select a patient, doctor, date and time.")
+      toast.error(t("receptionMgmt.bookValidation"))
       return
     }
     // Combine the date and time into an absolute instant for the server.
@@ -130,7 +135,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
         starts_at: startsAt, duration_min: 30, reason: form.reason, source: "manual",
       })
       if (result.status === "ok") {
-        toast.success("Appointment booked.")
+        toast.success(t("receptionMgmt.bookedToast"))
         setIsBookingOpen(false)
         setForm({ patientId: "", doctorId: "", date: "", time: "", reason: "" })
         router.refresh()
@@ -145,7 +150,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
     startTransition(async () => {
       const result = await checkInAppointment(checkInTarget.id)
       if (result.status === "ok") {
-        toast.success("Patient checked in.")
+        toast.success(t("receptionMgmt.checkedInToast"))
         router.refresh()
       } else {
         toast.error(result.message)
@@ -158,7 +163,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
     startTransition(async () => {
       const result = await revertCheckIn(apt.id)
       if (result.status === "ok") {
-        toast.success("Check-in undone — appointment back to scheduled.")
+        toast.success(t("receptionMgmt.checkInUndoneToast"))
         router.refresh()
       } else {
         toast.error(result.message)
@@ -168,11 +173,11 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
 
   function confirmDeleteAppt(reason: string) {
     if (!deleteApptTarget) return
-    const t = deleteApptTarget
+    const target = deleteApptTarget
     startTransition(async () => {
-      const result = await deleteAppointment(t.id, reason)
+      const result = await deleteAppointment(target.id, reason)
       if (result.status === "ok") {
-        toast.success("Appointment deleted.")
+        toast.success(t("receptionMgmt.apptDeletedToast"))
         router.refresh()
         setDeleteApptTarget(null)
       } else {
@@ -188,12 +193,12 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
 
   function confirmReassign() {
     if (!reassignTarget) return
-    if (!reassignDoctorId) { toast.error("Pick a doctor."); return }
+    if (!reassignDoctorId) { toast.error(t("receptionMgmt.pickDoctor")); return }
     if (reassignDoctorId === reassignTarget.doctor_id) { setReassignTarget(null); return }
     startTransition(async () => {
       const result = await reassignAppointment(reassignTarget.id, reassignDoctorId, { reasonForChange: "Reassigned by reception" })
       if (result.status === "ok") {
-        toast.success("Appointment reassigned.")
+        toast.success(t("receptionMgmt.reassignedToast"))
         router.refresh()
         setReassignTarget(null)
       } else {
@@ -210,12 +215,12 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
 
   function confirmReschedule() {
     if (!rescheduleTarget) return
-    if (!rescheduleForm.date || !rescheduleForm.time) { toast.error("Pick a date and time."); return }
+    if (!rescheduleForm.date || !rescheduleForm.time) { toast.error(t("receptionMgmt.pickDateTime")); return }
     const startsAt = new Date(`${rescheduleForm.date}T${rescheduleForm.time}:00`).toISOString()
     startTransition(async () => {
       const result = await rescheduleAppointment(rescheduleTarget.id, startsAt, { reasonForChange: "Rescheduled by reception" })
       if (result.status === "ok") {
-        toast.success("Appointment rescheduled.")
+        toast.success(t("receptionMgmt.rescheduledToast"))
         router.refresh()
         setRescheduleTarget(null)
       } else {
@@ -239,7 +244,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
     startTransition(async () => {
       const result = await cancelAppointment(cancelTarget.id, { reasonForChange: "Cancelled by reception" })
       if (result.status === "ok") {
-        toast.success("Appointment cancelled.")
+        toast.success(t("receptionMgmt.cancelledToast"))
         router.refresh()
       } else {
         toast.error(result.message)
@@ -253,25 +258,25 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
   const apptMenuItems = (apt: AppointmentWithNames) => (
     <>
       {apt.status === "scheduled" && (
-        <DropdownMenuItem onClick={() => setCheckInTarget(apt)} disabled={isPending}>Check In Patient</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setCheckInTarget(apt)} disabled={isPending}>{t("receptionMgmt.menuCheckIn")}</DropdownMenuItem>
       )}
       {apt.status === "waiting" && (
-        <DropdownMenuItem onClick={() => undoCheckIn(apt)} disabled={isPending}>Undo Check-in</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => undoCheckIn(apt)} disabled={isPending}>{t("receptionMgmt.menuUndoCheckIn")}</DropdownMenuItem>
       )}
       {(apt.status === "scheduled" || apt.status === "waiting") && (
-        <DropdownMenuItem onClick={() => openReschedule(apt)} disabled={isPending}>Reschedule</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => openReschedule(apt)} disabled={isPending}>{t("receptionMgmt.menuReschedule")}</DropdownMenuItem>
       )}
       {(apt.status === "scheduled" || apt.status === "waiting") && (
-        <DropdownMenuItem onClick={() => openReassign(apt)} disabled={isPending}>Reassign doctor</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => openReassign(apt)} disabled={isPending}>{t("receptionMgmt.menuReassign")}</DropdownMenuItem>
       )}
       {apt.status === "scheduled" && (
-        <DropdownMenuItem className="text-destructive" onClick={() => setCancelTarget(apt)} disabled={isPending}>Cancel</DropdownMenuItem>
+        <DropdownMenuItem className="text-destructive" onClick={() => setCancelTarget(apt)} disabled={isPending}>{t("receptionMgmt.menuCancel")}</DropdownMenuItem>
       )}
       {(apt.status === "scheduled" || apt.status === "cancelled" || apt.status === "no_show") && (
-        <DropdownMenuItem className="text-destructive" onClick={() => setDeleteApptTarget(apt)} disabled={isPending}>Delete (mistake)</DropdownMenuItem>
+        <DropdownMenuItem className="text-destructive" onClick={() => setDeleteApptTarget(apt)} disabled={isPending}>{t("receptionMgmt.menuDelete")}</DropdownMenuItem>
       )}
       {apt.status !== "scheduled" && apt.status !== "waiting" && apt.status !== "cancelled" && apt.status !== "no_show" && (
-        <DropdownMenuItem disabled>No actions available</DropdownMenuItem>
+        <DropdownMenuItem disabled>{t("receptionMgmt.menuNoActions")}</DropdownMenuItem>
       )}
     </>
   )
@@ -281,30 +286,30 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Schedule</h1>
-          <p className="text-muted-foreground">Manage appointments and schedules</p>
+          <h1 className="text-2xl font-bold text-foreground">{t("receptionMgmt.scheduleTitle")}</h1>
+          <p className="text-muted-foreground">{t("receptionMgmt.scheduleSubtitle")}</p>
         </div>
         <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2" onClick={() => setForm({ patientId: "", doctorId: "", date: "", time: "", reason: "" })}>
               <Plus className="w-4 h-4" />
-              Book Appointment
+              {t("receptionMgmt.bookAppointment")}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Book New Appointment</DialogTitle>
+              <DialogTitle>{t("receptionMgmt.bookDialogTitle")}</DialogTitle>
               <DialogDescription>
                 {form.date && form.time
-                  ? `New appointment on ${new Date(`${form.date}T00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} at ${form.time}`
-                  : "Schedule a new appointment for a patient"}
+                  ? t("receptionMgmt.bookDialogDescSlot", { date: new Date(`${form.date}T00:00`).toLocaleDateString(INTL_LOCALE[locale], { weekday: "long", month: "long", day: "numeric" }), time: form.time })
+                  : t("receptionMgmt.bookDialogDesc")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-4">
               <div className="space-y-2">
-                <Label>Patient</Label>
+                <Label>{t("receptionMgmt.labelPatient")}</Label>
                 <Select value={form.patientId} onValueChange={(v) => setForm({ ...form, patientId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select patient" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t("receptionMgmt.selectPatient")} /></SelectTrigger>
                   <SelectContent>
                     {patients.map((p) => (
                       <SelectItem key={p.id} value={p.id}>{patientName(p)}</SelectItem>
@@ -313,9 +318,9 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Doctor</Label>
+                <Label>{t("receptionMgmt.labelDoctor")}</Label>
                 <Select value={form.doctorId} onValueChange={(v) => setForm({ ...form, doctorId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select doctor" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t("receptionMgmt.selectDoctor")} /></SelectTrigger>
                   <SelectContent>
                     {doctors.map((d) => (
                       <SelectItem key={d.id} value={d.id}>{doctorName(d)} — {d.department}</SelectItem>
@@ -325,29 +330,29 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Date</Label>
+                  <Label>{t("receptionMgmt.labelDate")}</Label>
                   <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Time</Label>
+                  <Label>{t("receptionMgmt.labelTime")}</Label>
                   <Select value={form.time} onValueChange={(v) => setForm({ ...form, time: v })}>
-                    <SelectTrigger><SelectValue placeholder="Time" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t("receptionMgmt.timePlaceholder")} /></SelectTrigger>
                     <SelectContent>
-                      {TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      {TIME_SLOTS.map((slot) => <SelectItem key={slot} value={slot}>{slot}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Reason for Visit</Label>
+                <Label>{t("receptionMgmt.labelReason")}</Label>
                 <Textarea
-                  placeholder="Brief description of the visit reason..."
+                  placeholder={t("receptionMgmt.reasonPlaceholder")}
                   value={form.reason}
                   onChange={(e) => setForm({ ...form, reason: e.target.value })}
                 />
               </div>
               <Button className="w-full" onClick={handleBook} disabled={isPending}>
-                {isPending ? "Booking…" : "Book Appointment"}
+                {isPending ? t("receptionMgmt.booking") : t("receptionMgmt.bookAppointment")}
               </Button>
             </div>
           </DialogContent>
@@ -362,20 +367,20 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
               <Button variant="outline" size="icon" onClick={() => shiftWeek(-7)}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              <Button variant="outline" onClick={goToday}>Today</Button>
+              <Button variant="outline" onClick={goToday}>{t("receptionMgmt.today")}</Button>
               <Button variant="outline" size="icon" onClick={() => shiftWeek(7)}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
               <span className="ml-2 font-medium text-foreground text-sm sm:text-base">
-                {weekDates[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {weekDates[4].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                {weekDates[0].toLocaleDateString(INTL_LOCALE[locale], { month: "short", day: "numeric" })} – {weekDates[4].toLocaleDateString(INTL_LOCALE[locale], { month: "short", day: "numeric", year: "numeric" })}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
               <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
-                <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Filter by doctor" /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder={t("receptionMgmt.filterByDoctor")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Doctors</SelectItem>
+                  <SelectItem value="all">{t("receptionMgmt.allDoctors")}</SelectItem>
                   {doctors.map((d) => <SelectItem key={d.id} value={d.id}>{doctorName(d)}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -392,7 +397,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
               <div className="w-16" />
               {weekDates.map((date, idx) => (
                 <div key={idx} className={`text-center p-3 rounded-lg ${isToday(date) ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                  <p className="text-sm font-medium">{date.toLocaleDateString("en-US", { weekday: "short" })}</p>
+                  <p className="text-sm font-medium">{date.toLocaleDateString(INTL_LOCALE[locale], { weekday: "short" })}</p>
                   <p className="text-lg font-bold">{date.getDate()}</p>
                 </div>
               ))}
@@ -408,7 +413,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                       <div
                         key={dayIdx}
                         onClick={() => openBookingAt(date, time)}
-                        title={`Book on ${date.toLocaleDateString("en-US", { weekday: "short", day: "numeric" })} at ${time}`}
+                        title={t("receptionMgmt.bookSlotTooltip", { day: date.toLocaleDateString(INTL_LOCALE[locale], { weekday: "short", day: "numeric" }), time })}
                         className="group relative min-h-[60px] border border-border rounded-lg p-1 bg-card hover:bg-accent/40 hover:border-primary/40 transition-colors cursor-pointer"
                       >
                         {slotAppointments.length === 0 && (
@@ -458,7 +463,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                         : "border-border text-muted-foreground hover:bg-accent"
                   }`}
                 >
-                  <span className="text-[10px] uppercase">{date.toLocaleDateString("en-US", { weekday: "narrow" })}</span>
+                  <span className="text-[10px] uppercase">{date.toLocaleDateString(INTL_LOCALE[locale], { weekday: "narrow" })}</span>
                   <span className="text-sm font-bold">{date.getDate()}</span>
                 </button>
               )
@@ -468,10 +473,10 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
           {/* Selected day heading + quick book */}
           <div className="flex items-center justify-between mb-3">
             <p className="font-semibold text-foreground">
-              {mobileDate.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+              {mobileDate.toLocaleDateString(INTL_LOCALE[locale], { weekday: "long", month: "short", day: "numeric" })}
             </p>
             <Button size="sm" variant="outline" className="gap-1" onClick={() => openBookingAt(mobileDate, "09:00")}>
-              <Plus className="w-3.5 h-3.5" /> Book
+              <Plus className="w-3.5 h-3.5" /> {t("receptionMgmt.book")}
             </Button>
           </div>
 
@@ -479,7 +484,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
           {(() => {
             const dayAppts = appointmentsForDay(mobileDate)
             if (dayAppts.length === 0) {
-              return <p className="text-sm text-muted-foreground py-10 text-center">No appointments this day.</p>
+              return <p className="text-sm text-muted-foreground py-10 text-center">{t("receptionMgmt.noAppointmentsDay")}</p>
             }
             return (
               <div className="space-y-2">
@@ -494,7 +499,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
                       <p className="font-medium text-foreground truncate">{apt.patient_name}</p>
                       <p className="text-xs text-muted-foreground truncate">{apt.doctor_name}</p>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{statusLabel(apt.status)}</span>
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{t(`status.${apt.status}` as TKey)}</span>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded border ${bookingSource(apt.source).className}`}>{bookingSource(apt.source).label}</span>
                       </div>
                     </div>
@@ -516,13 +521,13 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
 
       {/* Legend */}
       <div className="mt-4 flex flex-wrap gap-4">
-        {[
-          ["bg-primary", "Scheduled"], ["bg-yellow-500", "Waiting"], ["bg-blue-500", "In Progress"],
-          ["bg-green-500", "Completed"], ["bg-red-500", "Cancelled"],
-        ].map(([color, label]) => (
-          <div key={label} className="flex items-center gap-2">
+        {([
+          ["bg-primary", "scheduled"], ["bg-yellow-500", "waiting"], ["bg-blue-500", "in_progress"],
+          ["bg-green-500", "completed"], ["bg-red-500", "cancelled"],
+        ] as const).map(([color, statusKey]) => (
+          <div key={statusKey} className="flex items-center gap-2">
             <div className={`w-3 h-3 rounded-full ${color}`} />
-            <span className="text-sm text-muted-foreground">{label}</span>
+            <span className="text-sm text-muted-foreground">{t(`status.${statusKey}` as TKey)}</span>
           </div>
         ))}
       </div>
@@ -531,20 +536,20 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
       <AlertDialog open={cancelTarget !== null} onOpenChange={(o) => !o && setCancelTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel this appointment?</AlertDialogTitle>
+            <AlertDialogTitle>{t("receptionMgmt.cancelDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {cancelTarget && `${cancelTarget.patient_name}'s appointment with ${cancelTarget.doctor_name} will be cancelled and the time slot freed. `}
-              This cannot be undone. (Only appointments before check-in can be cancelled.)
+              {cancelTarget && `${t("receptionMgmt.cancelDialogDescLead", { patient: cancelTarget.patient_name, doctor: cancelTarget.doctor_name })} `}
+              {t("receptionMgmt.cancelDialogDescTail")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Keep Appointment</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t("receptionMgmt.keepAppointment")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmCancel}
               disabled={isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Cancel Appointment
+              {t("receptionMgmt.cancelAppointmentBtn")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -554,14 +559,14 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
       <AlertDialog open={checkInTarget !== null} onOpenChange={(o) => !o && setCheckInTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Check in this patient?</AlertDialogTitle>
+            <AlertDialogTitle>{t("receptionMgmt.checkInDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {checkInTarget && `${checkInTarget.patient_name} will be marked as checked in (waiting) for ${checkInTarget.doctor_name} and will appear in the doctor's workspace.`}
+              {checkInTarget && t("receptionMgmt.checkInDialogDesc", { patient: checkInTarget.patient_name, doctor: checkInTarget.doctor_name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmCheckIn} disabled={isPending}>Check In</AlertDialogAction>
+            <AlertDialogCancel disabled={isPending}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCheckIn} disabled={isPending}>{t("receptionMgmt.checkIn")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -572,25 +577,25 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
           {rescheduleTarget && (
             <>
               <DialogHeader>
-                <DialogTitle>Reschedule appointment</DialogTitle>
+                <DialogTitle>{t("receptionMgmt.rescheduleDialogTitle")}</DialogTitle>
                 <DialogDescription>{rescheduleTarget.patient_name} · {rescheduleTarget.doctor_name}</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>New date</Label>
+                    <Label>{t("receptionMgmt.labelNewDate")}</Label>
                     <Input type="date" value={rescheduleForm.date} onChange={(e) => setRescheduleForm({ ...rescheduleForm, date: e.target.value })} />
                   </div>
                   <div className="space-y-2">
-                    <Label>New time</Label>
+                    <Label>{t("receptionMgmt.labelNewTime")}</Label>
                     <Select value={rescheduleForm.time} onValueChange={(v) => setRescheduleForm({ ...rescheduleForm, time: v })}>
-                      <SelectTrigger><SelectValue placeholder="Time" /></SelectTrigger>
-                      <SelectContent>{TIME_SLOTS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                      <SelectTrigger><SelectValue placeholder={t("receptionMgmt.timePlaceholder")} /></SelectTrigger>
+                      <SelectContent>{TIME_SLOTS.map((slot) => <SelectItem key={slot} value={slot}>{slot}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>
                 <Button className="w-full" onClick={confirmReschedule} disabled={isPending}>
-                  {isPending ? "Saving…" : "Save new time"}
+                  {isPending ? t("receptionMgmt.saving") : t("receptionMgmt.saveNewTime")}
                 </Button>
               </div>
             </>
@@ -604,27 +609,27 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
           {reassignTarget && (
             <>
               <DialogHeader>
-                <DialogTitle>Reassign to another doctor</DialogTitle>
+                <DialogTitle>{t("receptionMgmt.reassignDialogTitle")}</DialogTitle>
                 <DialogDescription>
-                  {reassignTarget.patient_name} · {new Date(reassignTarget.starts_at).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}
+                  {reassignTarget.patient_name} · {new Date(reassignTarget.starts_at).toLocaleString(INTL_LOCALE[locale], { dateStyle: "medium", timeStyle: "short" })}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="space-y-2">
-                  <Label>Doctor</Label>
+                  <Label>{t("receptionMgmt.labelDoctor")}</Label>
                   <Select value={reassignDoctorId} onValueChange={setReassignDoctorId}>
-                    <SelectTrigger><SelectValue placeholder="Select doctor" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t("receptionMgmt.selectDoctor")} /></SelectTrigger>
                     <SelectContent>
                       {doctors.map((d) => (
                         <SelectItem key={d.id} value={d.id}>
-                          {doctorName(d)}{d.is_available ? "" : " (off duty)"}
+                          {doctorName(d)}{d.is_available ? "" : t("receptionMgmt.offDutySuffix")}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <Button className="w-full" onClick={confirmReassign} disabled={isPending}>
-                  {isPending ? "Saving…" : "Reassign"}
+                  {isPending ? t("receptionMgmt.saving") : t("receptionMgmt.reassign")}
                 </Button>
               </div>
             </>
@@ -636,11 +641,11 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
         <ConfirmDeleteDialog
           open
           onOpenChange={(o) => !o && setDeleteApptTarget(null)}
-          title="Delete appointment"
-          description={`${deleteApptTarget.patient_name} · ${new Date(deleteApptTarget.starts_at).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}`}
-          consequence="Only for mistaken entries (wrong patient, duplicate, never happened). The appointment is permanently removed. Appointments with a report or invoice cannot be deleted — cancel them instead."
+          title={t("receptionMgmt.deleteDialogTitle")}
+          description={`${deleteApptTarget.patient_name} · ${new Date(deleteApptTarget.starts_at).toLocaleString(INTL_LOCALE[locale], { dateStyle: "medium", timeStyle: "short" })}`}
+          consequence={t("receptionMgmt.deleteConsequence")}
           confirmPhrase="DELETE"
-          confirmLabel="Delete permanently"
+          confirmLabel={t("receptionMgmt.deleteConfirmLabel")}
           pending={isPending}
           onConfirm={confirmDeleteAppt}
         />

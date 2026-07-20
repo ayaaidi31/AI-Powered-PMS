@@ -7,10 +7,13 @@
  */
 import { getCurrentDoctor } from "@/lib/queries"
 import { doctorName, initials } from "@/lib/display"
+import { getLocale } from "@/lib/i18n/server"
+import { messages } from "@/lib/i18n/messages"
+import { LocaleProvider } from "@/lib/i18n/locale-context"
 import { DoctorShell } from "./doctor-shell"
 
 export default async function DoctorLayout({ children }: { children: React.ReactNode }) {
-  const doctor = await getCurrentDoctor()
+  const [doctor, locale] = await Promise.all([getCurrentDoctor(), getLocale()])
   const profile = doctor
     ? {
         id: doctor.id,
@@ -23,5 +26,9 @@ export default async function DoctorLayout({ children }: { children: React.React
       }
     : { id: "", name: "Doctor", firstName: "Doctor", specialization: "", email: "", initials: "DR", isAvailable: true }
 
-  return <DoctorShell profile={profile}>{children}</DoctorShell>
+  return (
+    <LocaleProvider locale={locale} dict={messages[locale]}>
+      <DoctorShell profile={profile}>{children}</DoctorShell>
+    </LocaleProvider>
+  )
 }

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest"
-import { buildPatientNotifications, WINDOW_DAYS, type PatientNotifInput } from "@/lib/patient-notifications"
+import { buildPatientNotifications as bpnRaw, WINDOW_DAYS, type PatientNotifInput } from "@/lib/patient-notifications"
+import { en } from "@/lib/i18n/messages/en"
+import { translate, type TFunction } from "@/lib/i18n/translate"
+
+// Supply a real English translator so the assertions below check the resolved text.
+const t: TFunction = (key, vars) => translate(en, key, vars)
+const bpn = (input: PatientNotifInput) => bpnRaw(input, t)
 
 const NOW = Date.UTC(2026, 5, 15, 9, 0, 0) // fixed "now"
 const hours = (n: number) => new Date(NOW + n * 3_600_000).toISOString()
@@ -13,16 +19,16 @@ const base: PatientNotifInput = {
   pendingProposals: 0,
 }
 
-const kinds = (input: PatientNotifInput) => buildPatientNotifications(input).map((n) => n.kind)
-const ids = (input: PatientNotifInput) => buildPatientNotifications(input).map((n) => n.id)
+const kinds = (input: PatientNotifInput) => bpn(input).map((n) => n.kind)
+const ids = (input: PatientNotifInput) => bpn(input).map((n) => n.id)
 
 describe("buildPatientNotifications", () => {
   it("returns nothing when there is nothing to surface", () => {
-    expect(buildPatientNotifications(base)).toEqual([])
+    expect(bpn(base)).toEqual([])
   })
 
   it("flags a clinic-cancelled appointment (recent staff change)", () => {
-    const items = buildPatientNotifications({
+    const items = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: days(3), status: "cancelled", staff_modified_at: hours(-2) }],
     })
@@ -32,7 +38,7 @@ describe("buildPatientNotifications", () => {
   })
 
   it("flags a clinic-updated (still scheduled) appointment", () => {
-    const items = buildPatientNotifications({
+    const items = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: days(3), status: "scheduled", staff_modified_at: hours(-2) }],
     })
@@ -40,7 +46,7 @@ describe("buildPatientNotifications", () => {
   })
 
   it("does NOT flag a change the patient made themselves (no staff stamp)", () => {
-    const items = buildPatientNotifications({
+    const items = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: days(3), status: "scheduled", staff_modified_at: null }],
     })
@@ -48,7 +54,7 @@ describe("buildPatientNotifications", () => {
   })
 
   it("ignores a stale staff change (older than the window)", () => {
-    const items = buildPatientNotifications({
+    const items = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: days(3), status: "scheduled", staff_modified_at: days(-(WINDOW_DAYS + 1)) }],
     })
@@ -56,7 +62,7 @@ describe("buildPatientNotifications", () => {
   })
 
   it("offers same-day check-in for a visit today", () => {
-    const items = buildPatientNotifications({
+    const items = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: hours(2), status: "scheduled", staff_modified_at: null }],
     })
@@ -64,7 +70,7 @@ describe("buildPatientNotifications", () => {
   })
 
   it("reminds about an appointment within ~36h but not today", () => {
-    const items = buildPatientNotifications({
+    const items = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: hours(24), status: "scheduled", staff_modified_at: null }],
     })
@@ -72,11 +78,11 @@ describe("buildPatientNotifications", () => {
   })
 
   it("does not remind about a far-future or past appointment", () => {
-    const future = buildPatientNotifications({
+    const future = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: days(5), status: "scheduled", staff_modified_at: null }],
     })
-    const past = buildPatientNotifications({
+    const past = bpn({
       ...base,
       appointments: [{ id: "a2", starts_at: hours(-5), status: "scheduled", staff_modified_at: null }],
     })
@@ -85,7 +91,7 @@ describe("buildPatientNotifications", () => {
   })
 
   it("surfaces a recent approved report and links to it", () => {
-    const items = buildPatientNotifications({
+    const items = bpn({
       ...base,
       reports: [{ id: "r1", status: "approved", created_at: days(-1), approved_at: days(-1) }],
     })
@@ -117,7 +123,7 @@ describe("buildPatientNotifications", () => {
   })
 
   it("orders clinic-change alerts before reminders and other items", () => {
-    const items = buildPatientNotifications({
+    const items = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: hours(2), status: "scheduled", staff_modified_at: hours(-1) }],
       invoices: [{ id: "i1", status: "pending_payment", insurance_type: "pkv" }],

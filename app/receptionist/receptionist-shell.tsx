@@ -18,6 +18,9 @@ import { Input } from "@/components/ui/input"
 import { logout } from "@/lib/actions/auth"
 import { NotificationBell } from "@/components/notification-bell"
 import { getReceptionistNotifications } from "@/lib/actions/receptionists"
+import { LanguageToggle } from "@/components/language-toggle"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 export interface ReceptionistProfile {
   name: string
@@ -27,18 +30,20 @@ export interface ReceptionistProfile {
 }
 
 const navItems = [
-  { label: "Dashboard", href: "/receptionist/dashboard", icon: LayoutDashboard },
-  { label: "Schedule", href: "/receptionist/schedule", icon: Calendar },
-  { label: "Patients", href: "/receptionist/patients", icon: Users },
-  { label: "Waiting Room", href: "/receptionist/waiting", icon: Clock },
-  { label: "AI Call Agent", href: "/receptionist/calls", icon: PhoneCall },
-  { label: "Staff", href: "/receptionist/staff", icon: Stethoscope },
-  { label: "Billing", href: "/receptionist/billing", icon: Receipt },
-]
+  { labelKey: "reception.navDashboard", href: "/receptionist/dashboard", icon: LayoutDashboard },
+  { labelKey: "reception.navSchedule", href: "/receptionist/schedule", icon: Calendar },
+  { labelKey: "reception.navPatients", href: "/receptionist/patients", icon: Users },
+  { labelKey: "reception.navWaiting", href: "/receptionist/waiting", icon: Clock },
+  { labelKey: "reception.navCalls", href: "/receptionist/calls", icon: PhoneCall },
+  { labelKey: "reception.navStaff", href: "/receptionist/staff", icon: Stethoscope },
+  { labelKey: "reception.navBilling", href: "/receptionist/billing", icon: Receipt },
+] as const
 
 export function ReceptionistShell({ profile, children }: { profile: ReceptionistProfile; children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const handleLogout = async () => {
@@ -61,7 +66,7 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
             }`}
           >
             <item.icon className="w-5 h-5" />
-            {item.label}
+            {t(item.labelKey)}
           </Link>
         )
       })}
@@ -84,7 +89,7 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
         <div className="p-4 border-b border-border">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search patients..." className="pl-9" />
+            <Input placeholder={t("reception.searchPatients")} className="pl-9" />
           </div>
         </div>
 
@@ -115,10 +120,11 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
             <span className="font-bold text-foreground">AI-PMS Clinic</span>
           </Link>
           <div className="hidden lg:block text-sm text-muted-foreground">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+            {new Date().toLocaleDateString(INTL_LOCALE[locale], { weekday: "long", month: "long", day: "numeric" })}
           </div>
 
           <div className="flex items-center gap-2">
+            <LanguageToggle className="hidden sm:inline-flex" />
             <NotificationBell loader={getReceptionistNotifications} />
 
             {/* Account menu — mirrors the doctor and patient shells. */}
@@ -137,16 +143,19 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
                   <p className="text-xs font-normal text-muted-foreground truncate">{profile.department}</p>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <div className="sm:hidden px-2 py-1.5">
+                  <LanguageToggle />
+                </div>
                 <DropdownMenuItem asChild>
                   <Link href="/receptionist/settings" className="cursor-pointer">
                     <Settings className="w-4 h-4" />
-                    Settings
+                    {t("common.settings")}
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive cursor-pointer">
                   <LogOut className="w-4 h-4" />
-                  Logout
+                  {t("common.signOut")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -155,11 +164,11 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="lg:hidden">
                   <Menu className="w-5 h-5" />
-                  <span className="sr-only">Toggle menu</span>
+                  <span className="sr-only">{t("reception.toggleMenu")}</span>
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0">
-                <SheetTitle className="sr-only">Navigation</SheetTitle>
+                <SheetTitle className="sr-only">{t("reception.navigation")}</SheetTitle>
                 <div className="flex flex-col h-full">
                   <div className="h-16 flex items-center px-6 border-b border-border">
                     <div className="flex items-center gap-2">
@@ -176,7 +185,9 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
           </div>
         </header>
 
-        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">{children}</main>
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+          <div key={pathname} className="animate-fade-in">{children}</div>
+        </main>
       </div>
     </div>
   )

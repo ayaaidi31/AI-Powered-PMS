@@ -14,8 +14,10 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import type { ReceptionistRow } from "@/lib/seed-data"
 import { updateReceptionist } from "@/lib/actions/receptionists"
+import { useT } from "@/lib/i18n/locale-context"
 
 export function SettingsClient({ receptionist }: { receptionist: ReceptionistRow }) {
+  const t = useT()
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
@@ -32,7 +34,7 @@ export function SettingsClient({ receptionist }: { receptionist: ReceptionistRow
     const result = await updateReceptionist(receptionist.id, form)
     setSaving(false)
     if (result.status === "ok") {
-      toast.success("Profile updated.")
+      toast.success(t("reception.profileUpdated"))
       router.refresh()
     } else {
       toast.error(result.message)
@@ -42,31 +44,31 @@ export function SettingsClient({ receptionist }: { receptionist: ReceptionistRow
   return (
     <div className="p-6 lg:p-8 max-w-3xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-        <p className="text-muted-foreground">Manage your profile</p>
+        <h1 className="text-2xl font-bold text-foreground">{t("common.settings")}</h1>
+        <p className="text-muted-foreground">{t("reception.settingsSubtitle")}</p>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><User className="w-4 h-4 text-primary" />Profile</CardTitle>
-          <CardDescription>Your personal and contact details.</CardDescription>
+          <CardTitle className="text-base flex items-center gap-2"><User className="w-4 h-4 text-primary" />{t("reception.profile")}</CardTitle>
+          <CardDescription>{t("reception.profileDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="First name" icon={<User className="w-3.5 h-3.5" />}>
+            <Field label={t("reception.firstName")} icon={<User className="w-3.5 h-3.5" />}>
               <Input value={form.first_name} onChange={(e) => set("first_name", e.target.value)} />
             </Field>
-            <Field label="Last name" icon={<User className="w-3.5 h-3.5" />}>
+            <Field label={t("reception.lastName")} icon={<User className="w-3.5 h-3.5" />}>
               <Input value={form.last_name} onChange={(e) => set("last_name", e.target.value)} />
             </Field>
-            <Field label="Email" icon={<Mail className="w-3.5 h-3.5" />}>
+            <Field label={t("reception.email")} icon={<Mail className="w-3.5 h-3.5" />}>
               <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
             </Field>
-            <Field label="Phone" icon={<Phone className="w-3.5 h-3.5" />}>
+            <Field label={t("reception.phone")} icon={<Phone className="w-3.5 h-3.5" />}>
               <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="—" />
             </Field>
-            <Field label="Department" icon={<Building2 className="w-3.5 h-3.5" />}>
-              <Input value={form.department} onChange={(e) => set("department", e.target.value)} placeholder="e.g. Front Desk" />
+            <Field label={t("reception.department")} icon={<Building2 className="w-3.5 h-3.5" />}>
+              <Input value={form.department} onChange={(e) => set("department", e.target.value)} placeholder={t("reception.departmentPlaceholder")} />
             </Field>
           </div>
         </CardContent>
@@ -75,7 +77,7 @@ export function SettingsClient({ receptionist }: { receptionist: ReceptionistRow
       <div className="flex justify-end">
         <Button className="gap-2" onClick={handleSave} disabled={saving}>
           <Save className="w-4 h-4" />
-          {saving ? "Saving…" : "Save Changes"}
+          {saving ? t("reception.saving") : t("reception.saveChanges")}
         </Button>
       </div>
     </div>

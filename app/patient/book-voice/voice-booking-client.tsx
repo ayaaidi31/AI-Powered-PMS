@@ -20,6 +20,7 @@ import {
   type VoiceLang,
   type VoiceAction,
 } from "@/lib/actions/voice"
+import { useT } from "@/lib/i18n/locale-context"
 
 type Status = "idle" | "thinking" | "speaking" | "listening" | "ended"
 interface Bubble { role: "assistant" | "user"; text: string }
@@ -88,6 +89,7 @@ function pickVoice(voices: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynth
 }
 
 export function VoiceBookingClient({ patientFirstName }: { patientFirstName: string }) {
+  const t = useT()
   const [status, setStatus] = useState<Status>("idle")
   const [bubbles, setBubbles] = useState<Bubble[]>([])
   const [interim, setInterim] = useState("")
@@ -342,9 +344,9 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
 
   const inCall = status !== "idle" && status !== "ended"
   const statusLabel =
-    status === "listening" ? (lang === "de" ? "Ich höre zu…" : "Listening…")
-    : status === "thinking" ? (lang === "de" ? "Einen Moment…" : "One moment…")
-    : status === "speaking" ? (lang === "de" ? "Spricht…" : "Speaking…")
+    status === "listening" ? t("patientProfile.voiceListening")
+    : status === "thinking" ? t("patientProfile.voiceThinking")
+    : status === "speaking" ? t("patientProfile.voiceSpeaking")
     : ""
 
   return (
@@ -360,12 +362,12 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-foreground">
-            {status === "idle" ? (lang === "de" ? "KI-Terminassistent" : "AI appointment assistant")
-              : status === "ended" ? (lang === "de" ? "Gespräch beendet" : "Conversation ended")
+            {status === "idle" ? t("patientProfile.voiceAssistantName")
+              : status === "ended" ? t("patientProfile.voiceEnded")
               : statusLabel}
           </p>
           <p className="text-xs text-muted-foreground">
-            {lang === "de" ? "Termin buchen · verschieben · absagen" : "Book · reschedule · cancel"}
+            {t("patientProfile.voiceActions")}
           </p>
         </div>
         {!inCall && (
@@ -380,7 +382,7 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
         )}
         {inCall && (
           <Button variant="destructive" size="sm" className="gap-1.5" onClick={endCall}>
-            <PhoneOff className="w-4 h-4" /> {lang === "de" ? "Beenden" : "End"}
+            <PhoneOff className="w-4 h-4" /> {t("patientProfile.voiceEnd")}
           </Button>
         )}
       </div>
@@ -391,9 +393,7 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
           <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground gap-3">
             <Phone className="w-10 h-10 opacity-40" />
             <p className="max-w-xs text-sm">
-              {lang === "de"
-                ? `Hallo ${patientFirstName}! Starten Sie das Gespräch und sagen Sie einfach, ob Sie einen Termin buchen, verschieben oder absagen möchten.`
-                : `Hi ${patientFirstName}! Start the conversation and just say whether you'd like to book, reschedule, or cancel an appointment.`}
+              {t("patientProfile.voiceGreeting", { name: patientFirstName })}
             </p>
           </div>
         )}
@@ -421,12 +421,12 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
       <div className="px-5 py-4 border-t border-border space-y-3">
         {status === "idle" || status === "ended" ? (
           <Button className="w-full gap-2" size="lg" onClick={startCall}>
-            <Phone className="w-4 h-4" /> {status === "ended" ? (lang === "de" ? "Neues Gespräch" : "New conversation") : (lang === "de" ? "Gespräch starten" : "Start conversation")}
+            <Phone className="w-4 h-4" /> {status === "ended" ? t("patientProfile.voiceNewConversation") : t("patientProfile.voiceStartConversation")}
           </Button>
         ) : (
           <form onSubmit={submitText} className="flex items-center gap-2">
             <Input value={textInput} onChange={(e) => setTextInput(e.target.value)}
-              placeholder={sttSupported ? (lang === "de" ? "Sprechen Sie – oder tippen Sie hier…" : "Speak — or type here…") : (lang === "de" ? "Tippen Sie Ihre Nachricht…" : "Type your message…")}
+              placeholder={sttSupported ? t("patientProfile.voicePlaceholderSpeak") : t("patientProfile.voicePlaceholderType")}
               className="flex-1" />
             <Button type="submit" size="icon" variant="outline" disabled={!textInput.trim()}>
               <Send className="w-4 h-4" />
@@ -435,7 +435,7 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
         )}
         {!sttSupported && inCall && (
           <p className="text-xs text-amber-600">
-            {lang === "de" ? "Spracherkennung wird in diesem Browser nicht unterstützt — bitte tippen. (Chrome empfohlen.)" : "Speech recognition isn't supported here — please type. (Chrome recommended.)"}
+            {t("patientProfile.voiceSttUnsupported")}
           </p>
         )}
       </div>

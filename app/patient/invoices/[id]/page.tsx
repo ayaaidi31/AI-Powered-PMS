@@ -4,19 +4,21 @@
  */
 import { getCurrentPatient, getInvoiceById, getAppointmentBillingItems } from "@/lib/queries"
 import { patientName } from "@/lib/display"
+import { getT } from "@/lib/i18n/server"
 import { InvoicePrintClient } from "./invoice-print-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function PatientInvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { t } = await getT()
   const { id } = await params
   const patient = await getCurrentPatient()
   if (!patient) {
-    return <div className="p-8 text-muted-foreground">No patient account found.</div>
+    return <div className="p-8 text-muted-foreground">{t("patientRecords.noPatientAccount")}</div>
   }
   const invoice = await getInvoiceById(id)
   if (!invoice || invoice.patient_id !== patient.id || invoice.status === "storno") {
-    return <div className="p-8 text-muted-foreground">Invoice not found.</div>
+    return <div className="p-8 text-muted-foreground">{t("patientRecords.invoiceNotFound")}</div>
   }
   const items = await getAppointmentBillingItems(invoice.appointment_id)
 

@@ -33,19 +33,22 @@ import {
 import { toast } from "sonner"
 import type { PatientDocumentRow, DocumentCategory } from "@/lib/seed-data"
 import { uploadPatientDocument, deletePatientDocument } from "@/lib/actions/documents"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 
-const CATEGORIES: { value: DocumentCategory; label: string }[] = [
-  { value: "xray", label: "X-Ray" },
-  { value: "mri", label: "MRI" },
-  { value: "ct", label: "CT Scan" },
-  { value: "ultrasound", label: "Ultrasound" },
-  { value: "lab", label: "Lab Result" },
-  { value: "prescription", label: "Prescription" },
-  { value: "referral", label: "Referral" },
-  { value: "discharge", label: "Discharge Letter" },
-  { value: "other", label: "Other" },
-]
-const categoryLabel = (c: string) => CATEGORIES.find((x) => x.value === c)?.label ?? "Document"
+const CATEGORY_KEY: Record<DocumentCategory, TKey> = {
+  xray: "documents.catXray",
+  mri: "documents.catMri",
+  ct: "documents.catCt",
+  ultrasound: "documents.catUltrasound",
+  lab: "documents.catLab",
+  prescription: "documents.catPrescription",
+  referral: "documents.catReferral",
+  discharge: "documents.catDischarge",
+  other: "documents.catOther",
+}
+const CATEGORY_VALUES = Object.keys(CATEGORY_KEY) as DocumentCategory[]
 
 function categoryIcon(category: string, mime: string) {
   if (["xray", "mri", "ct", "ultrasound"].includes(category) || mime.startsWith("image/")) {
@@ -61,8 +64,6 @@ function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 
 export interface PatientDocumentsProps {
   patientId: string
@@ -83,6 +84,11 @@ export function PatientDocuments({
   patientId, documents, canUpload, viewerRole, currentUserId, appointmentId, compact,
 }: PatientDocumentsProps) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(INTL_LOCALE[locale], { month: "short", day: "numeric", year: "numeric" })
+  const categoryLabel = (c: string) => t(CATEGORY_KEY[c as DocumentCategory] ?? "documents.catDocument")
   const [uploadOpen, setUploadOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [title, setTitle] = useState("")
@@ -104,8 +110,8 @@ export function PatientDocuments({
 
   function submitUpload() {
     const file = fileRef.current?.files?.[0]
-    if (!title.trim()) { toast.error("Please enter a title."); return }
-    if (!file) { toast.error("Please choose a file."); return }
+    if (!title.trim()) { toast.error(t("documents.errNoTitle")); return }
+    if (!file) { toast.error(t("documents.errNoFile")); return }
 
     const form = new FormData()
     form.set("patient_id", patientId)
@@ -118,7 +124,7 @@ export function PatientDocuments({
     startTransition(async () => {
       const result = await uploadPatientDocument(form)
       if (result.status === "ok") {
-        toast.success("Document uploaded.")
+        toast.success(t("documents.uploaded"))
         setUploadOpen(false)
         resetForm()
         router.refresh()
@@ -133,7 +139,7 @@ export function PatientDocuments({
     startTransition(async () => {
       const result = await deletePatientDocument(deleteId)
       if (result.status === "ok") {
-        toast.success("Document removed.")
+        toast.success(t("documents.removed"))
         router.refresh()
       } else {
         toast.error(result.message)
@@ -149,15 +155,17 @@ export function PatientDocuments({
           <div>
             <CardTitle className={compact ? "text-sm flex items-center gap-2" : "text-base flex items-center gap-2"}>
               <FileImage className="w-4 h-4 text-primary" />
-              Documents
+              {t("documents.title")}
             </CardTitle>
             <CardDescription>
-              {documents.length} file{documents.length !== 1 ? "s" : ""} · imaging, lab results, referrals
+              {documents.length === 1
+                ? t("documents.fileCountOne", { count: documents.length })
+                : t("documents.fileCountMany", { count: documents.length })} · {t("documents.fileSubtitle")}
             </CardDescription>
           </div>
           {canUpload && (
             <Button size="sm" className="gap-2" onClick={() => setUploadOpen(true)}>
-              <Plus className="w-4 h-4" /> Upload
+              <Plus className="w-4 h-4" /> {t("documents.upload")}
             </Button>
           )}
         </div>
@@ -167,7 +175,7 @@ export function PatientDocuments({
           <div className="text-center py-6">
             <FileImage className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
             <p className="text-sm text-muted-foreground">
-              No documents yet.{canUpload ? " Use “Upload” to attach one." : ""}
+              {t("documents.noDocuments")}{canUpload ? t("documents.noDocumentsHint") : ""}
             </p>
           </div>
         ) : (
@@ -191,19 +199,19 @@ export function PatientDocuments({
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button asChild variant="ghost" size="icon" title="View">
+                  <Button asChild variant="ghost" size="icon" title={t("documents.view")}>
                     <a href={`/api/documents/${d.id}`} target="_blank" rel="noopener noreferrer">
                       <Eye className="w-4 h-4" />
                     </a>
                   </Button>
-                  <Button asChild variant="ghost" size="icon" title="Download">
+                  <Button asChild variant="ghost" size="icon" title={t("documents.download")}>
                     <a href={`/api/documents/${d.id}?download=1`}>
                       <Download className="w-4 h-4" />
                     </a>
                   </Button>
                   {canDelete(d) && (
                     <Button
-                      variant="ghost" size="icon" title="Remove"
+                      variant="ghost" size="icon" title={t("documents.remove")}
                       className="text-destructive hover:text-destructive"
                       onClick={() => setDeleteId(d.id)}
                     >
@@ -222,50 +230,50 @@ export function PatientDocuments({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-primary" /> Upload document
+              <Upload className="w-5 h-5 text-primary" /> {t("documents.uploadTitle")}
             </DialogTitle>
             <DialogDescription>
-              Attach an image, PDF, or DICOM file (up to 15 MB) to the record.
+              {t("documents.uploadDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="doc-title">Title</Label>
+              <Label htmlFor="doc-title">{t("documents.titleLabel")}</Label>
               <Input
-                id="doc-title" placeholder="e.g. Chest X-Ray, left lateral"
+                id="doc-title" placeholder={t("documents.titlePlaceholder")}
                 value={title} onChange={(e) => setTitle(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="doc-category">Type</Label>
+              <Label htmlFor="doc-category">{t("documents.typeLabel")}</Label>
               <Select value={category} onValueChange={(v) => setCategory(v as DocumentCategory)}>
                 <SelectTrigger id="doc-category"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  {CATEGORY_VALUES.map((c) => (
+                    <SelectItem key={c} value={c}>{categoryLabel(c)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="doc-description">Description</Label>
+              <Label htmlFor="doc-description">{t("documents.descriptionLabel")}</Label>
               <Textarea
-                id="doc-description" rows={3} placeholder="Add any notes about this document (optional)."
+                id="doc-description" rows={3} placeholder={t("documents.descPlaceholder")}
                 value={description} onChange={(e) => setDescription(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="doc-file">File</Label>
+              <Label htmlFor="doc-file">{t("documents.fileLabel")}</Label>
               <Input id="doc-file" type="file" ref={fileRef}
                 accept="image/*,application/pdf,.dcm,application/dicom" />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { resetForm(); setUploadOpen(false) }} disabled={isPending}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={submitUpload} disabled={isPending} className="gap-2">
-              <Upload className="w-4 h-4" /> {isPending ? "Uploading…" : "Upload"}
+              <Upload className="w-4 h-4" /> {isPending ? t("documents.uploading") : t("documents.upload")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -275,18 +283,18 @@ export function PatientDocuments({
       <AlertDialog open={deleteId !== null} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove document</AlertDialogTitle>
+            <AlertDialogTitle>{t("documents.removeTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This document will be removed from the record. This action cannot be undone from the interface.
+              {t("documents.removeDesc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Keep</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t("documents.keep")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete} disabled={isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Remove
+              {t("documents.remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

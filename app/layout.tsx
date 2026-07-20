@@ -2,6 +2,9 @@ import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from '@/components/ui/sonner'
+import { getLocale } from '@/lib/i18n/server'
+import { messages } from '@/lib/i18n/messages'
+import { LocaleProvider } from '@/lib/i18n/locale-context'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -41,15 +44,18 @@ export const viewport: Viewport = {
   userScalable: false,
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const locale = await getLocale()
   return (
-    <html lang="en" className="bg-background">
-      <body className="font-sans antialiased min-h-screen" suppressHydrationWarning>
-        {children}
+    <html lang={locale} className="bg-background">
+      <body className="font-sans antialiased min-h-screen">
+        <LocaleProvider locale={locale} dict={messages[locale]}>
+          {children}
+        </LocaleProvider>
         <Toaster />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

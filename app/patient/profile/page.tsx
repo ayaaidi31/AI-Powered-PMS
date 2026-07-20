@@ -7,14 +7,16 @@
 import { getCurrentPatient, getPatientClinical } from "@/lib/queries"
 import { getPendingProfileProposals } from "@/lib/actions/profile-proposals"
 import { getTwoFactorStatus } from "@/lib/actions/auth"
+import { getT } from "@/lib/i18n/server"
 import { ProfileClient } from "./profile-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function PatientProfilePage() {
+  const { t } = await getT()
   const patient = await getCurrentPatient()
   if (!patient) {
-    return <div className="p-8 text-muted-foreground">No patient account found.</div>
+    return <div className="p-8 text-muted-foreground">{t("patientProfile.noPatientAccount")}</div>
   }
   const [clinical, proposals, twoFactor] = await Promise.all([
     getPatientClinical(patient.id),

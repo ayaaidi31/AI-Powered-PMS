@@ -22,8 +22,11 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
-import { initials, statusLabel, type AppointmentStatusDb } from "@/lib/display"
+import { initials } from "@/lib/display"
 import { checkInAppointment, cancelAppointment } from "@/lib/actions/appointments"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 
 export interface TodayAppointment {
   id: string
@@ -48,6 +51,8 @@ const STATUS_STYLE: Record<string, { color: string; text: string; bg: string }> 
 const styleFor = (s: string) => STATUS_STYLE[s] ?? STATUS_STYLE.scheduled
 
 export function DashboardSchedule({ appointments }: { appointments: TodayAppointment[] }) {
+  const t = useT()
+  const locale = useLocale()
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [search, setSearch] = useState("")
@@ -57,19 +62,19 @@ export function DashboardSchedule({ appointments }: { appointments: TodayAppoint
     .filter((a) => `${a.patientName} ${a.doctorName}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => +new Date(a.startsAt) - +new Date(b.startsAt))
 
-  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" })
 
   function run(action: Promise<{ status: string; message?: string }>, success: string) {
     startTransition(async () => {
       const result = await action
       if (result.status === "ok") { toast.success(success); router.refresh() }
-      else toast.error(result.message ?? "Action failed.")
+      else toast.error(result.message ?? t("reception.actionFailed"))
     })
   }
 
   function confirmCancel() {
     if (!cancelTarget) return
-    run(cancelAppointment(cancelTarget.id, { reasonForChange: "Cancelled by reception" }), "Appointment cancelled.")
+    run(cancelAppointment(cancelTarget.id, { reasonForChange: "Cancelled by reception" }), t("reception.appointmentCancelled"))
     setCancelTarget(null)
   }
 
@@ -79,15 +84,15 @@ export function DashboardSchedule({ appointments }: { appointments: TodayAppoint
       <CardHeader className="pb-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" />Today&apos;s Schedule</CardTitle>
-            <CardDescription>{filtered.length} appointments</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5 text-primary" />{t("reception.todaysSchedule")}</CardTitle>
+            <CardDescription>{t("reception.appointmentsCount", { count: filtered.length })}</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative flex-1 sm:flex-initial">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search patients..." className="pl-9 w-full sm:w-[200px]" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <Input placeholder={t("reception.searchPatients")} className="pl-9 w-full sm:w-[200px]" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <Link href="/receptionist/schedule" className="shrink-0"><Button variant="outline" size="sm" className="gap-1">View All <ArrowRight className="w-4 h-4" /></Button></Link>
+            <Link href="/receptionist/schedule" className="shrink-0"><Button variant="outline" size="sm" className="gap-1">{t("reception.viewAll")} <ArrowRight className="w-4 h-4" /></Button></Link>
           </div>
         </div>
       </CardHeader>
@@ -98,21 +103,21 @@ export function DashboardSchedule({ appointments }: { appointments: TodayAppoint
               const st = styleFor(a.status)
               return (
                 <div key={a.id} className={`group flex items-center gap-4 p-4 rounded-xl border transition-all hover:shadow-md ${a.status === "waiting" ? "border-amber-200 bg-amber-50/50" : a.status === "in_progress" ? "border-blue-200 bg-blue-50/50" : "border-border hover:border-primary/30"}`}>
-                  <div className="text-center min-w-[70px]"><p className="font-bold text-foreground">{formatTime(a.startsAt)}</p><p className="text-xs text-muted-foreground">{a.durationMin} min</p></div>
+                  <div className="text-center min-w-[70px]"><p className="font-bold text-foreground">{formatTime(a.startsAt)}</p><p className="text-xs text-muted-foreground">{t("reception.minutes", { count: a.durationMin })}</p></div>
                   <div className={`w-1.5 h-14 rounded-full ${st.color}`} />
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <Avatar className="w-10 h-10 border-2 border-background shadow"><AvatarFallback className={`${st.bg} ${st.text} font-semibold text-sm`}>{initials(...a.patientName.split(" ") as [string, string])}</AvatarFallback></Avatar>
                     <div className="min-w-0 flex-1"><p className="font-semibold text-foreground truncate">{a.patientName}</p><p className="text-sm text-muted-foreground truncate">{a.reason}</p></div>
                   </div>
                   <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground"><Stethoscope className="w-4 h-4" /><span className="truncate max-w-[120px]">{a.doctorName}</span></div>
-                  <Badge className={`${st.bg} ${st.text} border-0 whitespace-nowrap`}>{statusLabel(a.status as AppointmentStatusDb)}</Badge>
+                  <Badge className={`${st.bg} ${st.text} border-0 whitespace-nowrap`}>{t(`status.${a.status}` as TKey)}</Badge>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><MoreHorizontal className="w-4 h-4" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem disabled={isPending || a.status !== "scheduled"} onClick={() => run(checkInAppointment(a.id), "Patient checked in.")}>Check In Patient</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive" disabled={isPending} onClick={() => setCancelTarget(a)}>Cancel</DropdownMenuItem>
+                      <DropdownMenuItem disabled={isPending || a.status !== "scheduled"} onClick={() => run(checkInAppointment(a.id), t("reception.patientCheckedIn"))}>{t("reception.checkInPatient")}</DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive" disabled={isPending} onClick={() => setCancelTarget(a)}>{t("common.cancel")}</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -120,7 +125,7 @@ export function DashboardSchedule({ appointments }: { appointments: TodayAppoint
             })}
           </div>
         ) : (
-          <div className="text-center py-12 text-muted-foreground"><Calendar className="w-16 h-16 mx-auto mb-4 opacity-30" /><p className="font-medium">No appointments found</p></div>
+          <div className="text-center py-12 text-muted-foreground"><Calendar className="w-16 h-16 mx-auto mb-4 opacity-30" /><p className="font-medium">{t("reception.noAppointmentsFound")}</p></div>
         )}
       </CardContent>
     </Card>
@@ -128,20 +133,20 @@ export function DashboardSchedule({ appointments }: { appointments: TodayAppoint
     <AlertDialog open={cancelTarget !== null} onOpenChange={(o) => !o && setCancelTarget(null)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Cancel this appointment?</AlertDialogTitle>
+          <AlertDialogTitle>{t("reception.cancelTitle")}</AlertDialogTitle>
           <AlertDialogDescription>
-            {cancelTarget && `${cancelTarget.patientName}'s appointment will be cancelled and the slot freed. `}
-            This cannot be undone. (Only appointments before check-in can be cancelled.)
+            {cancelTarget && t("reception.cancelDescName", { name: cancelTarget.patientName }) + " "}
+            {t("reception.cancelDescNote")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Keep Appointment</AlertDialogCancel>
+          <AlertDialogCancel disabled={isPending}>{t("reception.keepAppointment")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={confirmCancel}
             disabled={isPending}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            Cancel Appointment
+            {t("reception.cancelAppointment")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

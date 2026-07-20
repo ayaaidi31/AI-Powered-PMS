@@ -14,10 +14,11 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog"
+import { useT } from "@/lib/i18n/locale-context"
 
 export function ConfirmDeleteDialog({
   open, onOpenChange, title, description, consequence, confirmPhrase,
-  confirmLabel = "Delete", destructive = true, pending = false, onConfirm,
+  confirmLabel, destructive = true, pending = false, onConfirm,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -32,6 +33,7 @@ export function ConfirmDeleteDialog({
   pending?: boolean
   onConfirm: (reason: string) => void
 }) {
+  const t = useT()
   const [typed, setTyped] = useState("")
   const [reason, setReason] = useState("")
 
@@ -58,25 +60,25 @@ export function ConfirmDeleteDialog({
             {consequence}
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Reason (required, recorded in the audit trail)</Label>
-            <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why is this being removed?" className="min-h-[64px] field-sizing-fixed" />
+            <Label className="text-xs text-muted-foreground">{t("confirmDelete.reasonLabel")}</Label>
+            <Textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("confirmDelete.reasonPlaceholder")} className="min-h-[64px] field-sizing-fixed" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
-              Type <span className="font-semibold text-foreground">{confirmPhrase}</span> to confirm
+              {t("confirmDelete.typePrefix")} <span className="font-semibold text-foreground">{confirmPhrase}</span> {t("confirmDelete.typeSuffix")}
             </Label>
             <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={confirmPhrase} autoComplete="off" />
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>{t("common.cancel")}</Button>
           <Button
             variant={destructive ? "destructive" : "default"}
             disabled={!ready}
             onClick={() => onConfirm(reason.trim())}
           >
-            {pending ? "Working…" : confirmLabel}
+            {pending ? t("confirmDelete.working") : (confirmLabel ?? t("confirmDelete.delete"))}
           </Button>
         </DialogFooter>
       </DialogContent>

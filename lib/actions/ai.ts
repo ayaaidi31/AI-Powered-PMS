@@ -32,7 +32,8 @@ import { matchAllergyAlerts, type SafetyAlert } from "@/lib/clinical-safety"
 export type { SafetyAlert } from "@/lib/clinical-safety"
 import { ok, fail, type ActionResult } from "./types"
 import type { CodeSuggestion } from "./codes"
-import { languageDirective } from "@/lib/ai-language"
+import { languageDirective, directiveFor, type UiAiLang } from "@/lib/ai-language"
+import { getT } from "@/lib/i18n/server"
 import { requireDoctor, requireStaff, requireSession } from "@/lib/auth/guard"
 
 /** Format a vitals row into a compact clinical string (German units). */
@@ -51,6 +52,8 @@ interface ReportInput {
   diagnosis?: string
   treatment?: string
   context?: { conditions: string[]; allergies: string[]; medications: string[]; vitals?: string | null }
+  /** Language the generated report should be written in (chosen at the feature). */
+  lang?: UiAiLang
 }
 
 /** Turn the doctor's rough notes into a structured, formal clinical report. */
@@ -86,7 +89,7 @@ export async function generateConsultationReport(
             "Use the sections: History, Findings, Diagnosis, Treatment/Plan. " +
             "If vitals are provided, include them in the Findings. " +
             "Do not invent findings, values or diagnoses that are not in the notes or vitals. Do not include personal identifiers. " +
-            languageDirective(),
+            directiveFor(input.lang),
         },
         {
           role: "user",
@@ -276,7 +279,7 @@ export async function extractVitals(text: string): Promise<ActionResult<Extracte
  * report in plain, reassuring language a layperson can understand. Strictly
  * explanatory — it must not invent findings, diagnoses or recommendations.
  */
-export async function simplifyReport(reportText: string): Promise<ActionResult<{ summary: string }>> {
+export async function simplifyReport(reportText: string, lang?: UiAiLang): Promise<ActionResult<{ summary: string }>> {
   const g = await requireSession()
   if (!g.ok) return g.error
   if (!isLlmConfigured()) {
@@ -294,7 +297,7 @@ export async function simplifyReport(reportText: string): Promise<ActionResult<{
             "Keep the tone calm and matter-of-fact. Structure it briefly: what was found, what it means, and what happens next. " +
             "Do not invent anything: explain only what is in the report; give no new diagnoses or treatment " +
             "recommendations. Address the person directly (\"you\"). " +
-            languageDirective(),
+            directiveFor(lang),
         },
         { role: "user", content: reportText.slice(0, 6000) },
       ],
@@ -411,6 +414,7 @@ export async function summarizePatientHistory(input: {
   medications: string[]
   vitals?: string | null
   visits: { date: string; reason: string | null; status: string; diagnosis: string | null }[]
+  lang?: UiAiLang
 }): Promise<ActionResult<{ summary: string }>> {
   const g = await requireDoctor()
   if (!g.ok) return g.error
@@ -444,7 +448,7 @@ export async function summarizePatientHistory(input: {
             "diagnoses, allergies and medication, and what to pay particular attention to today. " +
             "Use ONLY the supplied data; do not invent findings or diagnoses. " +
             "Keep it short: at most about six bullet points. " +
-            languageDirective(),
+            directiveFor(input.lang),
         },
         {
           role: "user",
@@ -579,6 +583,7 @@ export async function askDecisionSupport(input: {
   diagnosis?: string
   patient?: PatientContext
   history?: { role: "user" | "assistant"; content: string }[]
+  lang?: UiAiLang
 }): Promise<ActionResult<{ answer: string; sources: DecisionSource[]; via: string; grounded: boolean }>> {
   const g = await requireDoctor()
   if (!g.ok) return g.error
@@ -626,7 +631,7 @@ export async function askDecisionSupport(input: {
             "If the CONTEXT does not answer the question, or only partially, say so explicitly and do not guess; " +
             "invent nothing. Make NO final diagnostic or therapeutic decision — you only support; " +
             "the decision is the doctor's. Answer professionally, in a structured and concise way. " +
-            languageDirective(),
+            directiveFor(input.lang),
         },
         ...recent,
         {
@@ -679,11 +684,12 @@ export async function checkPrescriptionSafety(input: {
 }): Promise<ActionResult<{ alerts: SafetyAlert[] }>> {
   const g = await requireDoctor()
   if (!g.ok) return g.error
+  const { t, locale } = await getT()
   const rx = input.prescriptions.filter((p) => p.medication.trim())
   if (rx.length === 0 && !input.diagnosis?.trim()) return ok({ alerts: [] })
 
-  // 1) Deterministic allergy name-match (guaranteed, no model).
-  const deterministic: SafetyAlert[] = matchAllergyAlerts(input.allergies, rx)
+  // 1) Deterministic allergy name-match (guaranteed, no model), localized.
+  const deterministic: SafetyAlert[] = matchAllergyAlerts(input.allergies, rx, t)
 
   if (!isLlmConfigured()) return ok({ alerts: deterministic })
 
@@ -706,8 +712,9 @@ export async function checkPrescriptionSafety(input: {
             "contraindication given a listed condition; (3) a well-known dangerous drug–drug interaction with a " +
             "current medication; (4) obvious duplicate therapy. Be conservative: if you are not confident it is a " +
             "real, well-known issue, do NOT flag it. Never invent allergies, conditions or interactions. " +
-            'Respond ONLY as JSON: {"alerts":[{"severity":"high|medium|low","category":"allergy|interaction|contraindication|dosing|duplicate|other","medication":"name","message":"short, specific, actionable, in English"}]}. ' +
-            "Empty list if nothing is clearly wrong.",
+            'Respond ONLY as JSON: {"alerts":[{"severity":"high|medium|low","category":"allergy|interaction|contraindication|dosing|duplicate|other","medication":"name","message":"short, specific, actionable"}]}. ' +
+            "Empty list if nothing is clearly wrong. " +
+            directiveFor(locale),
         },
         { role: "user", content: payload },
       ],
@@ -751,6 +758,7 @@ export async function askPatientRecordsQA(input: {
   patientId: string
   question: string
   history?: { role: "user" | "assistant"; content: string }[]
+  lang?: UiAiLang
 }): Promise<ActionResult<{ answer: string; sources: RecordSource[]; grounded: boolean }>> {
   // Doctor-only clinical tool — a patient must never read another patient's records.
   const g = await requireDoctor()
@@ -804,7 +812,7 @@ export async function askPatientRecordsQA(input: {
             "For every statement, cite the source with [1], [2] etc. (matching the reports in the CONTEXT). " +
             "If the information is NOT in the records, say so explicitly: that nothing on this is found in this " +
             "patient's records — do not guess or invent. Stay factual and concise. " +
-            languageDirective(),
+            directiveFor(input.lang),
         },
         ...recent,
         { role: "user", content: `Question: ${input.question}\n\nCONTEXT (this patient's records, most recent first):\n${context}` },

@@ -6,10 +6,13 @@
  */
 import { getCurrentReceptionist } from "@/lib/queries"
 import { initials } from "@/lib/display"
+import { getLocale } from "@/lib/i18n/server"
+import { messages } from "@/lib/i18n/messages"
+import { LocaleProvider } from "@/lib/i18n/locale-context"
 import { ReceptionistShell } from "./receptionist-shell"
 
 export default async function ReceptionistLayout({ children }: { children: React.ReactNode }) {
-  const r = await getCurrentReceptionist()
+  const [r, locale] = await Promise.all([getCurrentReceptionist(), getLocale()])
   const profile = r
     ? {
         name: `${r.first_name} ${r.last_name}`,
@@ -19,5 +22,9 @@ export default async function ReceptionistLayout({ children }: { children: React
       }
     : { name: "Reception Staff", department: "Front Desk", email: "", initials: "RS" }
 
-  return <ReceptionistShell profile={profile}>{children}</ReceptionistShell>
+  return (
+    <LocaleProvider locale={locale} dict={messages[locale]}>
+      <ReceptionistShell profile={profile}>{children}</ReceptionistShell>
+    </LocaleProvider>
+  )
 }

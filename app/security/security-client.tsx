@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "sonner"
 import { startTotpEnrollment, confirmTotpEnrollment, disableTwoFactor } from "@/lib/actions/auth"
+import { useT } from "@/lib/i18n/locale-context"
 
 type View = "status" | "enroll" | "backup"
 
@@ -29,6 +30,7 @@ export function SecurityClient({
   embedded?: boolean
 }) {
   const router = useRouter()
+  const t = useT()
   const [view, setView] = useState<View>("status")
   const [isOn, setIsOn] = useState(enabled)
   const [busy, setBusy] = useState(false)
@@ -54,7 +56,7 @@ export function SecurityClient({
 
   async function confirmEnroll() {
     if (code.replace(/\s/g, "").length !== 6) {
-      toast.error("Enter the 6-digit code from your app.")
+      toast.error(t("auth.enter6DigitFromApp"))
       return
     }
     setBusy(true)
@@ -72,14 +74,14 @@ export function SecurityClient({
 
   async function turnOff() {
     if (code.replace(/\s/g, "").length < 6) {
-      toast.error("Enter a current code to turn it off.")
+      toast.error(t("auth.enterCurrentToTurnOff"))
       return
     }
     setBusy(true)
     const res = await disableTwoFactor(code)
     setBusy(false)
     if (res.status === "ok") {
-      toast.success("Two-factor turned off.")
+      toast.success(t("auth.twoFactorTurnedOff"))
       setIsOn(false)
       setCode("")
       router.refresh()
@@ -105,11 +107,10 @@ export function SecurityClient({
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-primary" /> Two-factor is on
+                <ShieldCheck className="w-5 h-5 text-primary" /> {t("auth.twoFactorIsOn")}
               </CardTitle>
               <CardDescription>
-                Save these backup codes somewhere safe. Each works once if you lose access to your
-                authenticator app.
+                {t("auth.backupCodesDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -121,30 +122,29 @@ export function SecurityClient({
               <Button
                 variant="outline"
                 className="w-full gap-2"
-                onClick={() => { navigator.clipboard?.writeText(backupCodes.join("\n")); toast.success("Copied") }}
+                onClick={() => { navigator.clipboard?.writeText(backupCodes.join("\n")); toast.success(t("auth.copied")) }}
               >
-                <Copy className="w-4 h-4" /> Copy codes
+                <Copy className="w-4 h-4" /> {t("auth.copyCodes")}
               </Button>
-              <Button className="w-full" onClick={finish}>I&apos;ve saved these — continue</Button>
+              <Button className="w-full" onClick={finish}>{t("auth.savedContinue")}</Button>
             </CardContent>
           </Card>
         ) : view === "enroll" ? (
           /* Enrolment: scan + confirm */
           <Card>
             <CardHeader>
-              <CardTitle>Set up two-factor</CardTitle>
+              <CardTitle>{t("auth.setupTwoFactor")}</CardTitle>
               <CardDescription>
-                Scan this with an authenticator app (Google Authenticator, Authy…), then enter the
-                6-digit code it shows.
+                {t("auth.scanDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {qr && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={qr} alt="2FA QR code" width={200} height={200} className="mx-auto rounded-lg border border-border" />
+                <img src={qr} alt={t("auth.qrAlt")} width={200} height={200} className="mx-auto rounded-lg border border-border" />
               )}
               <div className="text-center">
-                <p className="text-xs text-muted-foreground">Can&apos;t scan? Enter this key manually:</p>
+                <p className="text-xs text-muted-foreground">{t("auth.cantScan")}</p>
                 <code className="font-mono text-sm break-all">{secret}</code>
               </div>
               <Input
@@ -156,10 +156,10 @@ export function SecurityClient({
                 onKeyDown={(e) => e.key === "Enter" && confirmEnroll()}
               />
               <Button className="w-full" onClick={confirmEnroll} disabled={busy}>
-                {busy ? "Verifying…" : "Verify & turn on"}
+                {busy ? t("auth.verifying") : t("auth.verifyTurnOn")}
               </Button>
               <button onClick={() => setView("status")} className="w-full text-sm text-muted-foreground hover:text-foreground underline underline-offset-4">
-                Cancel
+                {t("common.cancel")}
               </button>
             </CardContent>
           </Card>
@@ -169,14 +169,14 @@ export function SecurityClient({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 {isOn ? <ShieldCheck className="w-5 h-5 text-primary" /> : <ShieldAlert className="w-5 h-5 text-amber-500" />}
-                Two-factor authentication
+                {t("auth.twoFactorAuth")}
               </CardTitle>
               <CardDescription>
                 {isOn
-                  ? "Your account is protected with an authenticator app."
+                  ? t("auth.statusProtected")
                   : required
-                    ? "Staff accounts must enable two-factor to continue."
-                    : "Add a second step at sign-in for stronger security."}
+                    ? t("auth.statusRequired")
+                    : t("auth.statusDefault")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -184,37 +184,37 @@ export function SecurityClient({
                 <Alert>
                   <ShieldAlert className="w-4 h-4" />
                   <AlertDescription>
-                    This is required for staff. You&apos;ll be brought back here until it&apos;s set up.
+                    {t("auth.requiredAlert")}
                   </AlertDescription>
                 </Alert>
               )}
 
               {!isOn ? (
                 <Button className="w-full" onClick={beginEnroll} disabled={busy}>
-                  {busy ? "Preparing…" : "Set up two-factor"}
+                  {busy ? t("auth.preparing") : t("auth.setupTwoFactor")}
                 </Button>
               ) : (
                 <>
                   <div className="flex items-center gap-2 text-sm text-primary">
-                    <Check className="w-4 h-4" /> Enabled
+                    <Check className="w-4 h-4" /> {t("auth.enabled")}
                   </div>
                   {!required && (
                     <div className="space-y-2 pt-2 border-t border-border">
-                      <p className="text-sm text-muted-foreground">Turn it off (enter a current code):</p>
+                      <p className="text-sm text-muted-foreground">{t("auth.turnOffPrompt")}</p>
                       <Input
                         value={code}
                         onChange={(e) => setCode(e.target.value.replace(/\s/g, "").slice(0, 10))}
-                        placeholder="Code or backup code"
+                        placeholder={t("auth.codeOrBackupPlaceholder")}
                         className="font-mono"
                       />
                       <Button variant="outline" className="w-full" onClick={turnOff} disabled={busy}>
-                        Turn off two-factor
+                        {t("auth.turnOffTwoFactor")}
                       </Button>
                     </div>
                   )}
                   {!embedded && (
                     <Button variant="ghost" className="w-full" onClick={() => { router.push(home); router.refresh() }}>
-                      Back to my portal
+                      {t("auth.backToPortal")}
                     </Button>
                   )}
                 </>

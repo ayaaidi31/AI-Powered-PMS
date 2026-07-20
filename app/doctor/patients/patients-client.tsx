@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { DoctorPatientRow } from "@/lib/queries"
 import { patientName, initials, insuranceLabel, insuranceVariant } from "@/lib/display"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 function age(birthDate: string) {
   const b = new Date(birthDate)
@@ -24,6 +26,8 @@ function age(birthDate: string) {
 }
 
 export function DoctorPatientsClient({ patients }: { patients: DoctorPatientRow[] }) {
+  const t = useT()
+  const locale = useLocale()
   const [query, setQuery] = useState("")
 
   const filtered = patients.filter((p) =>
@@ -34,9 +38,9 @@ export function DoctorPatientsClient({ patients }: { patients: DoctorPatientRow[
     <div className="p-6 lg:p-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Users className="w-6 h-6 text-primary" /> My Patients
+          <Users className="w-6 h-6 text-primary" /> {t("patients.title")}
         </h1>
-        <p className="text-muted-foreground">Patients you have treated</p>
+        <p className="text-muted-foreground">{t("patients.subtitle")}</p>
       </div>
 
       <Card>
@@ -44,7 +48,7 @@ export function DoctorPatientsClient({ patients }: { patients: DoctorPatientRow[
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search patients by name…"
+              placeholder={t("patients.searchPlaceholder")}
               className="pl-10"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -55,14 +59,14 @@ export function DoctorPatientsClient({ patients }: { patients: DoctorPatientRow[
 
       <Card>
         <CardHeader>
-          <CardTitle>Patient Records</CardTitle>
-          <CardDescription>{filtered.length} patient{filtered.length !== 1 ? "s" : ""}</CardDescription>
+          <CardTitle>{t("patients.recordsTitle")}</CardTitle>
+          <CardDescription>{filtered.length === 1 ? t("patients.patientCountOne", { count: filtered.length }) : t("patients.patientCountOther", { count: filtered.length })}</CardDescription>
         </CardHeader>
         <CardContent>
           {filtered.length === 0 ? (
             <div className="text-center py-10 text-muted-foreground">
               <Search className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p>No patients found.</p>
+              <p>{t("patients.emptyState")}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -86,14 +90,14 @@ export function DoctorPatientsClient({ patients }: { patients: DoctorPatientRow[
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                      <span>{age(p.birth_date)} years old</span>
+                      <span>{t("patients.yearsOld", { age: age(p.birth_date) })}</span>
                       <span className="flex items-center gap-1">
                         <Activity className="w-3.5 h-3.5" />
-                        {p.condition_count} condition{p.condition_count !== 1 ? "s" : ""}
+                        {p.condition_count === 1 ? t("patients.conditionCountOne", { count: p.condition_count }) : t("patients.conditionCountOther", { count: p.condition_count })}
                       </span>
                       <span className="flex items-center gap-1">
                         <ClipboardList className="w-3.5 h-3.5" />
-                        {p.visit_count} visit{p.visit_count !== 1 ? "s" : ""}
+                        {p.visit_count === 1 ? t("patients.visitCountOne", { count: p.visit_count }) : t("patients.visitCountOther", { count: p.visit_count })}
                       </span>
                     </div>
                   </div>
@@ -101,10 +105,10 @@ export function DoctorPatientsClient({ patients }: { patients: DoctorPatientRow[
                   <div className="text-sm text-muted-foreground sm:text-right shrink-0">
                     <div className="flex items-center gap-1 sm:justify-end">
                       <Calendar className="w-3.5 h-3.5" />
-                      Last visit
+                      {t("patients.lastVisit")}
                     </div>
                     <p className="font-medium text-foreground">
-                      {p.last_visit ? new Date(p.last_visit).toLocaleDateString("de-DE") : "—"}
+                      {p.last_visit ? new Date(p.last_visit).toLocaleDateString(INTL_LOCALE[locale]) : "—"}
                     </p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0 hidden sm:block" />

@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { initials } from "@/lib/display"
 import { setAppointmentStatus } from "@/lib/actions/appointments"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 export interface WaitingAppointment {
   id: string
@@ -37,13 +39,15 @@ export interface WaitingAppointment {
 
 // Board columns map directly to database appointment statuses.
 type ColumnStatus = "waiting" | "in_progress" | "completed"
-const COLUMN_LABELS: Record<ColumnStatus, string> = {
-  waiting: "Waiting",
-  in_progress: "With Doctor",
-  completed: "Completed",
-}
 
 export function WaitingClient({ appointments }: { appointments: WaitingAppointment[] }) {
+  const t = useT()
+  const locale = useLocale()
+  const COLUMN_LABELS: Record<ColumnStatus, string> = {
+    waiting: t("reception.columnWaiting"),
+    in_progress: t("reception.columnWithDoctor"),
+    completed: t("reception.columnCompleted"),
+  }
   const [isPending, startTransition] = useTransition()
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<ColumnStatus | null>(null)
@@ -54,13 +58,13 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
   const inProgress = appointments.filter((a) => a.status === "in_progress")
   const completed = appointments.filter((a) => a.status === "completed").sort((a, b) => +new Date(b.startsAt) - +new Date(a.startsAt))
 
-  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+  const formatTime = (iso: string) => new Date(iso).toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" })
   const getWaitTime = (iso: string | null) => {
     if (!iso) return "—"
     const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
-    if (mins < 1) return "Just now"
-    if (mins < 60) return `${mins} min`
-    return `${Math.floor(mins / 60)}h ${mins % 60}m`
+    if (mins < 1) return t("reception.justNow")
+    if (mins < 60) return t("reception.minutes", { count: mins })
+    return t("reception.hoursMinutes", { hours: Math.floor(mins / 60), minutes: mins % 60 })
   }
 
   /** Persist a status change, then refresh from the server. */
@@ -95,13 +99,13 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
   function confirmMove() {
     if (!pendingMove) return
     const { appointment, target } = pendingMove
-    applyStatus(appointment.id, target, `${appointment.patientName} moved to "${COLUMN_LABELS[target]}"`)
+    applyStatus(appointment.id, target, t("reception.movedTo", { name: appointment.patientName, status: COLUMN_LABELS[target] }))
     setPendingMove(null)
   }
 
   function confirmCall() {
     if (!callTarget) return
-    applyStatus(callTarget.id, "in_progress", `${callTarget.patientName} has been called to ${callTarget.doctorName}'s office`)
+    applyStatus(callTarget.id, "in_progress", t("reception.calledToOffice", { name: callTarget.patientName, doctor: callTarget.doctorName }))
     setCallTarget(null)
   }
 
@@ -109,31 +113,31 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
     <div className="p-6 lg:p-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Waiting Room</h1>
-          <p className="text-muted-foreground">Manage patient flow and waiting times</p>
+          <h1 className="text-2xl font-bold text-foreground">{t("reception.waitingRoom")}</h1>
+          <p className="text-muted-foreground">{t("reception.waitingRoomSubtitle")}</p>
         </div>
         <div className="flex items-center gap-3">
           <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <GripVertical className="w-3.5 h-3.5" />
-            Drag a card to another column to move a patient
+            {t("reception.dragHint")}
           </span>
           <Badge variant="outline" className="text-sm py-1 px-3">
             <Clock className="w-4 h-4 mr-2" />
-            {waiting.length} Waiting
+            {t("reception.waitingBadge", { count: waiting.length })}
           </Badge>
         </div>
       </div>
 
       <div className="grid grid-cols-1 min-w-0 lg:grid-cols-3 gap-6">
         {/* Waiting */}
-        <Column color="yellow" title={`Waiting (${waiting.length})`} description="Patients waiting to be seen"
+        <Column color="yellow" title={`${t("reception.columnWaiting")} (${waiting.length})`} description={t("reception.descWaiting")}
           icon={<Clock className="w-5 h-5" />}
           isOver={dragOverColumn === "waiting"}
           onDragOver={(e) => { e.preventDefault(); setDragOverColumn("waiting") }}
           onDrop={(e) => handleDrop(e, "waiting")}
           empty={waiting.length === 0}
           emptyIcon={<Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />}
-          emptyText="No patients waiting"
+          emptyText={t("reception.noPatientsWaiting")}
         >
           {waiting.map((a, index) => (
             <div key={a.id} {...dragProps(a)} className={cn("group p-4 rounded-lg border border-border bg-card cursor-grab active:cursor-grabbing transition-all hover:shadow-md hover:border-yellow-500/40", draggedId === a.id && "opacity-40 ring-2 ring-yellow-500/50")}>
@@ -146,27 +150,27 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
                   </div>
                   <div>
                     <p className="font-medium text-foreground">{a.patientName}</p>
-                    <p className="text-xs text-muted-foreground">Waiting: {getWaitTime(a.checkInAt)}</p>
+                    <p className="text-xs text-muted-foreground">{t("reception.waitingTime", { time: getWaitTime(a.checkInAt) })}</p>
                   </div>
                 </div>
-                {a.hasAllergy && <Badge variant="destructive" className="text-xs"><AlertCircle className="w-3 h-3 mr-1" />Allergy</Badge>}
+                {a.hasAllergy && <Badge variant="destructive" className="text-xs"><AlertCircle className="w-3 h-3 mr-1" />{t("reception.allergy")}</Badge>}
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3"><Stethoscope className="w-4 h-4" /><span>{a.doctorName}</span></div>
               {a.reason && <p className="text-sm text-muted-foreground mb-3">{a.reason}</p>}
-              <Button className="w-full gap-2" size="sm" onClick={() => setCallTarget(a)} disabled={isPending}><Bell className="w-4 h-4" />Call Patient</Button>
+              <Button className="w-full gap-2" size="sm" onClick={() => setCallTarget(a)} disabled={isPending}><Bell className="w-4 h-4" />{t("reception.callPatient")}</Button>
             </div>
           ))}
         </Column>
 
         {/* In Progress */}
-        <Column color="blue" title={`With Doctor (${inProgress.length})`} description="Patients currently being seen"
+        <Column color="blue" title={`${t("reception.columnWithDoctor")} (${inProgress.length})`} description={t("reception.descInProgress")}
           icon={<User className="w-5 h-5" />}
           isOver={dragOverColumn === "in_progress"}
           onDragOver={(e) => { e.preventDefault(); setDragOverColumn("in_progress") }}
           onDrop={(e) => handleDrop(e, "in_progress")}
           empty={inProgress.length === 0}
           emptyIcon={<User className="w-12 h-12 mx-auto mb-4 opacity-50" />}
-          emptyText="No patients with doctors"
+          emptyText={t("reception.noPatientsWithDoctor")}
         >
           {inProgress.map((a) => (
             <div key={a.id} {...dragProps(a)} className={cn("group p-4 rounded-lg border border-border bg-card cursor-grab active:cursor-grabbing transition-all hover:shadow-md hover:border-blue-500/40", draggedId === a.id && "opacity-40 ring-2 ring-blue-500/50")}>
@@ -175,24 +179,24 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
                 <Avatar><AvatarFallback className="bg-blue-100 text-blue-800">{initials(...a.patientName.split(" ") as [string, string])}</AvatarFallback></Avatar>
                 <div>
                   <p className="font-medium text-foreground">{a.patientName}</p>
-                  <p className="text-xs text-muted-foreground">Started: {formatTime(a.startsAt)}</p>
+                  <p className="text-xs text-muted-foreground">{t("reception.startedAt", { time: formatTime(a.startsAt) })}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3"><Stethoscope className="w-4 h-4" /><span>{a.doctorName}</span></div>
-              <Button variant="outline" className="w-full gap-2" size="sm" onClick={() => applyStatus(a.id, "completed", "Appointment marked as completed")} disabled={isPending}><CheckCircle2 className="w-4 h-4" />Mark Complete</Button>
+              <Button variant="outline" className="w-full gap-2" size="sm" onClick={() => applyStatus(a.id, "completed", t("reception.markedCompleted"))} disabled={isPending}><CheckCircle2 className="w-4 h-4" />{t("reception.markComplete")}</Button>
             </div>
           ))}
         </Column>
 
         {/* Completed */}
-        <Column color="green" title={`Completed (${completed.length})`} description="Today's completed appointments"
+        <Column color="green" title={`${t("reception.columnCompleted")} (${completed.length})`} description={t("reception.descCompleted")}
           icon={<CheckCircle2 className="w-5 h-5" />}
           isOver={dragOverColumn === "completed"}
           onDragOver={(e) => { e.preventDefault(); setDragOverColumn("completed") }}
           onDrop={(e) => handleDrop(e, "completed")}
           empty={completed.length === 0}
           emptyIcon={<CheckCircle2 className="w-12 h-12 mx-auto mb-4 opacity-50" />}
-          emptyText="No completed appointments yet"
+          emptyText={t("reception.noCompletedYet")}
         >
           {completed.slice(0, 5).map((a) => (
             <div key={a.id} {...dragProps(a)} className={cn("group p-4 rounded-lg border border-border bg-card cursor-grab active:cursor-grabbing transition-all hover:shadow-md hover:border-green-500/40", draggedId === a.id && "opacity-40 ring-2 ring-green-500/50")}>
@@ -201,13 +205,13 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
                 <Avatar><AvatarFallback className="bg-green-100 text-green-800">{initials(...a.patientName.split(" ") as [string, string])}</AvatarFallback></Avatar>
                 <div>
                   <p className="font-medium text-foreground">{a.patientName}</p>
-                  <p className="text-xs text-muted-foreground">Completed at {formatTime(a.startsAt)}</p>
+                  <p className="text-xs text-muted-foreground">{t("reception.completedAt", { time: formatTime(a.startsAt) })}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground"><Stethoscope className="w-4 h-4" /><span>{a.doctorName}</span></div>
             </div>
           ))}
-          {completed.length > 5 && <p className="text-center text-sm text-muted-foreground">+{completed.length - 5} more completed</p>}
+          {completed.length > 5 && <p className="text-center text-sm text-muted-foreground">{t("reception.moreCompleted", { count: completed.length - 5 })}</p>}
         </Column>
       </div>
 
@@ -215,10 +219,10 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
       <AlertDialog open={pendingMove !== null} onOpenChange={(open) => { if (!open) setPendingMove(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Move patient?</AlertDialogTitle>
+            <AlertDialogTitle>{t("reception.movePatientTitle")}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
-                <p>Move <span className="font-semibold text-foreground">{pendingMove?.appointment.patientName}</span> to a new status?</p>
+                <p>{t("reception.movePatientPrefix")} <span className="font-semibold text-foreground">{pendingMove?.appointment.patientName}</span> {t("reception.movePatientSuffix")}</p>
                 {pendingMove && (
                   <div className="flex items-center justify-center gap-3 rounded-lg border border-border bg-muted/40 p-3 text-sm">
                     <Badge variant="outline">{COLUMN_LABELS[pendingMove.appointment.status as ColumnStatus] ?? pendingMove.appointment.status}</Badge>
@@ -230,8 +234,8 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmMove} disabled={isPending}><MoveRight className="w-4 h-4 mr-2" />Confirm move</AlertDialogAction>
+            <AlertDialogCancel disabled={isPending}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmMove} disabled={isPending}><MoveRight className="w-4 h-4 mr-2" />{t("reception.confirmMove")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -240,15 +244,14 @@ export function WaitingClient({ appointments }: { appointments: WaitingAppointme
       <AlertDialog open={callTarget !== null} onOpenChange={(open) => { if (!open) setCallTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Call Patient</AlertDialogTitle>
+            <AlertDialogTitle>{t("reception.callPatient")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will notify {callTarget?.patientName} that {callTarget?.doctorName} is ready to see them.
-              The patient will be moved to &quot;With Doctor&quot; status.
+              {t("reception.callPatientDesc", { name: callTarget?.patientName ?? "", doctor: callTarget?.doctorName ?? "", status: COLUMN_LABELS.in_progress })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmCall} disabled={isPending}><Bell className="w-4 h-4 mr-2" />Call Patient</AlertDialogAction>
+            <AlertDialogCancel disabled={isPending}>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCall} disabled={isPending}><Bell className="w-4 h-4 mr-2" />{t("reception.callPatient")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

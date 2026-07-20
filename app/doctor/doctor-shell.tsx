@@ -25,6 +25,9 @@ import { getDoctorNotifications, setDoctorAvailability } from "@/lib/actions/doc
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { RecordingProvider } from "@/components/recording/recording-provider"
+import { LanguageToggle } from "@/components/language-toggle"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 export interface DoctorProfile {
   id: string
@@ -37,17 +40,19 @@ export interface DoctorProfile {
 }
 
 const navigation = [
-  { name: "Dashboard", href: "/doctor/dashboard", icon: LayoutDashboard },
-  { name: "Workspace", href: "/doctor/workspace", icon: Stethoscope },
-  { name: "Schedule", href: "/doctor/schedule", icon: Calendar },
-  { name: "Patients", href: "/doctor/patients", icon: Users },
-  { name: "Reports", href: "/doctor/reports", icon: FileText },
-  { name: "Billing", href: "/doctor/billing", icon: Receipt },
-]
+  { key: "nav.dashboard", href: "/doctor/dashboard", icon: LayoutDashboard },
+  { key: "nav.workspace", href: "/doctor/workspace", icon: Stethoscope },
+  { key: "nav.schedule", href: "/doctor/schedule", icon: Calendar },
+  { key: "nav.patients", href: "/doctor/patients", icon: Users },
+  { key: "nav.reports", href: "/doctor/reports", icon: FileText },
+  { key: "nav.billing", href: "/doctor/billing", icon: Receipt },
+] as const
 
 export function DoctorShell({ profile, children }: { profile: DoctorProfile; children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dutyPending, setDutyPending] = useState(false)
 
@@ -56,9 +61,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
     const r = await setDoctorAvailability(profile.id, !profile.isAvailable)
     setDutyPending(false)
     if (r.status === "ok") {
-      toast.success(profile.isAvailable
-        ? "You are now off duty. Reception can reassign your appointments."
-        : "You are back on duty.")
+      toast.success(profile.isAvailable ? t("doctorShell.nowOffDuty") : t("doctorShell.nowOnDuty"))
       router.refresh()
     } else {
       toast.error(r.message)
@@ -88,7 +91,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
               </div>
               <div>
                 <span className="font-bold text-lg text-foreground">AI-PMS</span>
-                <p className="text-xs text-muted-foreground">Doctor Portal</p>
+                <p className="text-xs text-muted-foreground">{t("doctorShell.portal")}</p>
               </div>
             </Link>
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(false)}>
@@ -108,10 +111,10 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <button onClick={toggleDuty} disabled={dutyPending} title="Click to change your availability">
+                <button onClick={toggleDuty} disabled={dutyPending} title={t("doctorShell.dutyHint")}>
                   <Badge variant={profile.isAvailable ? "secondary" : "outline"} className="text-xs cursor-pointer hover:opacity-80 gap-1.5">
                     <span className={cn("w-1.5 h-1.5 rounded-full", profile.isAvailable ? "bg-green-500" : "bg-muted-foreground")} />
-                    {dutyPending ? "…" : profile.isAvailable ? "On Duty" : "Off Duty"}
+                    {dutyPending ? "…" : profile.isAvailable ? t("doctorShell.onDuty") : t("doctorShell.offDuty")}
                   </Badge>
                 </button>
               </div>
@@ -123,7 +126,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
               const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
               return (
                 <Link
-                  key={item.name}
+                  key={item.key}
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
@@ -132,7 +135,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
                   )}
                 >
                   <item.icon className={cn("w-5 h-5", isActive && "text-primary-foreground")} />
-                  {item.name}
+                  {t(item.key)}
                 </Link>
               )
             })}
@@ -148,14 +151,15 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
                 <Menu className="w-5 h-5" />
               </Button>
               <div className="hidden sm:block">
-                <h2 className="text-sm font-medium text-muted-foreground">Welcome back, {profile.firstName}</h2>
+                <h2 className="text-sm font-medium text-muted-foreground">{t("doctorShell.welcomeBack", { name: profile.firstName })}</h2>
                 <p className="text-xs text-muted-foreground">
-                  {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                  {new Date().toLocaleDateString(INTL_LOCALE[locale], { weekday: "long", month: "long", day: "numeric" })}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              <LanguageToggle className="hidden sm:inline-flex" />
               <NotificationBell loader={getDoctorNotifications} />
 
               <DropdownMenu>
@@ -175,14 +179,17 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <div className="sm:hidden px-2 py-1.5">
+                    <LanguageToggle />
+                  </div>
                   <DropdownMenuItem onClick={() => router.push("/doctor/settings")}>
                     <Settings className="w-4 h-4 mr-2" />
-                    Settings
+                    {t("common.settings")}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="text-destructive" onClick={handleSignOut}>
                     <LogOut className="w-4 h-4 mr-2" />
-                    Sign Out
+                    {t("common.signOut")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -190,7 +197,9 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
           </div>
         </header>
 
-        <main className="min-h-[calc(100vh-4rem)] min-w-0 overflow-x-clip">{children}</main>
+        <main className="min-h-[calc(100vh-4rem)] min-w-0 overflow-x-clip">
+          <div key={pathname} className="animate-fade-in">{children}</div>
+        </main>
       </div>
     </div>
     </RecordingProvider>

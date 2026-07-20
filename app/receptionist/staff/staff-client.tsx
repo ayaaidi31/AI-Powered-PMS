@@ -20,11 +20,14 @@ import { toast } from "sonner"
 import { setDoctorAvailability } from "@/lib/actions/doctors"
 import { proposeRecoveryPlan, executeRecoveryPlan, type RecoveryPlan } from "@/lib/actions/staffing"
 import type { UrgencyLevel } from "@/lib/actions/ai"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 
-const URGENCY: Record<UrgencyLevel, { label: string; cls: string }> = {
-  high: { label: "High", cls: "text-red-600 dark:text-red-400" },
-  medium: { label: "Medium", cls: "text-amber-600 dark:text-amber-400" },
-  routine: { label: "Routine", cls: "text-emerald-600 dark:text-emerald-400" },
+const URGENCY: Record<UrgencyLevel, { labelKey: TKey; cls: string }> = {
+  high: { labelKey: "receptionMgmt.urgencyHigh" as TKey, cls: "text-red-600 dark:text-red-400" },
+  medium: { labelKey: "receptionMgmt.urgencyMedium" as TKey, cls: "text-amber-600 dark:text-amber-400" },
+  routine: { labelKey: "receptionMgmt.urgencyRoutine" as TKey, cls: "text-emerald-600 dark:text-emerald-400" },
 }
 const CANCEL = "__cancel__"
 
@@ -41,7 +44,6 @@ export interface RosterDoctor {
   affectedCount: number
 }
 
-const fmtDay = (s: string | null) => (s ? new Date(`${s}T00:00:00`).toLocaleDateString("de-DE") : null)
 const todayISO = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
@@ -49,6 +51,9 @@ const todayISO = () => {
 
 export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
+  const fmtDay = (s: string | null) => (s ? new Date(`${s}T00:00:00`).toLocaleDateString(INTL_LOCALE[locale]) : null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [plan, setPlan] = useState<RecoveryPlan | null>(null)
   const [choices, setChoices] = useState<Record<string, string>>({}) // appointmentId -> doctorId | CANCEL
@@ -66,13 +71,13 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
   }
 
   async function markUnavailable(d: RosterDoctor) {
-    if (!markFrom) { toast.error("Pick a start date."); return }
-    if (markUntil && markUntil < markFrom) { toast.error("End date can't be before start date."); return }
+    if (!markFrom) { toast.error(t("receptionMgmt.pickStartDate")); return }
+    if (markUntil && markUntil < markFrom) { toast.error(t("receptionMgmt.endBeforeStart")); return }
     setBusyId(d.id)
     const r = await setDoctorAvailability(d.id, false, { from: markFrom, until: markUntil || null })
     setBusyId(null)
     if (r.status === "ok") {
-      toast.success(`${d.name} marked unavailable.`)
+      toast.success(t("receptionMgmt.markedUnavailableToast", { name: d.name }))
       setMarkingId(null)
       router.refresh()
     } else {
@@ -85,7 +90,7 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
     const r = await setDoctorAvailability(d.id, true)
     setBusyId(null)
     if (r.status === "ok") {
-      toast.success(`${d.name} marked available.`)
+      toast.success(t("receptionMgmt.markedAvailableToast", { name: d.name }))
       router.refresh()
     } else {
       toast.error(r.message)
@@ -114,7 +119,7 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
     const r = await executeRecoveryPlan(items)
     setExecuting(false)
     if (r.status === "ok") {
-      toast.success(`Plan executed: ${r.data.reassigned} reassigned, ${r.data.cancelled} cancelled${r.data.failed ? `, ${r.data.failed} failed` : ""}.`)
+      toast.success(t("receptionMgmt.planExecutedToast", { reassigned: r.data.reassigned, cancelled: r.data.cancelled }) + (r.data.failed ? t("receptionMgmt.planExecutedFailedSuffix", { failed: r.data.failed }) : "") + ".")
       setPlan(null)
       router.refresh()
     } else {
@@ -131,21 +136,21 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
     return (
       <div className="p-6 lg:p-8 max-w-6xl mx-auto space-y-6">
         <button onClick={() => setPlan(null)} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" /> Back to staff
+          <ArrowLeft className="w-4 h-4" /> {t("receptionMgmt.backToStaff")}
         </button>
 
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Sparkles className="w-6 h-6 text-primary" /> Schedule Recovery
+              <Sparkles className="w-6 h-6 text-primary" /> {t("receptionMgmt.scheduleRecovery")}
             </h1>
             <p className="text-muted-foreground">
-              {plan.doctorName} · {plan.doctorSpecialization ?? "General"} · absent{" "}
-              {fmtDay(plan.windowFrom) ?? "today"}{plan.windowUntil ? ` – ${fmtDay(plan.windowUntil)}` : " – ongoing"}
+              {plan.doctorName} · {plan.doctorSpecialization ?? t("receptionMgmt.specGeneral")} · {t("receptionMgmt.absentLc")}{" "}
+              {fmtDay(plan.windowFrom) ?? t("receptionMgmt.todayLc")}{plan.windowUntil ? ` – ${fmtDay(plan.windowUntil)}` : ` – ${t("receptionMgmt.ongoing")}`}
             </p>
           </div>
           <Badge variant="outline" className="gap-1.5 border-amber-300 text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="w-3.5 h-3.5" /> Active recovery
+            <AlertTriangle className="w-3.5 h-3.5" /> {t("receptionMgmt.activeRecovery")}
           </Badge>
         </div>
 
@@ -153,19 +158,19 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
         <div className="grid grid-cols-1 min-w-0 sm:grid-cols-2 gap-4">
           <Card>
             <CardContent className="pt-6">
-              <p className="text-xs text-muted-foreground">Impacted appointments</p>
+              <p className="text-xs text-muted-foreground">{t("receptionMgmt.impactedAppointments")}</p>
               <p className="text-3xl font-bold text-foreground">{plan.items.length}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <p className="text-xs text-muted-foreground mb-2">Available {plan.doctorSpecialization ?? ""} capacity</p>
+              <p className="text-xs text-muted-foreground mb-2">{t("receptionMgmt.availableCapacity", { spec: plan.doctorSpecialization ?? "" })}</p>
               {sameSpecialtyFree.length === 0 ? (
-                <p className="text-sm text-amber-600 dark:text-amber-500">No same-specialty colleague available</p>
+                <p className="text-sm text-amber-600 dark:text-amber-500">{t("receptionMgmt.noSameSpecialty")}</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
                   {sameSpecialtyFree.map((c) => (
-                    <Badge key={c.id} variant="secondary" className="text-xs">{c.name} — {c.remainingToday} slots</Badge>
+                    <Badge key={c.id} variant="secondary" className="text-xs">{c.name} — {t("receptionMgmt.slotsCount", { count: c.remainingToday })}</Badge>
                   ))}
                 </div>
               )}
@@ -177,12 +182,12 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
           {/* Plan table */}
           <Card className="lg:col-span-2">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">AI Proposed Recovery Plan</CardTitle>
-              <CardDescription>Urgency-prioritized; reassignment kept within the same specialty. Adjust any row.</CardDescription>
+              <CardTitle className="text-base">{t("receptionMgmt.aiRecoveryPlan")}</CardTitle>
+              <CardDescription>{t("receptionMgmt.recoveryPlanDesc")}</CardDescription>
             </CardHeader>
             <CardContent>
               {plan.items.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">No upcoming appointments to recover.</p>
+                <p className="text-sm text-muted-foreground py-6 text-center">{t("receptionMgmt.noUpcomingRecover")}</p>
               ) : (
                 <div className="space-y-2">
                   {plan.items.map((it) => {
@@ -194,18 +199,18 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-foreground truncate">{it.patientName}</p>
                           <p className="text-xs text-muted-foreground">
-                            {new Date(it.startsAt).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })} · {it.durationMin} min
-                            {noCover && <span className="text-amber-600 dark:text-amber-500"> · no same-specialty cover</span>}
+                            {new Date(it.startsAt).toLocaleString(INTL_LOCALE[locale], { dateStyle: "medium", timeStyle: "short" })} · {it.durationMin} {t("receptionMgmt.minShort")}
+                            {noCover && <span className="text-amber-600 dark:text-amber-500"> {t("receptionMgmt.noCoverSuffix")}</span>}
                           </p>
                         </div>
                         <Select value={urg} onValueChange={(v) => setUrgencyChoices((u) => ({ ...u, [it.appointmentId]: v as UrgencyLevel }))}>
-                          <SelectTrigger className="w-full sm:w-28" title="Urgency (AI-triaged)">
-                            <span className={URGENCY[urg].cls}>{URGENCY[urg].label}</span>
+                          <SelectTrigger className="w-full sm:w-28" title={t("receptionMgmt.urgencyTooltip")}>
+                            <span className={URGENCY[urg].cls}>{t(URGENCY[urg].labelKey)}</span>
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="high"><span className={URGENCY.high.cls}>High</span></SelectItem>
-                            <SelectItem value="medium"><span className={URGENCY.medium.cls}>Medium</span></SelectItem>
-                            <SelectItem value="routine"><span className={URGENCY.routine.cls}>Routine</span></SelectItem>
+                            <SelectItem value="high"><span className={URGENCY.high.cls}>{t("receptionMgmt.urgencyHigh")}</span></SelectItem>
+                            <SelectItem value="medium"><span className={URGENCY.medium.cls}>{t("receptionMgmt.urgencyMedium")}</span></SelectItem>
+                            <SelectItem value="routine"><span className={URGENCY.routine.cls}>{t("receptionMgmt.urgencyRoutine")}</span></SelectItem>
                           </SelectContent>
                         </Select>
                         <ArrowRight className="w-4 h-4 text-muted-foreground hidden sm:block shrink-0" />
@@ -213,18 +218,18 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
                           <SelectTrigger className="w-full sm:w-60">
                             <span className="truncate">
                               {choice === CANCEL
-                                ? "Cancel appointment"
-                                : `→ ${plan.candidates.find((c) => c.id === choice)?.name ?? "Reassign"}`}
+                                ? t("receptionMgmt.cancelAppointmentOption")
+                                : `→ ${plan.candidates.find((c) => c.id === choice)?.name ?? t("receptionMgmt.reassignFallback")}`}
                             </span>
                           </SelectTrigger>
                           <SelectContent>
                             {plan.candidates.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
-                                {c.name}{c.sameSpecialty ? "" : ` · ${c.specialization ?? "other"}`} — {c.remainingToday} slots
+                                {c.name}{c.sameSpecialty ? "" : ` · ${c.specialization ?? t("receptionMgmt.specOther")}`} — {t("receptionMgmt.slotsCount", { count: c.remainingToday })}
                               </SelectItem>
                             ))}
                             <SelectItem value={CANCEL}>
-                              <span className="flex items-center gap-1.5 text-destructive"><Ban className="w-3.5 h-3.5" /> Cancel appointment</span>
+                              <span className="flex items-center gap-1.5 text-destructive"><Ban className="w-3.5 h-3.5" /> {t("receptionMgmt.cancelAppointmentOption")}</span>
                             </SelectItem>
                           </SelectContent>
                         </Select>
@@ -239,28 +244,28 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
           {/* Execution summary */}
           <Card className="lg:sticky lg:top-20">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Plan Execution Summary</CardTitle>
+              <CardTitle className="text-base">{t("receptionMgmt.planExecutionSummary")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg bg-muted/50 p-3 text-center">
                   <p className="text-2xl font-bold text-foreground">{reassignNow}</p>
-                  <p className="text-xs text-muted-foreground">Reassigned</p>
+                  <p className="text-xs text-muted-foreground">{t("receptionMgmt.reassignedLabel")}</p>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-3 text-center">
                   <p className="text-2xl font-bold text-foreground">{cancelNow}</p>
-                  <p className="text-xs text-muted-foreground">Cancelled</p>
+                  <p className="text-xs text-muted-foreground">{t("receptionMgmt.cancelledLabel")}</p>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Reassignments stay within the doctor&apos;s specialty and re-check for time conflicts. The decision is yours.
+                {t("receptionMgmt.reassignNote")}
               </p>
               <div className="space-y-2 pt-1">
                 <Button className="w-full" onClick={execute} disabled={executing || plan.items.length === 0}>
-                  {executing ? "Executing…" : "Approve & Execute Plan"}
+                  {executing ? t("receptionMgmt.executing") : t("receptionMgmt.approveExecute")}
                 </Button>
                 <Button variant="outline" className="w-full" onClick={() => setPlan(null)} disabled={executing}>
-                  Discard
+                  {t("receptionMgmt.discard")}
                 </Button>
               </div>
             </CardContent>
@@ -274,8 +279,8 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Staff Scheduling</h1>
-        <p className="text-muted-foreground">Manage doctor availability and recover from sick leave</p>
+        <h1 className="text-2xl font-bold text-foreground">{t("receptionMgmt.staffTitle")}</h1>
+        <p className="text-muted-foreground">{t("receptionMgmt.staffSubtitle")}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -294,24 +299,24 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
                 </div>
                 <Badge variant={d.isAvailable ? "secondary" : "outline"} className="gap-1.5 shrink-0">
                   <span className={`w-1.5 h-1.5 rounded-full ${d.isAvailable ? "bg-green-500" : "bg-amber-500"}`} />
-                  {d.isAvailable ? "On Duty" : "Off Duty"}
+                  {d.isAvailable ? t("receptionMgmt.onDuty") : t("receptionMgmt.offDuty")}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                <span>Today: <strong className="text-foreground">{d.todayCount}/{d.capacity}</strong></span>
-                <span>Upcoming: <strong className="text-foreground">{d.upcomingCount}</strong></span>
+                <span>{t("receptionMgmt.todayLabel")}: <strong className="text-foreground">{d.todayCount}/{d.capacity}</strong></span>
+                <span>{t("receptionMgmt.upcomingLabel")}: <strong className="text-foreground">{d.upcomingCount}</strong></span>
               </div>
 
               {!d.isAvailable && (
                 <div className="rounded-lg bg-amber-500/10 border border-amber-300/50 dark:border-amber-900 p-2.5 text-xs text-amber-700 dark:text-amber-400">
                   <p className="flex items-center gap-1.5 font-medium">
                     <AlertTriangle className="w-3.5 h-3.5" />
-                    Absent {fmtDay(d.unavailableFrom) ?? "today"}{d.unavailableUntil ? ` – ${fmtDay(d.unavailableUntil)}` : " – ongoing"}
+                    {t("receptionMgmt.absentCap")} {fmtDay(d.unavailableFrom) ?? t("receptionMgmt.todayLc")}{d.unavailableUntil ? ` – ${fmtDay(d.unavailableUntil)}` : ` – ${t("receptionMgmt.ongoing")}`}
                   </p>
                   <p className="mt-0.5 opacity-90">
-                    {d.affectedCount} appointment{d.affectedCount !== 1 ? "s" : ""} in this period need recovery.
+                    {d.affectedCount === 1 ? t("receptionMgmt.affectedRecoverOne", { count: d.affectedCount }) : t("receptionMgmt.affectedRecoverMany", { count: d.affectedCount })}
                   </p>
                 </div>
               )}
@@ -321,41 +326,41 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
                 <div className="rounded-lg border border-border p-3 space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">From</Label>
+                      <Label className="text-xs text-muted-foreground">{t("receptionMgmt.labelFrom")}</Label>
                       <Input type="date" value={markFrom} onChange={(e) => setMarkFrom(e.target.value)} />
                     </div>
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Until (optional)</Label>
+                      <Label className="text-xs text-muted-foreground">{t("receptionMgmt.labelUntil")}</Label>
                       <Input type="date" min={markFrom} value={markUntil} onChange={(e) => setMarkUntil(e.target.value)} />
                     </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">Leave “Until” empty for an open-ended absence.</p>
+                  <p className="text-[11px] text-muted-foreground">{t("receptionMgmt.untilHint")}</p>
                   <div className="flex gap-2">
                     <Button size="sm" className="gap-1.5" onClick={() => markUnavailable(d)} disabled={busyId === d.id}>
-                      <UserX className="w-4 h-4" /> Confirm absence
+                      <UserX className="w-4 h-4" /> {t("receptionMgmt.confirmAbsence")}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setMarkingId(null)} disabled={busyId === d.id}>Cancel</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setMarkingId(null)} disabled={busyId === d.id}>{t("common.cancel")}</Button>
                   </div>
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2 pt-1">
                   {d.isAvailable ? (
                     <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openMark(d)} disabled={busyId === d.id}>
-                      <UserX className="w-4 h-4" /> Mark unavailable
+                      <UserX className="w-4 h-4" /> {t("receptionMgmt.markUnavailable")}
                     </Button>
                   ) : (
                     <>
                       {d.affectedCount > 0 && (
                         <Button size="sm" className="gap-1.5" onClick={() => generatePlan(d)} disabled={busyId === d.id}>
                           <Sparkles className="w-4 h-4" />
-                          {busyId === d.id ? "Planning…" : "Recovery plan"}
+                          {busyId === d.id ? t("receptionMgmt.planning") : t("receptionMgmt.recoveryPlanBtn")}
                         </Button>
                       )}
                       <Button variant="outline" size="sm" onClick={() => openMark(d)} disabled={busyId === d.id}>
-                        Edit dates
+                        {t("receptionMgmt.editDates")}
                       </Button>
                       <Button variant="secondary" size="sm" className="gap-1.5" onClick={() => markAvailable(d)} disabled={busyId === d.id}>
-                        <UserCheck className="w-4 h-4" /> Mark available
+                        <UserCheck className="w-4 h-4" /> {t("receptionMgmt.markAvailable")}
                       </Button>
                     </>
                   )}

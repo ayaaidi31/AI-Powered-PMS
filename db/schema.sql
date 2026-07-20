@@ -122,14 +122,6 @@ CREATE TABLE IF NOT EXISTS medications (
   end_date   date                                -- NULL = ongoing
 );
 
-CREATE TABLE IF NOT EXISTS surgeries (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  patient_id   uuid NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
-  name         text NOT NULL,
-  surgery_date date,
-  notes        text
-);
-
 -- ──────────────────────── SCHEDULING / CLINICAL EVENTS ─────────────────────
 
 CREATE TABLE IF NOT EXISTS appointments (
@@ -274,7 +266,6 @@ CREATE INDEX IF NOT EXISTS idx_profile_proposals_patient   ON profile_change_pro
 CREATE INDEX IF NOT EXISTS idx_patient_allergies_patient   ON patient_allergies(patient_id);
 CREATE INDEX IF NOT EXISTS idx_patient_conditions_patient  ON patient_conditions(patient_id);
 CREATE INDEX IF NOT EXISTS idx_medications_patient         ON medications(patient_id);
-CREATE INDEX IF NOT EXISTS idx_surgeries_patient           ON surgeries(patient_id);
 CREATE INDEX IF NOT EXISTS idx_vitals_patient_time         ON vitals(patient_id, recorded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_appointments_doctor_time    ON appointments(doctor_id, starts_at);
 CREATE INDEX IF NOT EXISTS idx_appointments_patient        ON appointments(patient_id);

@@ -19,6 +19,8 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { checkInAppointment, checkInByCode } from "@/lib/actions/appointments"
 import { logout } from "@/lib/actions/auth"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 export interface TodayAppointment {
   id: string
@@ -34,9 +36,6 @@ interface CheckedIn {
   patient_name?: string
 }
 
-const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-
 export function ClinicCheckInClient({
   loggedIn,
   firstName,
@@ -49,6 +48,10 @@ export function ClinicCheckInClient({
   isMobile: boolean
 }) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
+  const formatTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" })
   const hasToday = appointments.length > 0
   const [mode, setMode] = useState<"confirm" | "code">(hasToday ? "confirm" : "code")
   const [checkedIn, setCheckedIn] = useState<CheckedIn | null>(null)
@@ -78,7 +81,7 @@ export function ClinicCheckInClient({
 
   async function submitCode() {
     if (!code.trim()) {
-      toast.error("Please enter your check-in code.")
+      toast.error(t("auth.codeRequired"))
       return
     }
     setSubmitting(true)
@@ -102,13 +105,13 @@ export function ClinicCheckInClient({
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
             <QrCode className="w-6 h-6 text-primary" />
           </div>
-          <h1 className="text-xl font-bold text-foreground">Clinic Check-in</h1>
-          <p className="text-sm text-muted-foreground">Let the front desk know you have arrived.</p>
+          <h1 className="text-xl font-bold text-foreground">{t("auth.checkInTitle")}</h1>
+          <p className="text-sm text-muted-foreground">{t("auth.checkInSubtitle")}</p>
         </div>
 
         {!isMobile && !checkedIn && (
           <div className="rounded-lg border border-amber-300/60 bg-amber-50 text-amber-900 text-sm px-4 py-3 text-center dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800/60">
-            Check-in is meant to be done on your phone at the clinic — scan the reception QR code when you arrive.
+            {t("auth.desktopWarning")}
           </div>
         )}
 
@@ -120,10 +123,12 @@ export function ClinicCheckInClient({
                 <Check className="w-10 h-10 text-primary" />
               </div>
               <h2 className="text-xl font-semibold text-foreground mb-1">
-                You&apos;re checked in{checkedIn.patient_name ? `, ${checkedIn.patient_name.split(" ")[0]}` : ""}!
+                {checkedIn.patient_name
+                  ? t("auth.checkedInTitleNamed", { name: checkedIn.patient_name.split(" ")[0] })
+                  : t("auth.checkedInTitlePlain")}
               </h2>
               <p className="text-muted-foreground mb-4">
-                Please take a seat in the waiting area — we&apos;ll call you when it&apos;s your turn.
+                {t("auth.checkedInBody")}
               </p>
               <div className="w-full border border-border rounded-lg p-4 text-left space-y-2">
                 <div className="flex items-center gap-3">
@@ -132,7 +137,7 @@ export function ClinicCheckInClient({
                 </div>
                 <div className="flex items-center gap-3">
                   <Clock className="w-4 h-4 text-primary" />
-                  <span className="text-sm text-foreground">{formatTime(checkedIn.starts_at)} today</span>
+                  <span className="text-sm text-foreground">{t("auth.timeToday", { time: formatTime(checkedIn.starts_at) })}</span>
                 </div>
               </div>
             </CardContent>
@@ -142,12 +147,12 @@ export function ClinicCheckInClient({
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">
-                Welcome{firstName ? `, ${firstName}` : ""}!
+                {firstName ? t("auth.welcomeNamed", { name: firstName }) : t("auth.welcomePlain")}
               </CardTitle>
               <CardDescription>
                 {appointments.length > 1
-                  ? "You have more than one appointment today — confirm the one you're here for."
-                  : "Confirm your appointment below to check in."}
+                  ? t("auth.confirmDescMultiple")
+                  : t("auth.confirmDescSingle")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -161,19 +166,19 @@ export function ClinicCheckInClient({
                         <p className="font-medium text-foreground">{appt.doctor_name}</p>
                         {appt.reason && <p className="text-sm text-muted-foreground">{appt.reason}</p>}
                         <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" /> {formatTime(appt.starts_at)} today
+                          <Clock className="w-3.5 h-3.5" /> {t("auth.timeToday", { time: formatTime(appt.starts_at) })}
                         </p>
                       </div>
                     </div>
                     {alreadyIn ? (
-                      <Badge variant="secondary" className="gap-1"><Check className="w-3 h-3" /> Already checked in</Badge>
+                      <Badge variant="secondary" className="gap-1"><Check className="w-3 h-3" /> {t("auth.alreadyCheckedIn")}</Badge>
                     ) : (
                       <Button
                         className="w-full gap-2"
                         onClick={() => confirmArrival(appt)}
                         disabled={busyId === appt.id}
                       >
-                        {busyId === appt.id ? "Checking in…" : (<><Check className="w-4 h-4" /> Confirm arrival</>)}
+                        {busyId === appt.id ? t("auth.checkingIn") : (<><Check className="w-4 h-4" /> {t("auth.confirmArrival")}</>)}
                       </Button>
                     )}
                   </div>
@@ -182,7 +187,7 @@ export function ClinicCheckInClient({
               <div className="pt-1 text-center space-y-1.5">
                 {firstName && (
                   <p className="text-xs text-muted-foreground">
-                    Signed in as <span className="font-medium text-foreground">{firstName}</span>
+                    {t("auth.signedInAs")} <span className="font-medium text-foreground">{firstName}</span>
                   </p>
                 )}
                 <div className="flex items-center justify-center gap-3 text-sm">
@@ -190,7 +195,7 @@ export function ClinicCheckInClient({
                     onClick={() => setMode("code")}
                     className="text-muted-foreground hover:text-foreground underline underline-offset-4"
                   >
-                    Enter a code instead
+                    {t("auth.enterCodeInstead")}
                   </button>
                   <span className="text-muted-foreground/50">·</span>
                   <button
@@ -198,7 +203,7 @@ export function ClinicCheckInClient({
                     disabled={signingOut}
                     className="text-muted-foreground hover:text-foreground underline underline-offset-4"
                   >
-                    {signingOut ? "Signing out…" : "Not you? Sign out"}
+                    {signingOut ? t("auth.signingOut") : t("auth.notYouSignOut")}
                   </button>
                 </div>
               </div>
@@ -209,17 +214,17 @@ export function ClinicCheckInClient({
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
-                <KeyRound className="w-5 h-5 text-primary" /> Enter your check-in code
+                <KeyRound className="w-5 h-5 text-primary" /> {t("auth.enterCheckInCode")}
               </CardTitle>
               <CardDescription>
-                Use the 6-character code from your booking confirmation email.
+                {t("auth.codeDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Input
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g. K7P2X9"
+                placeholder={t("auth.codePlaceholder")}
                 autoCapitalize="characters"
                 autoComplete="off"
                 maxLength={8}
@@ -227,21 +232,21 @@ export function ClinicCheckInClient({
                 onKeyDown={(e) => e.key === "Enter" && submitCode()}
               />
               <Button className="w-full" onClick={submitCode} disabled={submitting || !code.trim()}>
-                {submitting ? "Checking in…" : "Check in"}
+                {submitting ? t("auth.checkingIn") : t("auth.checkIn")}
               </Button>
               {hasToday && (
                 <button
                   onClick={() => setMode("confirm")}
                   className="w-full text-center text-sm text-muted-foreground hover:text-foreground underline underline-offset-4"
                 >
-                  Back to my appointment
+                  {t("auth.backToAppointment")}
                 </button>
               )}
               {!loggedIn && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Have an account?{" "}
-                  <Link href="/" className="underline underline-offset-4">Sign in</Link>{" "}
-                  to check in without a code.
+                  {t("auth.haveAccount")}{" "}
+                  <Link href="/" className="underline underline-offset-4">{t("auth.signInLink")}</Link>{" "}
+                  {t("auth.toCheckInWithoutCode")}
                 </p>
               )}
             </CardContent>

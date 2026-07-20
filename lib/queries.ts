@@ -20,7 +20,6 @@ import type {
   PatientAllergyRow,
   PatientConditionRow,
   MedicationRow,
-  SurgeryRow,
   VitalsRow,
   AppointmentRow,
   MedicalReportRow,
@@ -81,7 +80,7 @@ export async function getPatientByNameDob(fullName: string, birthDate: string) {
 
 /** Everything a doctor's "Patient Briefing" panel needs in one call. */
 export async function getPatientClinical(patientId: string) {
-  const [allergies, conditions, medications, surgeries, latestVitals] =
+  const [allergies, conditions, medications, latestVitals] =
     await Promise.all([
       sql<PatientAllergyRow>`
         SELECT * FROM patient_allergies WHERE patient_id = ${patientId}
@@ -92,9 +91,6 @@ export async function getPatientClinical(patientId: string) {
       sql<MedicationRow>`
         SELECT * FROM medications WHERE patient_id = ${patientId}
         ORDER BY start_date DESC NULLS LAST`,
-      sql<SurgeryRow>`
-        SELECT * FROM surgeries WHERE patient_id = ${patientId}
-        ORDER BY surgery_date DESC NULLS LAST`,
       sql<VitalsRow>`
         SELECT * FROM vitals WHERE patient_id = ${patientId}
         ORDER BY recorded_at DESC LIMIT 1`,
@@ -103,7 +99,6 @@ export async function getPatientClinical(patientId: string) {
     allergies,
     conditions,
     medications,
-    surgeries,
     currentVitals: latestVitals[0] ?? null,
   }
 }

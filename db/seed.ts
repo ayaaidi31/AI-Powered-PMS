@@ -42,7 +42,6 @@ const APP_TABLES = [
   "medical_reports",
   "vitals",
   "appointments",
-  "surgeries",
   "medications",
   "patient_conditions",
   "patient_allergies",
@@ -128,11 +127,6 @@ async function main() {
       "medications",
       ["id", "patient_id", "pzn_code", "name", "dosage", "frequency", "start_date", "end_date"],
       seed.medications.map((m) => ({ ...m, id: randomUUID(), patient_id: patId.get(m.patient_id) })),
-    )
-    await insert(
-      "surgeries",
-      ["id", "patient_id", "name", "surgery_date", "notes"],
-      seed.surgeries.map((s) => ({ ...s, id: randomUUID(), patient_id: patId.get(s.patient_id) })),
     )
 
     // ── Scheduling / clinical events ──

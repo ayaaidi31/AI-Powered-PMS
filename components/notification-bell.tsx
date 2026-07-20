@@ -13,6 +13,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { getSeenNotificationIds, markNotificationsSeen } from "@/lib/actions/notifications-seen"
+import { useT } from "@/lib/i18n/locale-context"
 
 // How often the bell quietly re-checks for new notifications (ms).
 const REFRESH_MS = 60_000
@@ -38,6 +39,7 @@ const KIND_ICON: Record<string, { Icon: LucideIcon; tone: string }> = {
 
 export function NotificationBell({ loader }: { loader: () => Promise<NotificationItem[]> }) {
   const router = useRouter()
+  const t = useT()
   const [items, setItems] = useState<NotificationItem[]>([])
   const [seen, setSeen] = useState<Set<string>>(new Set())
 
@@ -70,7 +72,7 @@ export function NotificationBell({ loader }: { loader: () => Promise<Notificatio
       }}
     >
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+        <Button variant="ghost" size="icon" className="relative" aria-label={t("notifications.title")}>
           <Bell className="w-5 h-5" />
           {unread > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold">
@@ -81,14 +83,14 @@ export function NotificationBell({ loader }: { loader: () => Promise<Notificatio
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
         <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Notifications</span>
+          <span>{t("notifications.title")}</span>
           {items.length > 0 && <span className="text-xs font-normal text-muted-foreground">{items.length}</span>}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {items.length === 0 ? (
           <div className="py-8 flex flex-col items-center gap-2 text-muted-foreground">
             <Inbox className="w-6 h-6" />
-            <p className="text-sm">You&apos;re all caught up.</p>
+            <p className="text-sm">{t("notifications.emptyState")}</p>
           </div>
         ) : (
           <div className="max-h-80 overflow-y-auto py-1">

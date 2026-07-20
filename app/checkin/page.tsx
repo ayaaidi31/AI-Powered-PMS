@@ -14,11 +14,13 @@
 import { headers } from "next/headers"
 import { getCurrentPatient, getAppointmentsByPatient, getDoctors } from "@/lib/queries"
 import { doctorName } from "@/lib/display"
+import { getT } from "@/lib/i18n/server"
 import { ClinicCheckInClient, type TodayAppointment } from "./checkin-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function ClinicCheckInPage() {
+  const { t } = await getT()
   const ua = (await headers()).get("user-agent") ?? ""
   const isMobile = /Mobi|Android|iPhone|iPad|iPod|Windows Phone/i.test(ua)
 
@@ -43,7 +45,7 @@ export default async function ClinicCheckInPage() {
         starts_at: a.starts_at,
         status: a.status,
         reason: a.reason ?? null,
-        doctor_name: docNames.get(a.doctor_id) ?? "Your doctor",
+        doctor_name: docNames.get(a.doctor_id) ?? t("auth.yourDoctor"),
       }))
   }
 

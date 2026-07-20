@@ -11,21 +11,24 @@ import {
 import { useState } from "react"
 import { FaqChat } from "@/components/faq-chat"
 import { NotificationBell } from "@/components/notification-bell"
+import { LanguageToggle } from "@/components/language-toggle"
 import { logout } from "@/lib/actions/auth"
 import { getPatientNotifications } from "@/lib/actions/patient-notifications"
+import { useT } from "@/lib/i18n/locale-context"
+import type { TKey } from "@/lib/i18n/translate"
 
 // Primary sections — the day-to-day tasks.
 const mainNav = [
-  { label: "Dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
-  { label: "My Appointments", href: "/patient/appointments", icon: Calendar },
-  { label: "Health Records", href: "/patient/records", icon: FileText },
-  { label: "Documents", href: "/patient/documents", icon: FolderOpen },
-]
+  { key: "patient.nav.dashboard", href: "/patient/dashboard", icon: LayoutDashboard },
+  { key: "patient.nav.appointments", href: "/patient/appointments", icon: Calendar },
+  { key: "patient.nav.records", href: "/patient/records", icon: FileText },
+  { key: "patient.nav.documents", href: "/patient/documents", icon: FolderOpen },
+] as const
 // Account — tucked into the avatar menu (and the mobile sheet).
 const accountNav = [
-  { label: "My Profile", href: "/patient/profile", icon: User },
-  { label: "Billing", href: "/patient/invoices", icon: Receipt },
-]
+  { key: "patient.nav.profile", href: "/patient/profile", icon: User },
+  { key: "patient.nav.billing", href: "/patient/invoices", icon: Receipt },
+] as const
 
 export function PatientShell({
   patientName,
@@ -38,6 +41,7 @@ export function PatientShell({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  const t = useT()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const handleLogout = async () => {
@@ -77,14 +81,15 @@ export function PatientShell({
                     }`}
                   >
                     <item.icon className="w-4 h-4" />
-                    {item.label}
+                    {t(item.key as TKey)}
                   </Link>
                 )
               })}
             </nav>
 
-            {/* Right: notifications + account menu */}
+            {/* Right: language + notifications + account menu */}
             <div className="hidden md:flex items-center gap-2">
+              <LanguageToggle />
               <NotificationBell loader={getPatientNotifications} />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -99,21 +104,21 @@ export function PatientShell({
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>
                     <p className="font-medium text-foreground truncate">{patientName}</p>
-                    <p className="text-xs font-normal text-muted-foreground">Patient account</p>
+                    <p className="text-xs font-normal text-muted-foreground">{t("patient.shell.patientAccount")}</p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {accountNav.map((item) => (
                     <DropdownMenuItem key={item.href} asChild>
                       <Link href={item.href} className="cursor-pointer">
                         <item.icon className="w-4 h-4" />
-                        {item.label}
+                        {t(item.key as TKey)}
                       </Link>
                     </DropdownMenuItem>
                   ))}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive cursor-pointer">
                     <LogOut className="w-4 h-4" />
-                    Log out
+                    {t("common.signOut")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -126,50 +131,61 @@ export function PatientShell({
                 <SheetTrigger asChild>
                   <Button variant="ghost" size="icon">
                     <Menu className="w-5 h-5" />
-                    <span className="sr-only">Toggle menu</span>
+                    <span className="sr-only">{t("patient.shell.toggleMenu")}</span>
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="right" className="w-72">
-                  <SheetTitle>Navigation Menu</SheetTitle>
-                  <SheetDescription>Access your practice management tools</SheetDescription>
-                  <div className="flex flex-col h-full">
-                    <div className="flex items-center gap-3 mb-6">
-                      <span className="w-9 h-9 rounded-full bg-primary/10 text-primary text-sm font-semibold flex items-center justify-center">
-                        {initials}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground truncate">{patientName}</p>
-                        <p className="text-xs text-muted-foreground">Patient account</p>
-                      </div>
-                    </div>
+                <SheetContent side="right" className="w-80 p-0 flex flex-col gap-0">
+                  <SheetTitle className="sr-only">{t("patient.shell.navigation")}</SheetTitle>
+                  <SheetDescription className="sr-only">{t("patient.shell.navigationDesc")}</SheetDescription>
 
-                    <nav className="flex flex-col gap-1">
-                      {[...mainNav, ...accountNav].map((item) => {
-                        const isActive = pathname === item.href
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            onClick={() => setIsMobileMenuOpen(false)}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-colors ${
-                              isActive
-                                ? "bg-primary text-primary-foreground"
-                                : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                            }`}
-                          >
-                            <item.icon className="w-5 h-5" />
-                            {item.label}
-                          </Link>
-                        )
-                      })}
-                    </nav>
-
-                    <div className="mt-auto pt-4 border-t border-border">
-                      <Button variant="outline" className="w-full" onClick={handleLogout}>
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Log out
-                      </Button>
+                  {/* Brand */}
+                  <div className="flex items-center gap-2 px-5 h-16 border-b border-border shrink-0">
+                    <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                      <HeartPulse className="w-5 h-5 text-primary-foreground" />
                     </div>
+                    <span className="font-bold text-foreground text-lg">AI-PMS Clinic</span>
+                  </div>
+
+                  {/* Profile */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-border shrink-0">
+                    <span className="w-11 h-11 rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-sm font-semibold flex items-center justify-center">
+                      {initials}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground truncate">{patientName}</p>
+                      <p className="text-xs text-muted-foreground">{t("patient.shell.patientAccount")}</p>
+                    </div>
+                  </div>
+
+                  {/* Nav */}
+                  <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+                    {[...mainNav, ...accountNav].map((item) => {
+                      const isActive = pathname === item.href
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
+                            isActive
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                          }`}
+                        >
+                          <item.icon className="w-5 h-5" />
+                          {t(item.key as TKey)}
+                        </Link>
+                      )
+                    })}
+                  </nav>
+
+                  {/* Language + log out */}
+                  <div className="p-4 border-t border-border shrink-0 space-y-3">
+                    <LanguageToggle className="w-full justify-center" />
+                    <Button variant="outline" className="w-full gap-2" onClick={handleLogout}>
+                      <LogOut className="w-4 h-4" />
+                      {t("common.signOut")}
+                    </Button>
                   </div>
                 </SheetContent>
               </Sheet>
@@ -178,9 +194,9 @@ export function PatientShell({
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Content — subtle fade on each route change (keyed by path) */}
       <main className="flex-1">
-        {children}
+        <div key={pathname} className="animate-fade-in">{children}</div>
       </main>
 
       {/* Clinic FAQ assistant (Mistral-backed) */}

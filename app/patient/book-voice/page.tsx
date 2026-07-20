@@ -6,11 +6,13 @@ import { redirect } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Sparkles } from "lucide-react"
 import { getCurrentPatient } from "@/lib/queries"
+import { getT } from "@/lib/i18n/server"
 import { VoiceBookingClient } from "./voice-booking-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function BookByVoicePage() {
+  const { t } = await getT()
   const patient = await getCurrentPatient()
   if (!patient) redirect("/login")
 
@@ -18,13 +20,13 @@ export default async function BookByVoicePage() {
     <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       <div>
         <Link href="/patient/appointments" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-3">
-          <ArrowLeft className="w-4 h-4" /> Back to appointments
+          <ArrowLeft className="w-4 h-4" /> {t("patientProfile.voiceBackToAppointments")}
         </Link>
         <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Sparkles className="w-6 h-6 text-primary" /> Book by voice
+          <Sparkles className="w-6 h-6 text-primary" /> {t("patientProfile.voiceTitle")}
         </h1>
         <p className="text-muted-foreground">
-          Talk to the assistant to book, move, or cancel an appointment — no forms.
+          {t("patientProfile.voiceSubtitle")}
         </p>
       </div>
 

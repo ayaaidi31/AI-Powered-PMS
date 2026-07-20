@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ArrowLeft, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { InvoiceDocument } from "@/components/invoice-document"
+import { useT } from "@/lib/i18n/locale-context"
 
 interface InvoiceLine {
   catalog: "EBM" | "GOAE"
@@ -25,6 +26,7 @@ export function InvoicePrintClient(props: {
   totalCents: number | null
   items: InvoiceLine[]
 }) {
+  const t = useT()
   return (
     <div className="min-h-screen bg-muted/40">
       {/* Toolbar — hidden when printing. */}
@@ -32,11 +34,11 @@ export function InvoicePrintClient(props: {
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <Link href="/patient/invoices">
             <Button variant="ghost" size="sm" className="gap-2">
-              <ArrowLeft className="w-4 h-4" /> Back to billing
+              <ArrowLeft className="w-4 h-4" /> {t("patientRecords.backToBilling")}
             </Button>
           </Link>
           <Button size="sm" className="gap-2" onClick={() => window.print()}>
-            <Printer className="w-4 h-4" /> Print / Save as PDF
+            <Printer className="w-4 h-4" /> {t("patientRecords.printSaveAsPdf")}
           </Button>
         </div>
       </div>

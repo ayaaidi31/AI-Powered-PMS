@@ -6,21 +6,23 @@
  */
 import { getCurrentPatient, getReportsByPatient, getCurrentDoctor } from "@/lib/queries"
 import { doctorName } from "@/lib/display"
+import { getT } from "@/lib/i18n/server"
 import { RecordsClient, type ReportListItem } from "./records-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function PatientRecordsPage() {
+  const { t } = await getT()
   const patient = await getCurrentPatient()
   if (!patient) {
-    return <div className="p-8 text-muted-foreground">No patient account found.</div>
+    return <div className="p-8 text-muted-foreground">{t("patientRecords.noPatientAccount")}</div>
   }
 
   const [reports, doctor] = await Promise.all([
     getReportsByPatient(patient.id),
     getCurrentDoctor(),
   ])
-  const treatingDoctor = doctor ? doctorName(doctor) : "Treating physician"
+  const treatingDoctor = doctor ? doctorName(doctor) : t("patientRecords.treatingPhysician")
 
   const items: ReportListItem[] = reports.map((r) => ({
     id: r.id,

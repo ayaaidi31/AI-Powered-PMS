@@ -8,7 +8,7 @@
  *
  * Design choices (kept deliberately lean for a thesis prototype):
  *  - No FHIR. Plain normalized tables. The `patients` table stays SHORT;
- *    everything else (allergies, conditions, meds, surgeries, vitals) lives in
+ *    everything else (allergies, conditions, meds, vitals) lives in
  *    small child tables linked by patient_id.
  *  - VITALS are per-visit measurements (a time series), so they get their own
  *    table keyed by patient_id + appointment_id + recorded_at. "Current vitals"
@@ -233,16 +233,6 @@ export const medications: MedicationRow[] = [
 ]
 
 /**
- * surgeries  (past surgeries)
- *  id          uuid PK
- *  patient_id  uuid FK -> patients(id)
- *  name        text
- *  surgery_date date
- *  notes       text
- */
-export interface SurgeryRow { id: string; patient_id: string; name: string; surgery_date: string; notes: string | null }
-
-/**
  * patient_documents  (uploaded files attached to a record: X-ray, MRI, lab …).
  * This metadata shape deliberately omits the `content` bytea column — the bytes
  * are streamed separately by the download route, never bundled into list views.
@@ -257,10 +247,6 @@ export interface PatientDocumentRow {
   uploaded_by_id: string | null; uploaded_by_name: string
   created_at: string; deleted_at: string | null
 }
-
-export const surgeries: SurgeryRow[] = [
-  { id: "surg-1", patient_id: "pat-3", name: "Appendectomy", surgery_date: "2010-08-20", notes: "Routine procedure, no complications" },
-]
 
 /**
  * vitals  ⭐ per-visit measurements (a time series, NOT static patient fields)

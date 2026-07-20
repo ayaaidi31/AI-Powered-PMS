@@ -7,15 +7,17 @@
  */
 import { getCurrentPatient, getAppointmentsByPatient, getDoctors } from "@/lib/queries"
 import { doctorName } from "@/lib/display"
+import { getT } from "@/lib/i18n/server"
 import { PatientAppointmentsClient, type PatientAppointmentView } from "./appointments-client"
 
 // Live appointment data must be fetched per request, never statically cached.
 export const dynamic = "force-dynamic"
 
 export default async function PatientAppointmentsPage() {
+  const { t } = await getT()
   const patient = await getCurrentPatient()
   if (!patient) {
-    return <div className="p-8 text-muted-foreground">No patient account found.</div>
+    return <div className="p-8 text-muted-foreground">{t("patient.noPatientAccount")}</div>
   }
 
   const [appointments, doctors] = await Promise.all([
@@ -30,7 +32,7 @@ export default async function PatientAppointmentsPage() {
     starts_at: a.starts_at,
     status: a.status,
     reason: a.reason,
-    doctor_name: doctorNames.get(a.doctor_id) ?? "Doctor",
+    doctor_name: doctorNames.get(a.doctor_id) ?? t("patient.doctorFallback"),
     check_in_code: a.check_in_code ?? null,
   }))
 

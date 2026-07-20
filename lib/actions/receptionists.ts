@@ -12,6 +12,8 @@ import { query } from "@/lib/db"
 import { getAppointments, getBillingWorklist, getDoctors } from "@/lib/queries"
 import { doctorName } from "@/lib/display"
 import { receptionistSchema } from "@/lib/validation"
+import { getT } from "@/lib/i18n/server"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 import type { ReceptionistRow } from "@/lib/seed-data"
 import { ok, fail, type ActionResult } from "./types"
 
@@ -45,10 +47,11 @@ export interface ReceptionistNotification {
 /** Live front-desk alerts: off-duty doctors needing recovery, billing, waiting. */
 export async function getReceptionistNotifications(): Promise<ReceptionistNotification[]> {
   const [appointments, worklist, doctors] = await Promise.all([getAppointments(), getBillingWorklist(), getDoctors()])
+  const { t, locale } = await getT()
   const startOfToday = new Date()
   startOfToday.setHours(0, 0, 0, 0)
   const todayStr = startOfToday.toDateString()
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" })
 
   const out: ReceptionistNotification[] = []
 
@@ -62,8 +65,10 @@ export async function getReceptionistNotifications(): Promise<ReceptionistNotifi
       out.push({
         id: `staff-${d.id}`,
         kind: "staff",
-        title: `${doctorName(d)} is off duty`,
-        description: `${orphaned} appointment${orphaned !== 1 ? "s" : ""} need recovery`,
+        title: t("notify.doctorOffDuty", { name: doctorName(d) }),
+        description: orphaned !== 1
+          ? t("notify.recoveryNeededMany", { count: orphaned })
+          : t("notify.recoveryNeededOne", { count: orphaned }),
         href: "/receptionist/staff",
       })
     }
@@ -75,8 +80,10 @@ export async function getReceptionistNotifications(): Promise<ReceptionistNotifi
       out.push({
         id: `bill-${w.appointment_id}`,
         kind: "billing",
-        title: "Billing to process",
-        description: `${w.patient_name} · ${w.code_count} code${w.code_count !== 1 ? "s" : ""}`,
+        title: t("notify.billingToProcess"),
+        description: w.code_count !== 1
+          ? t("notify.billingDescMany", { name: w.patient_name, count: w.code_count })
+          : t("notify.billingDescOne", { name: w.patient_name, count: w.code_count }),
         href: "/receptionist/billing",
       })
     }
@@ -88,7 +95,8 @@ export async function getReceptionistNotifications(): Promise<ReceptionistNotifi
       out.push({
         id: `wait-${a.id}`,
         kind: "waiting",
-        title: `${a.patient_name} is waiting`,
+        title: t("notify.patientWaiting", { name: a.patient_name }),
+        // Doctor name and time are data, shown as-is.
         description: `${a.doctor_name} · ${fmtTime(a.starts_at)}`,
         href: "/receptionist/waiting",
       })

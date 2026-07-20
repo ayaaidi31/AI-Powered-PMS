@@ -5,6 +5,7 @@
  * patient (stand-in until authentication), then renders the booking wizard.
  */
 import { getDoctors, getCurrentPatient, getAppointmentById } from "@/lib/queries"
+import { getT } from "@/lib/i18n/server"
 import { NewAppointmentClient } from "./new-appointment-client"
 
 export const dynamic = "force-dynamic"
@@ -15,9 +16,10 @@ export default async function NewAppointmentPage({
   searchParams: Promise<{ reschedule?: string }>
 }) {
   const { reschedule } = await searchParams
+  const { t } = await getT()
   const [doctors, patient] = await Promise.all([getDoctors(), getCurrentPatient()])
   if (!patient) {
-    return <div className="p-8 text-muted-foreground">No patient account found.</div>
+    return <div className="p-8 text-muted-foreground">{t("patient.noPatientAccount")}</div>
   }
   // Keep on-duty doctors, plus those on a fixed-term absence (bookable again once
   // it ends). Doctors on open-ended leave (no return date) are hidden entirely.

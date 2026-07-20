@@ -7,11 +7,13 @@
  */
 import { getReportById, getDoctorById, getPatientById } from "@/lib/queries"
 import { doctorName, patientName } from "@/lib/display"
+import { getT } from "@/lib/i18n/server"
 import { RecordDetailClient } from "./record-detail-client"
 
 export const dynamic = "force-dynamic"
 
 export default async function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { t } = await getT()
   const { id } = await params
   const report = await getReportById(id)
   if (!report) {
@@ -31,10 +33,10 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ i
         prescriptions: report.prescriptions ?? [],
         status: report.status,
         date: report.approved_at ?? report.created_at,
-        doctorName: doctor ? doctorName(doctor) : "Treating physician",
+        doctorName: doctor ? doctorName(doctor) : t("patientRecords.treatingPhysician"),
         doctorSpecialization: doctor?.specialization ?? null,
         doctorLanr: doctor?.lanr ?? null,
-        patientName: patient ? patientName(patient) : "Patient",
+        patientName: patient ? patientName(patient) : t("patientRecords.patientFallback"),
         patientDob: patient?.birth_date ?? null,
       }}
     />

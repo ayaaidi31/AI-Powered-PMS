@@ -10,6 +10,7 @@ import { Send, FileSearch, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { askPatientRecordsQA, type RecordSource } from "@/lib/actions/ai"
 import { ReportContent } from "@/components/report-content"
+import { useT } from "@/lib/i18n/locale-context"
 
 export interface RecordsQAMessage {
   role: "user" | "assistant"
@@ -25,13 +26,16 @@ const SUGGESTIONS = [
 ]
 
 export function RecordsQA({
-  patientId, patientName, messages, setMessages,
+  patientId, patientName, messages, setMessages, lang,
 }: {
   patientId: string
   patientName: string
   messages: RecordsQAMessage[]
   setMessages: (updater: (prev: RecordsQAMessage[]) => RecordsQAMessage[]) => void
+  /** Language the AI should answer in, chosen at the workspace. */
+  lang?: "de" | "en"
 }) {
+  const t = useT()
   const [input, setInput] = useState("")
   const [pending, start] = useTransition()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -47,7 +51,7 @@ export function RecordsQA({
     setMessages((m) => [...m, { role: "user", content: q }])
     setInput("")
     start(async () => {
-      const r = await askPatientRecordsQA({ patientId, question: q, history })
+      const r = await askPatientRecordsQA({ patientId, question: q, history, lang })
       if (r.status === "ok") {
         setMessages((m) => [...m, { role: "assistant", content: r.data.answer, sources: r.data.sources, grounded: r.data.grounded }])
       } else {
@@ -62,8 +66,7 @@ export function RecordsQA({
         {messages.length === 0 && (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Ask about <span className="font-medium text-foreground">{patientName}</span>&apos;s record. Answers come
-              only from this patient&apos;s past reports and cite their sources.
+              {t("aiChat.recordsIntroBefore")}<span className="font-medium text-foreground">{patientName}</span>{t("aiChat.recordsIntroAfter")}
             </p>
             <div className="flex flex-wrap gap-2">
               {SUGGESTIONS.map((s) => (
@@ -96,7 +99,7 @@ export function RecordsQA({
                   {m.sources && m.sources.length > 0 && m.grounded !== false && (
                     <div className="mt-2 pt-2 border-t border-border/60 space-y-0.5">
                       <p className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
-                        <BookOpen className="w-3 h-3" /> Sources
+                        <BookOpen className="w-3 h-3" /> {t("aiChat.sources")}
                       </p>
                       {m.sources.map((s) => (
                         <p key={s.id} className="text-[11px] text-muted-foreground">{s.label}</p>
@@ -125,16 +128,16 @@ export function RecordsQA({
       </div>
 
       <p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-2">
-        <FileSearch className="w-3 h-3 shrink-0" /> Answers are limited to this patient&apos;s own records and cite their sources.
+        <FileSearch className="w-3 h-3 shrink-0" /> {t("aiChat.recordsDisclaimer")}
       </p>
       <form onSubmit={(e) => { e.preventDefault(); send(input) }} className="flex gap-2 pt-2">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about this patient's history…"
+          placeholder={t("aiChat.recordsPlaceholder")}
           className="flex-1 px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
         />
-        <Button type="submit" size="icon" disabled={pending || !input.trim()} aria-label="Ask">
+        <Button type="submit" size="icon" disabled={pending || !input.trim()} aria-label={t("aiChat.send")}>
           <Send className="w-4 h-4" />
         </Button>
       </form>

@@ -20,17 +20,13 @@ import { patientName } from "@/lib/display"
 import { updatePatient } from "@/lib/actions/patients"
 import { respondToProposal, type ProfileProposalRow } from "@/lib/actions/profile-proposals"
 import { SecurityClient } from "@/app/security/security-client"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 interface Alerts {
   allergies: string[]
   conditions: string[]
   medications: { name: string; dosage: string; frequency: string }[]
-}
-
-const INSURANCE_LABEL: Record<PatientRow["insurance_type"], string> = {
-  gkv: "Public Insurance (GKV)",
-  pkv: "Private Insurance (PKV)",
-  selbstzahler: "Self-Pay",
 }
 
 export function ProfileClient({
@@ -42,6 +38,13 @@ export function ProfileClient({
   proposals: ProfileProposalRow[]
   twoFactorEnabled: boolean
 }) {
+  const t = useT()
+  const locale = useLocale()
+  const insuranceLabel: Record<PatientRow["insurance_type"], string> = {
+    gkv: t("patientProfile.insuranceGkv"),
+    pkv: t("patientProfile.insurancePkv"),
+    selbstzahler: t("patientProfile.insuranceSelbstzahler"),
+  }
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -54,7 +57,7 @@ export function ProfileClient({
       const r = await respondToProposal(id, accept)
       setRespondingId(null)
       if (r.status === "ok") {
-        toast.success(accept ? "Change applied to your profile." : "Change declined.")
+        toast.success(accept ? t("patientProfile.changeApplied") : t("patientProfile.changeDeclined"))
         router.refresh()
       } else {
         toast.error(r.message)
@@ -74,7 +77,7 @@ export function ProfileClient({
     const result = await updatePatient(patient.id, form, "Patient (self-service)")
     setIsSaving(false)
     if (result.status === "ok") {
-      toast.success("Profile updated successfully")
+      toast.success(t("patientProfile.profileUpdated"))
       setIsEditing(false)
     } else {
       toast.error(result.message)
@@ -86,20 +89,20 @@ export function ProfileClient({
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">My Profile</h1>
-            <p className="text-muted-foreground">Manage your personal information</p>
+            <h1 className="text-2xl font-bold text-foreground">{t("patientProfile.title")}</h1>
+            <p className="text-muted-foreground">{t("patientProfile.subtitle")}</p>
           </div>
           {!isEditing ? (
             <Button onClick={() => setIsEditing(true)} variant="outline" className="gap-2">
               <Edit className="w-4 h-4" />
-              Edit Profile
+              {t("patientProfile.editProfile")}
             </Button>
           ) : (
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isSaving}>Cancel</Button>
+              <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isSaving}>{t("common.cancel")}</Button>
               <Button onClick={handleSave} className="gap-2" disabled={isSaving}>
                 <Save className="w-4 h-4" />
-                {isSaving ? "Saving…" : "Save Changes"}
+                {isSaving ? t("patientProfile.saving") : t("patientProfile.saveChanges")}
               </Button>
             </div>
           )}
@@ -112,11 +115,10 @@ export function ProfileClient({
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Sparkles className="w-5 h-5 text-primary" />
-                  Suggested updates to your profile
+                  {t("patientProfile.suggestedUpdates")}
                 </CardTitle>
                 <CardDescription>
-                  Your doctor suggested these changes after your consultation. Review and choose whether to apply
-                  each one to your profile.
+                  {t("patientProfile.suggestedUpdatesDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -126,17 +128,17 @@ export function ProfileClient({
                       <p className="text-sm font-medium text-foreground">
                         {p.label}: <span className="text-primary">{p.proposed_value}</span>
                       </p>
-                      {p.current_value && <p className="text-xs text-muted-foreground">Current: {p.current_value}</p>}
+                      {p.current_value && <p className="text-xs text-muted-foreground">{t("patientProfile.currentValue", { value: p.current_value })}</p>}
                       {p.reason && <p className="text-xs text-muted-foreground italic">{p.reason}</p>}
                     </div>
                     <div className="flex gap-2 shrink-0">
                       <Button size="sm" className="gap-1" onClick={() => respond(p.id, true)} disabled={isResponding}>
                         <Check className="w-4 h-4" />
-                        {isResponding && respondingId === p.id ? "…" : "Accept"}
+                        {isResponding && respondingId === p.id ? "…" : t("patientProfile.accept")}
                       </Button>
                       <Button size="sm" variant="outline" className="gap-1" onClick={() => respond(p.id, false)} disabled={isResponding}>
                         <X className="w-4 h-4" />
-                        Decline
+                        {t("patientProfile.decline")}
                       </Button>
                     </div>
                   </div>
@@ -148,19 +150,19 @@ export function ProfileClient({
           {/* Personal Information */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><User className="w-5 h-5 text-primary" />Personal Information</CardTitle>
-              <CardDescription>Your basic profile details</CardDescription>
+              <CardTitle className="flex items-center gap-2"><User className="w-5 h-5 text-primary" />{t("patientProfile.personalInfo")}</CardTitle>
+              <CardDescription>{t("patientProfile.personalInfoDesc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Full Name</Label>
+                  <Label>{t("patientProfile.fullName")}</Label>
                   <p className="text-foreground py-2">{patientName(patient)}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Date of Birth</Label>
+                  <Label>{t("patientProfile.dateOfBirth")}</Label>
                   <p className="text-foreground py-2">
-                    {new Date(patient.birth_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                    {new Date(patient.birth_date).toLocaleDateString(INTL_LOCALE[locale], { month: "long", day: "numeric", year: "numeric" })}
                   </p>
                 </div>
               </div>
@@ -169,24 +171,24 @@ export function ProfileClient({
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
+                  <Label htmlFor="email">{t("patientProfile.emailAddress")}</Label>
                   {isEditing ? (
                     <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                   ) : (
                     <div className="flex items-center gap-2 py-2">
                       <Mail className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-foreground">{patient.email ?? "Not provided"}</span>
+                      <span className="text-foreground">{patient.email ?? t("patientProfile.notProvided")}</span>
                     </div>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
+                  <Label htmlFor="phone">{t("patientProfile.phoneNumber")}</Label>
                   {isEditing ? (
                     <Input id="phone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                   ) : (
                     <div className="flex items-center gap-2 py-2">
                       <Phone className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-foreground">{patient.phone ?? "Not provided"}</span>
+                      <span className="text-foreground">{patient.phone ?? t("patientProfile.notProvided")}</span>
                     </div>
                   )}
                 </div>
@@ -197,23 +199,23 @@ export function ProfileClient({
           {/* Address */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><MapPin className="w-5 h-5 text-primary" />Address</CardTitle>
-              <CardDescription>Your residential address</CardDescription>
+              <CardTitle className="flex items-center gap-2"><MapPin className="w-5 h-5 text-primary" />{t("patientProfile.address")}</CardTitle>
+              <CardDescription>{t("patientProfile.addressDesc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {isEditing ? (
                 <div className="grid gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="street">Street Address</Label>
+                    <Label htmlFor="street">{t("patientProfile.streetAddress")}</Label>
                     <Input id="street" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="city">City</Label>
+                      <Label htmlFor="city">{t("patientProfile.city")}</Label>
                       <Input id="city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="postal_code">Postal Code</Label>
+                      <Label htmlFor="postal_code">{t("patientProfile.postalCode")}</Label>
                       <Input id="postal_code" value={form.postal_code} onChange={(e) => setForm({ ...form, postal_code: e.target.value })} />
                     </div>
                   </div>
@@ -228,7 +230,7 @@ export function ProfileClient({
                   </div>
                 </div>
               ) : (
-                <p className="text-muted-foreground">No address provided</p>
+                <p className="text-muted-foreground">{t("patientProfile.noAddress")}</p>
               )}
             </CardContent>
           </Card>
@@ -236,24 +238,24 @@ export function ProfileClient({
           {/* Insurance Information (read-only) */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Shield className="w-5 h-5 text-primary" />Insurance Information</CardTitle>
-              <CardDescription>Your health insurance details</CardDescription>
+              <CardTitle className="flex items-center gap-2"><Shield className="w-5 h-5 text-primary" />{t("patientProfile.insuranceInfo")}</CardTitle>
+              <CardDescription>{t("patientProfile.insuranceInfoDesc")}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Insurance Type</Label>
-                  <div className="py-2"><Badge variant="secondary" className="text-sm">{INSURANCE_LABEL[patient.insurance_type]}</Badge></div>
+                  <Label>{t("patientProfile.insuranceType")}</Label>
+                  <div className="py-2"><Badge variant="secondary" className="text-sm">{insuranceLabel[patient.insurance_type]}</Badge></div>
                 </div>
                 {patient.versicherten_id && (
                   <div className="space-y-2">
-                    <Label>Insurance Number</Label>
+                    <Label>{t("patientProfile.insuranceNumber")}</Label>
                     <p className="text-foreground py-2">{patient.versicherten_id}</p>
                   </div>
                 )}
               </div>
               <p className="text-sm text-muted-foreground">
-                To update your insurance information, please contact the clinic reception.
+                {t("patientProfile.insuranceContact")}
               </p>
             </CardContent>
           </Card>
@@ -262,18 +264,18 @@ export function ProfileClient({
           {vitals && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Activity className="w-5 h-5 text-primary" />Latest Vitals</CardTitle>
+                <CardTitle className="flex items-center gap-2"><Activity className="w-5 h-5 text-primary" />{t("patientProfile.latestVitals")}</CardTitle>
                 <CardDescription>
-                  From your most recent consultation · {new Date(vitals.recorded_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                  {t("patientProfile.vitalsFrom", { date: new Date(vitals.recorded_at).toLocaleDateString(INTL_LOCALE[locale], { month: "long", day: "numeric", year: "numeric" }) })}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  <VitalStat icon={<Activity className="w-4 h-4" />} label="Blood Pressure" value={vitals.systolic != null ? `${vitals.systolic}/${vitals.diastolic}` : "—"} unit="mmHg" />
-                  <VitalStat icon={<Heart className="w-4 h-4" />} label="Heart Rate" value={vitals.heart_rate != null ? `${vitals.heart_rate}` : "—"} unit="bpm" />
-                  <VitalStat icon={<Thermometer className="w-4 h-4" />} label="Temperature" value={vitals.temperature_c != null ? `${vitals.temperature_c}` : "—"} unit="°C" />
-                  <VitalStat icon={<User className="w-4 h-4" />} label="Weight" value={vitals.weight_kg != null ? `${vitals.weight_kg}` : "—"} unit="kg" />
-                  <VitalStat icon={<User className="w-4 h-4" />} label="Height" value={vitals.height_cm != null ? `${vitals.height_cm}` : "—"} unit="cm" />
+                  <VitalStat icon={<Activity className="w-4 h-4" />} label={t("patientProfile.bloodPressure")} value={vitals.systolic != null ? `${vitals.systolic}/${vitals.diastolic}` : "—"} unit="mmHg" />
+                  <VitalStat icon={<Heart className="w-4 h-4" />} label={t("patientProfile.heartRate")} value={vitals.heart_rate != null ? `${vitals.heart_rate}` : "—"} unit="bpm" />
+                  <VitalStat icon={<Thermometer className="w-4 h-4" />} label={t("patientProfile.temperature")} value={vitals.temperature_c != null ? `${vitals.temperature_c}` : "—"} unit="°C" />
+                  <VitalStat icon={<User className="w-4 h-4" />} label={t("patientProfile.weight")} value={vitals.weight_kg != null ? `${vitals.weight_kg}` : "—"} unit="kg" />
+                  <VitalStat icon={<User className="w-4 h-4" />} label={t("patientProfile.height")} value={vitals.height_cm != null ? `${vitals.height_cm}` : "—"} unit="cm" />
                 </div>
               </CardContent>
             </Card>
@@ -283,13 +285,13 @@ export function ProfileClient({
           {(alerts.allergies.length > 0 || alerts.conditions.length > 0 || alerts.medications.length > 0) && (
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-destructive" />Medical Alerts</CardTitle>
-                <CardDescription>Important medical information</CardDescription>
+                <CardTitle className="flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-destructive" />{t("patientProfile.medicalAlerts")}</CardTitle>
+                <CardDescription>{t("patientProfile.medicalAlertsDesc")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {alerts.allergies.length > 0 && (
                   <div>
-                    <Label className="text-destructive">Allergies</Label>
+                    <Label className="text-destructive">{t("patientProfile.allergies")}</Label>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {alerts.allergies.map((a, i) => <Badge key={i} variant="destructive">{a}</Badge>)}
                     </div>
@@ -297,7 +299,7 @@ export function ProfileClient({
                 )}
                 {alerts.conditions.length > 0 && (
                   <div>
-                    <Label>Chronic Conditions</Label>
+                    <Label>{t("patientProfile.chronicConditions")}</Label>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {alerts.conditions.map((c, i) => <Badge key={i} variant="secondary">{c}</Badge>)}
                     </div>
@@ -305,7 +307,7 @@ export function ProfileClient({
                 )}
                 {alerts.medications.length > 0 && (
                   <div>
-                    <Label>Current Medications</Label>
+                    <Label>{t("patientProfile.currentMedications")}</Label>
                     <div className="mt-2 space-y-2">
                       {alerts.medications.map((med, i) => (
                         <div key={i} className="text-sm">

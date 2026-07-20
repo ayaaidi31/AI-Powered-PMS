@@ -15,7 +15,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { AppointmentWithNames } from "@/lib/queries"
-import { initials, statusLabel, type AppointmentStatusDb } from "@/lib/display"
+import { initials } from "@/lib/display"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 
 const STATUS_STYLE: Record<string, { color: string; text: string; bg: string }> = {
   waiting: { color: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50" },
@@ -27,13 +30,15 @@ const STATUS_STYLE: Record<string, { color: string; text: string; bg: string }> 
 }
 const styleFor = (s: string) => STATUS_STYLE[s] ?? STATUS_STYLE.scheduled
 
-const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-
 export function DoctorScheduleClient({
   appointments, allergyPatientIds,
 }: { appointments: AppointmentWithNames[]; allergyPatientIds: string[] }) {
+  const t = useT()
+  const locale = useLocale()
   const [selected, setSelected] = useState(() => new Date())
   const allergyIds = new Set(allergyPatientIds)
+
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" })
 
   const isToday = selected.toDateString() === new Date().toDateString()
   const dayAppointments = appointments
@@ -51,12 +56,12 @@ export function DoctorScheduleClient({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Calendar className="w-6 h-6 text-primary" /> Schedule
+            <Calendar className="w-6 h-6 text-primary" /> {t("schedule.title")}
           </h1>
-          <p className="text-muted-foreground">Your appointments</p>
+          <p className="text-muted-foreground">{t("schedule.subtitle")}</p>
         </div>
         <Link href="/doctor/workspace">
-          <Button className="gap-2"><Stethoscope className="w-4 h-4" />Open Workspace</Button>
+          <Button className="gap-2"><Stethoscope className="w-4 h-4" />{t("schedule.openWorkspace")}</Button>
         </Link>
       </div>
 
@@ -67,11 +72,13 @@ export function DoctorScheduleClient({
             <Button variant="outline" size="icon" onClick={() => shift(-1)}><ChevronLeft className="w-4 h-4" /></Button>
             <div className="text-center">
               <p className="font-semibold text-foreground">
-                {selected.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                {selected.toLocaleDateString(INTL_LOCALE[locale], { weekday: "long", month: "long", day: "numeric" })}
               </p>
               <p className="text-xs text-muted-foreground">
-                {dayAppointments.length} appointment{dayAppointments.length !== 1 ? "s" : ""}
-                {!isToday && <> · <button className="underline" onClick={() => setSelected(new Date())}>Back to today</button></>}
+                {dayAppointments.length === 1
+                  ? t("schedule.appointmentCountOne", { count: dayAppointments.length })
+                  : t("schedule.appointmentCountOther", { count: dayAppointments.length })}
+                {!isToday && <> · <button className="underline" onClick={() => setSelected(new Date())}>{t("schedule.backToToday")}</button></>}
               </p>
             </div>
             <Button variant="outline" size="icon" onClick={() => shift(1)}><ChevronRight className="w-4 h-4" /></Button>
@@ -81,14 +88,14 @@ export function DoctorScheduleClient({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">{isToday ? "Today" : "Day"}&apos;s Appointments</CardTitle>
-          <CardDescription>Times shown for the selected day</CardDescription>
+          <CardTitle className="text-lg">{isToday ? t("schedule.todaysAppointments") : t("schedule.daysAppointments")}</CardTitle>
+          <CardDescription>{t("schedule.timesShown")}</CardDescription>
         </CardHeader>
         <CardContent>
           {dayAppointments.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Calendar className="w-16 h-16 mx-auto mb-4 opacity-30" />
-              <p className="font-medium">No appointments on this day</p>
+              <p className="font-medium">{t("schedule.noAppointments")}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -101,7 +108,7 @@ export function DoctorScheduleClient({
                   >
                     <div className="text-center min-w-[70px]">
                       <p className="font-bold text-foreground">{fmtTime(a.starts_at)}</p>
-                      <p className="text-xs text-muted-foreground">{a.duration_min} min</p>
+                      <p className="text-xs text-muted-foreground">{t("schedule.minutesShort", { count: a.duration_min })}</p>
                     </div>
                     <div className={`w-1.5 h-14 rounded-full ${st.color}`} />
                     <Avatar className="w-10 h-10 border-2 border-background shadow">
@@ -119,9 +126,9 @@ export function DoctorScheduleClient({
                       </span>
                     )}
                     {allergyIds.has(a.patient_id) && (
-                      <Badge variant="destructive" className="hidden sm:flex text-xs"><AlertCircle className="w-3 h-3 mr-1" />Allergies</Badge>
+                      <Badge variant="destructive" className="hidden sm:flex text-xs"><AlertCircle className="w-3 h-3 mr-1" />{t("schedule.allergies")}</Badge>
                     )}
-                    <Badge className={`${st.bg} ${st.text} border-0 whitespace-nowrap`}>{statusLabel(a.status as AppointmentStatusDb)}</Badge>
+                    <Badge className={`${st.bg} ${st.text} border-0 whitespace-nowrap`}>{t(`status.${a.status}` as TKey)}</Badge>
                   </div>
                 )
               })}

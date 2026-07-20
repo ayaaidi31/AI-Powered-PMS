@@ -1,5 +1,9 @@
+"use client"
+
 import React from "react"
 import { CLINIC } from "@/lib/clinic"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 interface InvoiceLine {
   catalog: "EBM" | "GOAE"
@@ -25,13 +29,6 @@ interface Props {
 // GOÄ Schwellenwert — above it a written justification is required (§12 Abs. 3).
 const GOAE_THRESHOLD = 2.3
 
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })
-const euro = (cents: number | null) =>
-  cents == null ? "—" : (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })
-
-const INSURANCE_LABEL = { gkv: "Gesetzlich (GKV)", pkv: "Privat (PKV)", selbstzahler: "Selbstzahler" } as const
-
 /**
  * A finalised billing document. For private/self-pay patients it is a §12 GOÄ
  * invoice (Rechnung) with all mandatory fields; for statutory (GKV) patients it
@@ -42,6 +39,18 @@ export const InvoiceDocument = React.forwardRef<HTMLDivElement, Props>(function 
   { insuranceType, patientName, patientDob, invoiceNumber, invoiceDate, serviceDate, dueDate, items, totalCents },
   ref,
 ) {
+  const t = useT()
+  const locale = useLocale()
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(INTL_LOCALE[locale], { day: "2-digit", month: "2-digit", year: "numeric" })
+  const euro = (cents: number | null) =>
+    cents == null ? "—" : (cents / 100).toLocaleString(INTL_LOCALE[locale], { style: "currency", currency: "EUR" })
+  const INSURANCE_LABEL = {
+    gkv: t("invoiceDoc.insGkv"),
+    pkv: t("invoiceDoc.insPkv"),
+    selbstzahler: t("invoiceDoc.insSelbstzahler"),
+  } as const
+
   const isGkv = insuranceType === "gkv"
   const factorOf = (m: number | null) => (m == null ? null : Number(m))
   const needsJustification = items.some((i) => (factorOf(i.multiplier) ?? 0) > GOAE_THRESHOLD)
@@ -56,32 +65,32 @@ export const InvoiceDocument = React.forwardRef<HTMLDivElement, Props>(function 
           <p className="text-xs text-neutral-600">{CLINIC.line2}</p>
         </div>
         <div className="text-right shrink-0">
-          <p className="text-[10px] uppercase tracking-widest text-neutral-500">{isGkv ? "Datum" : "Rechnungs-Nr."}</p>
-          <p className="font-mono text-sm font-semibold">{isGkv ? fmtDate(invoiceDate) : (invoiceNumber ?? "(bei Ausstellung)")}</p>
-          {!isGkv && <p className="text-xs text-neutral-600 mt-1">Datum: {fmtDate(invoiceDate)}</p>}
+          <p className="text-[10px] uppercase tracking-widest text-neutral-500">{isGkv ? t("invoiceDoc.date") : t("invoiceDoc.invoiceNumber")}</p>
+          <p className="font-mono text-sm font-semibold">{isGkv ? fmtDate(invoiceDate) : (invoiceNumber ?? t("invoiceDoc.onIssue"))}</p>
+          {!isGkv && <p className="text-xs text-neutral-600 mt-1">{t("invoiceDoc.dateLabel")} {fmtDate(invoiceDate)}</p>}
         </div>
       </div>
 
       {/* Recipient */}
       <div className="flex flex-wrap justify-between gap-4 mt-6">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-neutral-500">{isGkv ? "Patient / Patientin" : "Rechnungsempfänger"}</p>
+          <p className="text-[10px] uppercase tracking-widest text-neutral-500">{isGkv ? t("invoiceDoc.patient") : t("invoiceDoc.billTo")}</p>
           <p className="font-semibold">{patientName}</p>
-          {patientDob && <p className="text-xs text-neutral-600">geb. {fmtDate(patientDob)}</p>}
+          {patientDob && <p className="text-xs text-neutral-600">{t("invoiceDoc.born")} {fmtDate(patientDob)}</p>}
         </div>
         <div className="text-right">
-          <p className="text-[10px] uppercase tracking-widest text-neutral-500">Versicherung</p>
+          <p className="text-[10px] uppercase tracking-widest text-neutral-500">{t("invoiceDoc.insurance")}</p>
           <p className="text-sm">{INSURANCE_LABEL[insuranceType]}</p>
-          <p className="text-xs text-neutral-600 mt-1">Behandlung: {fmtDate(serviceDate)}</p>
+          <p className="text-xs text-neutral-600 mt-1">{t("invoiceDoc.serviceLabel")} {fmtDate(serviceDate)}</p>
         </div>
       </div>
 
       {/* Title */}
       <h2 className="text-base sm:text-lg font-bold mt-8 mb-1 text-center tracking-[0.1em] sm:tracking-[0.2em] break-words">
-        {isGkv ? "LEISTUNGSNACHWEIS" : "RECHNUNG"}
+        {isGkv ? t("invoiceDoc.titleGkv") : t("invoiceDoc.titleInvoice")}
       </h2>
       <p className="text-center text-xs text-neutral-500 mb-4">
-        {isGkv ? "Abrechnung über die Kassenärztliche Vereinigung" : "gemäß §12 GOÄ"}
+        {isGkv ? t("invoiceDoc.subtitleGkv") : t("invoiceDoc.subtitleInvoice")}
       </p>
 
       {/* Line items — scrolls horizontally on narrow screens instead of clipping. */}
@@ -89,12 +98,12 @@ export const InvoiceDocument = React.forwardRef<HTMLDivElement, Props>(function 
       <table className="w-full min-w-[30rem] text-sm border-collapse">
         <thead>
           <tr className="border-b border-neutral-400 text-left text-xs uppercase tracking-wide text-neutral-600">
-            <th className="py-1 pr-2">Datum</th>
-            <th className="py-1 pr-2">{isGkv ? "EBM-Ziffer" : "GOÄ-Nr."}</th>
-            <th className="py-1 pr-2">Leistung</th>
-            <th className="py-1 px-2 text-right">Punkte</th>
-            {!isGkv && <th className="py-1 px-2 text-right">Faktor</th>}
-            {!isGkv && <th className="py-1 pl-2 text-right">Betrag</th>}
+            <th className="py-1 pr-2">{t("invoiceDoc.date")}</th>
+            <th className="py-1 pr-2">{isGkv ? t("invoiceDoc.ebmCode") : t("invoiceDoc.goaeNo")}</th>
+            <th className="py-1 pr-2">{t("invoiceDoc.service")}</th>
+            <th className="py-1 px-2 text-right">{t("invoiceDoc.points")}</th>
+            {!isGkv && <th className="py-1 px-2 text-right">{t("invoiceDoc.factor")}</th>}
+            {!isGkv && <th className="py-1 pl-2 text-right">{t("invoiceDoc.amount")}</th>}
           </tr>
         </thead>
         <tbody>
@@ -118,13 +127,12 @@ export const InvoiceDocument = React.forwardRef<HTMLDivElement, Props>(function 
       {/* Total / settlement note */}
       {isGkv ? (
         <p className="mt-6 text-sm text-neutral-700">
-          Es wird keine Rechnung an die Patientin/den Patienten gestellt. Die Leistungen werden im Rahmen der
-          quartalsweisen Abrechnung (Quartalsabrechnung) mit der Kassenärztlichen Vereinigung abgerechnet.
+          {t("invoiceDoc.gkvSettlement")}
         </p>
       ) : (
         <div className="mt-4 flex justify-end">
           <div className="text-right">
-            <span className="text-sm text-neutral-600 mr-6">Gesamtbetrag</span>
+            <span className="text-sm text-neutral-600 mr-6">{t("invoiceDoc.total")}</span>
             <span className="text-xl font-bold">{euro(totalCents)}</span>
           </div>
         </div>
@@ -135,15 +143,15 @@ export const InvoiceDocument = React.forwardRef<HTMLDivElement, Props>(function 
         <div className="mt-8 space-y-2 text-xs text-neutral-600 border-t border-neutral-300 pt-4">
           {dueDate && (
             <p className="text-sm text-neutral-800">
-              Bitte überweisen Sie den Betrag bis zum <strong>{fmtDate(dueDate)}</strong> auf folgendes Konto:
+              {t("invoiceDoc.payableBefore")} <strong>{fmtDate(dueDate)}</strong> {t("invoiceDoc.payableAccount")}
               <br />{CLINIC.bank}
             </p>
           )}
           {needsJustification && (
-            <p>* Steigerungssatz über {GOAE_THRESHOLD.toFixed(1)} — schriftliche Begründung gemäß §12 Abs. 3 GOÄ erforderlich.</p>
+            <p>{t("invoiceDoc.justification", { threshold: GOAE_THRESHOLD.toFixed(1) })}</p>
           )}
-          <p>Heilbehandlungen sind gemäß §4 Nr. 14 UStG umsatzsteuerfrei.</p>
-          <p>Rechnung gemäß §12 GOÄ (Gebührenordnung für Ärzte).</p>
+          <p>{t("invoiceDoc.vatExempt")}</p>
+          <p>{t("invoiceDoc.legalBasis")}</p>
         </div>
       )}
 

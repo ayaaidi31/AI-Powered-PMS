@@ -24,8 +24,11 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
-import { formatDateTime, statusLabel, type AppointmentStatusDb } from "@/lib/display"
+import { type AppointmentStatusDb } from "@/lib/display"
 import { cancelAppointment } from "@/lib/actions/appointments"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
+import type { TKey } from "@/lib/i18n/translate"
 
 /** Minimal shape the patient list needs (projected by the Server Component). */
 export interface PatientAppointmentView {
@@ -48,8 +51,18 @@ const STATUS_VARIANT: Record<AppointmentStatusDb, "default" | "secondary" | "out
 
 export function PatientAppointmentsClient({ appointments }: { appointments: PatientAppointmentView[] }) {
   const router = useRouter()
+  const t = useT()
+  const locale = useLocale()
   const [isPending, startTransition] = useTransition()
   const [cancelId, setCancelId] = useState<string | null>(null)
+
+  const formatDateTime = (iso: string) => {
+    const d = new Date(iso)
+    return {
+      date: d.toLocaleDateString(INTL_LOCALE[locale], { weekday: "short", month: "short", day: "numeric", year: "numeric" }),
+      time: d.toLocaleTimeString(INTL_LOCALE[locale], { hour: "2-digit", minute: "2-digit" }),
+    }
+  }
 
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
@@ -77,7 +90,7 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
     startTransition(async () => {
       const result = await cancelAppointment(cancelId, { enforce24hWindow: true })
       if (result.status === "ok") {
-        toast.success("Appointment cancelled.")
+        toast.success(t("patient.appointmentCancelled"))
         router.refresh()
       } else {
         toast.error(result.message)
@@ -113,17 +126,17 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
               </div>
               {isUpcoming && appointment.check_in_code && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  Check-in code:{" "}
+                  {t("patient.checkInCode")}{" "}
                   <span className="font-mono font-semibold tracking-widest text-foreground">
                     {appointment.check_in_code}
                   </span>
-                  <span className="block text-[11px] mt-0.5">Scan the clinic QR on arrival and enter this code.</span>
+                  <span className="block text-[11px] mt-0.5">{t("patient.checkInHint")}</span>
                 </p>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant={STATUS_VARIANT[appointment.status]}>{statusLabel(appointment.status)}</Badge>
+            <Badge variant={STATUS_VARIANT[appointment.status]}>{t(`status.${appointment.status}` as TKey)}</Badge>
             {isUpcoming && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -134,17 +147,17 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
                 <DropdownMenuContent align="end">
                   {cancellable ? (
                     <DropdownMenuItem asChild>
-                      <Link href={`/patient/appointments/new?reschedule=${appointment.id}`}>Reschedule</Link>
+                      <Link href={`/patient/appointments/new?reschedule=${appointment.id}`}>{t("patient.reschedule")}</Link>
                     </DropdownMenuItem>
                   ) : (
-                    <DropdownMenuItem disabled>Cannot reschedule (less than 24h)</DropdownMenuItem>
+                    <DropdownMenuItem disabled>{t("patient.cannotReschedule")}</DropdownMenuItem>
                   )}
                   {cancellable ? (
                     <DropdownMenuItem className="text-destructive" onClick={() => setCancelId(appointment.id)}>
-                      Cancel Appointment
+                      {t("patient.cancelAppointment")}
                     </DropdownMenuItem>
                   ) : (
-                    <DropdownMenuItem disabled>Cannot cancel (less than 24h)</DropdownMenuItem>
+                    <DropdownMenuItem disabled>{t("patient.cannotCancel")}</DropdownMenuItem>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -160,21 +173,21 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">My Appointments</h1>
-            <p className="text-muted-foreground">Manage your scheduled visits</p>
+            <h1 className="text-2xl font-bold text-foreground">{t("patient.title")}</h1>
+            <p className="text-muted-foreground">{t("patient.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/patient/book-voice">
               <Button variant="outline" className="gap-2">
                 <Sparkles className="w-4 h-4" />
-                <span className="hidden sm:inline">Book by voice</span>
-                <span className="sm:hidden">Voice</span>
+                <span className="hidden sm:inline">{t("patient.bookByVoice")}</span>
+                <span className="sm:hidden">{t("patient.voice")}</span>
               </Button>
             </Link>
             <Link href="/patient/appointments/new">
               <Button className="gap-2">
                 <Plus className="w-4 h-4" />
-                Book New
+                {t("patient.bookNew")}
               </Button>
             </Link>
           </div>
@@ -182,15 +195,15 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
 
         <Tabs defaultValue="upcoming" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="upcoming">Upcoming ({upcoming.length})</TabsTrigger>
-            <TabsTrigger value="past">Past ({past.length})</TabsTrigger>
+            <TabsTrigger value="upcoming">{t("patient.tabUpcoming", { count: upcoming.length })}</TabsTrigger>
+            <TabsTrigger value="past">{t("patient.tabPast", { count: past.length })}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upcoming">
             <Card>
               <CardHeader>
-                <CardTitle>Upcoming Appointments</CardTitle>
-                <CardDescription>Your scheduled visits with our healthcare providers</CardDescription>
+                <CardTitle>{t("patient.upcomingTitle")}</CardTitle>
+                <CardDescription>{t("patient.upcomingDesc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 {upcoming.length > 0 ? (
@@ -200,8 +213,8 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
                 ) : (
                   <div className="text-center py-8">
                     <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground mb-4">No upcoming appointments</p>
-                    <Link href="/patient/appointments/new"><Button>Book an Appointment</Button></Link>
+                    <p className="text-muted-foreground mb-4">{t("patient.noUpcoming")}</p>
+                    <Link href="/patient/appointments/new"><Button>{t("patient.bookAnAppointment")}</Button></Link>
                   </div>
                 )}
               </CardContent>
@@ -211,8 +224,8 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
           <TabsContent value="past">
             <Card>
               <CardHeader>
-                <CardTitle>Past Appointments</CardTitle>
-                <CardDescription>Your appointment history</CardDescription>
+                <CardTitle>{t("patient.pastTitle")}</CardTitle>
+                <CardDescription>{t("patient.pastDesc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 {past.length > 0 ? (
@@ -222,7 +235,7 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
                 ) : (
                   <div className="text-center py-8">
                     <Calendar className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground">No past appointments</p>
+                    <p className="text-muted-foreground">{t("patient.noPast")}</p>
                   </div>
                 )}
               </CardContent>
@@ -234,20 +247,19 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
       <AlertDialog open={cancelId !== null} onOpenChange={(open) => !open && setCancelId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel Appointment</AlertDialogTitle>
+            <AlertDialogTitle>{t("patient.cancelDialogTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel this appointment? The time slot will become available
-              for other patients.
+              {t("patient.cancelDialogDesc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Keep Appointment</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t("patient.keepAppointment")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmCancel}
               disabled={isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Cancel Appointment
+              {t("patient.cancelAppointment")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
