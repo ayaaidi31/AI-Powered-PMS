@@ -20,7 +20,7 @@ import {
   type VoiceLang,
   type VoiceAction,
 } from "@/lib/actions/voice"
-import { useT } from "@/lib/i18n/locale-context"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
 
 type Status = "idle" | "thinking" | "speaking" | "listening" | "ended"
 interface Bubble { role: "assistant" | "user"; text: string }
@@ -90,10 +90,12 @@ function pickVoice(voices: SpeechSynthesisVoice[], lang: VoiceLang): SpeechSynth
 
 export function VoiceBookingClient({ patientFirstName }: { patientFirstName: string }) {
   const t = useT()
+  // The voice conversation (speech recognition, spoken voice, and the AI's replies)
+  // follows the patient's chosen interface language — one language, no mismatch.
+  const lang = useLocale() as VoiceLang
   const [status, setStatus] = useState<Status>("idle")
   const [bubbles, setBubbles] = useState<Bubble[]>([])
   const [interim, setInterim] = useState("")
-  const [lang, setLang] = useState<VoiceLang>("de")
   const [textInput, setTextInput] = useState("")
   const [sttSupported, setSttSupported] = useState(true)
 
@@ -370,16 +372,6 @@ export function VoiceBookingClient({ patientFirstName }: { patientFirstName: str
             {t("patientProfile.voiceActions")}
           </p>
         </div>
-        {!inCall && (
-          <div className="inline-flex rounded-md border border-border overflow-hidden text-xs">
-            {(["de", "en"] as const).map((l) => (
-              <button key={l} type="button" onClick={() => setLang(l)}
-                className={`px-2.5 py-1 transition-colors ${lang === l ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"}`}>
-                {l.toUpperCase()}
-              </button>
-            ))}
-          </div>
-        )}
         {inCall && (
           <Button variant="destructive" size="sm" className="gap-1.5" onClick={endCall}>
             <PhoneOff className="w-4 h-4" /> {t("patientProfile.voiceEnd")}

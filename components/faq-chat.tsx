@@ -17,15 +17,10 @@ interface Msg {
   content: string
 }
 
-const SUGGESTIONS = [
-  "What are your opening hours?",
-  "How do I cancel an appointment?",
-  "Do you accept private insurance?",
-  "Where can I park?",
-]
 
 export function FaqChat() {
   const t = useT()
+  const suggestions = [t("aiChat.faqSuggestion1"), t("aiChat.faqSuggestion2"), t("aiChat.faqSuggestion3"), t("aiChat.faqSuggestion4")]
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState("")
@@ -75,7 +70,7 @@ export function FaqChat() {
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">{t("aiChat.faqGreeting")}</p>
                 <div className="flex flex-wrap gap-2">
-                  {SUGGESTIONS.map((s) => (
+                  {suggestions.map((s) => (
                     <button
                       key={s}
                       onClick={() => send(s)}

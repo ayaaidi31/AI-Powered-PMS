@@ -19,12 +19,6 @@ export interface RecordsQAMessage {
   grounded?: boolean
 }
 
-const SUGGESTIONS = [
-  "Summarize this patient's history.",
-  "Welche Dauerdiagnosen und Allergien sind dokumentiert?",
-  "What was prescribed at the last visit?",
-]
-
 export function RecordsQA({
   patientId, patientName, messages, setMessages, lang,
 }: {
@@ -36,6 +30,7 @@ export function RecordsQA({
   lang?: "de" | "en"
 }) {
   const t = useT()
+  const suggestions = [t("aiChat.recordsSuggestion1"), t("aiChat.recordsSuggestion2"), t("aiChat.recordsSuggestion3")]
   const [input, setInput] = useState("")
   const [pending, start] = useTransition()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -69,7 +64,7 @@ export function RecordsQA({
               {t("aiChat.recordsIntroBefore")}<span className="font-medium text-foreground">{patientName}</span>{t("aiChat.recordsIntroAfter")}
             </p>
             <div className="flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <button
                   key={s}
                   onClick={() => send(s)}

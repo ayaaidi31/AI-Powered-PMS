@@ -23,12 +23,6 @@ export interface DsMessage {
   grounded?: boolean
 }
 
-const SUGGESTIONS = [
-  "Welche leitliniengerechte Therapie wird empfohlen?",
-  "Welche Red Flags muss ich ausschließen?",
-  "Welche Diagnostik ist indiziert?",
-]
-
 export function DecisionSupport({
   notes, diagnosis, patient, messages, setMessages, lang,
 }: {
@@ -43,6 +37,7 @@ export function DecisionSupport({
   lang?: "de" | "en"
 }) {
   const t = useT()
+  const suggestions = [t("aiChat.dsSuggestion1"), t("aiChat.dsSuggestion2"), t("aiChat.dsSuggestion3")]
   const [input, setInput] = useState("")
   const [pending, start] = useTransition()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -76,7 +71,7 @@ export function DecisionSupport({
               {t("aiChat.dsIntro")}
             </p>
             <div className="flex flex-wrap gap-2">
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <button
                   key={s}
                   onClick={() => send(s)}
