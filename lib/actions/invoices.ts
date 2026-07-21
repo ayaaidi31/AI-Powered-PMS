@@ -66,15 +66,22 @@ export async function generateInvoice(
     const appt = await client.query<{
       patient_id: string
       insurance_type: InvoiceRow["insurance_type"]
+      insurer_name: string | null
+      insurer_ik: string | null
+      versicherten_id: string | null
       status: string
     }>(
-      `SELECT a.patient_id, a.status, p.insurance_type
+      `SELECT a.patient_id, a.status,
+              p.insurance_type, p.insurer_name, p.insurer_ik, p.versicherten_id
        FROM appointments a JOIN patients p ON p.id = a.patient_id
        WHERE a.id = $1`,
       [appointmentId],
     )
     if (appt.rowCount === 0) return { kind: "not_found" as const }
-    const { patient_id, insurance_type, status: apptStatus } = appt.rows[0]
+    const {
+      patient_id, insurance_type, insurer_name, insurer_ik, versicherten_id,
+      status: apptStatus,
+    } = appt.rows[0]
 
     // Precondition (UC-REC-01): only a completed consultation may be billed.
     if (apptStatus !== "completed") return { kind: "not_completed" as const }
@@ -125,13 +132,16 @@ export async function generateInvoice(
     }
 
     const invoiceNumber = await allocateInvoiceNumber(client)
+    // Freeze the payer identity as it stands at finalisation. A later switch of
+    // Krankenkasse must not alter this settled document.
     const inserted = await client.query<InvoiceRow>(
       `INSERT INTO invoices
          (invoice_number, appointment_id, patient_id, insurance_type,
-          total_cents, status, due_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+          total_cents, status, due_date, insurer_name, insurer_ik, versicherten_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [invoiceNumber, appointmentId, patient_id, insurance_type, totalCents, status, dueDate],
+      [invoiceNumber, appointmentId, patient_id, insurance_type, totalCents, status, dueDate,
+       insurer_name, insurer_ik, versicherten_id],
     )
     return { kind: "ok" as const, invoice: inserted.rows[0] }
   })
@@ -226,11 +236,12 @@ export async function stornoInvoice(originalId: string): Promise<ActionResult<In
     const inserted = await client.query<InvoiceRow>(
       `INSERT INTO invoices
          (invoice_number, appointment_id, patient_id, insurance_type,
-          total_cents, status, storno_of)
-       VALUES ($1, $2, $3, $4, $5, 'storno', $6)
+          total_cents, status, storno_of, insurer_name, insurer_ik, versicherten_id)
+       VALUES ($1, $2, $3, $4, $5, 'storno', $6, $7, $8, $9)
        RETURNING *`,
       [invoiceNumber, original.appointment_id, original.patient_id,
-       original.insurance_type, reversed, originalId],
+       original.insurance_type, reversed, originalId,
+       original.insurer_name, original.insurer_ik, original.versicherten_id],
     )
     return { kind: "ok" as const, invoice: inserted.rows[0] }
   })

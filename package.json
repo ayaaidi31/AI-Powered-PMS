@@ -13,6 +13,7 @@
     "db:seed": "tsx db/seed.ts",
     "db:seed-users": "tsx db/seed-users.ts",
     "db:import-codes": "tsx db/import-codes.ts",
+    "db:backfill-insurers": "tsx db/backfill-insurers.ts",
     "db:reset": "tsx db/migrate.ts && tsx db/seed.ts && tsx db/import-codes.ts && tsx db/seed-users.ts"
   },
   "dependencies": {

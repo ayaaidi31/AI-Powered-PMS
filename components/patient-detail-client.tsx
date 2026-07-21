@@ -12,7 +12,7 @@ import Link from "next/link"
 import {
   ArrowLeft, User, Mail, Phone, MapPin, Shield, AlertCircle, Activity, Heart,
   Thermometer, Pill, FileText, Calendar, ClipboardList, Search, Printer, Clock,
-  Stethoscope, ChevronRight, UserCheck, Receipt,
+  Stethoscope, ChevronRight, UserCheck, Receipt, Pencil,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,6 +28,7 @@ import { patientName, initials, insuranceLabel, insuranceVariant, formatCents } 
 import { ReportDocument } from "@/components/report-document"
 import { InvoiceDocument } from "@/components/invoice-document"
 import { PatientDocuments } from "@/components/patient-documents"
+import { PatientFormDialog } from "@/components/patient-form-dialog"
 import { printReport } from "@/lib/print-element"
 import { useT, useLocale } from "@/lib/i18n/locale-context"
 import { INTL_LOCALE } from "@/lib/i18n/config"
@@ -127,6 +128,7 @@ export function PatientDetailClient({
   const invoiceRef = useRef<HTMLDivElement>(null)
   const [reportQuery, setReportQuery] = useState("")
   const [apptQuery, setApptQuery] = useState("")
+  const [editOpen, setEditOpen] = useState(false)
   const v = clinical.vitals
 
   const fmtDateTime = (iso: string) =>
@@ -141,9 +143,20 @@ export function PatientDetailClient({
 
   return (
     <div className="p-6 lg:p-8 space-y-6 max-w-5xl mx-auto">
-      <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="w-4 h-4" /> {t("patientDetail.backToPatients")}
-      </Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link href={backHref} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="w-4 h-4" /> {t("patientDetail.backToPatients")}
+        </Link>
+        {viewerRole === "receptionist" && (
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => setEditOpen(true)}>
+            <Pencil className="w-4 h-4" /> {t("patientDetail.editPatient")}
+          </Button>
+        )}
+      </div>
+
+      {viewerRole === "receptionist" && (
+        <PatientFormDialog open={editOpen} onOpenChange={setEditOpen} patient={patient} />
+      )}
 
       {/* Header */}
       <Card>
@@ -175,6 +188,16 @@ export function PatientDetailClient({
               {clinical.allergies.map((a, i) => (
                 <Badge key={i} variant="destructive"><AlertCircle className="w-3 h-3 mr-1" />{a}</Badge>
               ))}
+            </div>
+          )}
+          {(patient.insurer_name || patient.versicherten_id || patient.insurer_ik || patient.guardian_name || patient.guardian_contact) && (
+            <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-3">
+              {patient.insurer_name && <AdminField label={t("patientDetail.provider")} value={patient.insurer_name} />}
+              {patient.versicherten_id && <AdminField label={t("patientDetail.insuranceNumber")} value={patient.versicherten_id} mono />}
+              {patient.insurer_ik && <AdminField label={t("patientDetail.insurerIk")} value={patient.insurer_ik} mono />}
+              {(patient.guardian_name || patient.guardian_contact) && (
+                <AdminField label={t("patientDetail.guardian")} value={[patient.guardian_name, patient.guardian_contact].filter(Boolean).join(" · ")} />
+              )}
             </div>
           )}
         </CardContent>
@@ -444,6 +467,15 @@ function DetailRow({ icon, label, value }: { icon: React.ReactNode; label: strin
       <span className="text-muted-foreground mt-0.5 shrink-0">{icon}</span>
       <span className="text-muted-foreground w-24 shrink-0">{label}</span>
       <span className="font-medium text-foreground">{value}</span>
+    </div>
+  )
+}
+
+function AdminField({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`text-foreground truncate ${mono ? "font-mono text-sm" : "text-sm font-medium"}`}>{value}</p>
     </div>
   )
 }

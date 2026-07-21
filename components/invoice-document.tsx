@@ -18,6 +18,8 @@ interface Props {
   insuranceType: "gkv" | "pkv" | "selbstzahler"
   patientName: string
   patientDob?: string | null
+  insurerName?: string | null
+  insuranceNumber?: string | null
   invoiceNumber: string | null
   invoiceDate: string
   serviceDate: string
@@ -36,7 +38,7 @@ const GOAE_THRESHOLD = 2.3
  * settled with the KV). Print-friendly serif document.
  */
 export const InvoiceDocument = React.forwardRef<HTMLDivElement, Props>(function InvoiceDocument(
-  { insuranceType, patientName, patientDob, invoiceNumber, invoiceDate, serviceDate, dueDate, items, totalCents },
+  { insuranceType, patientName, patientDob, insurerName, insuranceNumber, invoiceNumber, invoiceDate, serviceDate, dueDate, items, totalCents },
   ref,
 ) {
   const t = useT()
@@ -81,6 +83,10 @@ export const InvoiceDocument = React.forwardRef<HTMLDivElement, Props>(function 
         <div className="text-right">
           <p className="text-[10px] uppercase tracking-widest text-neutral-500">{t("invoiceDoc.insurance")}</p>
           <p className="text-sm">{INSURANCE_LABEL[insuranceType]}</p>
+          {insurerName && <p className="text-xs text-neutral-700">{insurerName}</p>}
+          {insuranceNumber && (
+            <p className="text-xs text-neutral-600">{t("invoiceDoc.insuranceNo")} {insuranceNumber}</p>
+          )}
           <p className="text-xs text-neutral-600 mt-1">{t("invoiceDoc.serviceLabel")} {fmtDate(serviceDate)}</p>
         </div>
       </div>

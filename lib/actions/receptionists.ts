@@ -24,6 +24,9 @@ export async function updateReceptionist(
   const parsed = receptionistSchema.safeParse(input)
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Invalid input.")
   const d = parsed.data
+  // Email identifies the login and must not collide with another receptionist.
+  const dup = await query(`SELECT 1 FROM receptionists WHERE lower(email) = lower($1) AND id <> $2 LIMIT 1`, [d.email, id])
+  if (dup.rowCount && dup.rowCount > 0) return fail("This email is already used by another receptionist.")
   const res = await query<ReceptionistRow>(
     `UPDATE receptionists
         SET first_name = $2, last_name = $3, email = $4, phone = $5, department = $6

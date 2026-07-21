@@ -263,6 +263,8 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
                 ref={invoiceRef}
                 insuranceType={viewing.insurance_type}
                 patientName={viewing.patient_name}
+                insurerName={viewing.insurer_name}
+                insuranceNumber={viewing.versicherten_id}
                 invoiceNumber={viewing.invoice_number}
                 invoiceDate={viewing.created_at}
                 serviceDate={viewing.starts_at}

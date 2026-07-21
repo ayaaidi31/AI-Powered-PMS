@@ -247,6 +247,12 @@ export function ProfileClient({
                   <Label>{t("patientProfile.insuranceType")}</Label>
                   <div className="py-2"><Badge variant="secondary" className="text-sm">{insuranceLabel[patient.insurance_type]}</Badge></div>
                 </div>
+                {patient.insurer_name && (
+                  <div className="space-y-2">
+                    <Label>{t("patientProfile.insuranceProvider")}</Label>
+                    <p className="text-foreground py-2">{patient.insurer_name}</p>
+                  </div>
+                )}
                 {patient.versicherten_id && (
                   <div className="space-y-2">
                     <Label>{t("patientProfile.insuranceNumber")}</Label>

@@ -129,19 +129,19 @@ describe("verifyTwoFactorLogin", () => {
 
 describe("startSignup", () => {
   it("rejects a weak password (validation)", async () => {
-    const r = await startSignup({ first_name: "A", last_name: "B", email: "a@b.com", password: "short", birth_date: "1990-01-01", insurance_type: "gkv" })
+    const r = await startSignup({ first_name: "A", last_name: "B", email: "a@b.com", password: "short", birth_date: "1990-01-01", insurance_type: "gkv", phone: "0151 23456789" })
     expect(r.status).toBe("error")
   })
 
   it("rejects an email that is already registered", async () => {
     h.query.mockResolvedValueOnce({ rows: [{ "?column?": 1 }], rowCount: 1 })
-    const r = await startSignup({ first_name: "A", last_name: "B", email: "a@b.com", password: "longenough", birth_date: "1990-01-01", insurance_type: "gkv" })
+    const r = await startSignup({ first_name: "A", last_name: "B", email: "a@b.com", password: "longenough", birth_date: "1990-01-01", insurance_type: "gkv", phone: "0151 23456789" })
     expect(r.status).toBe("error")
   })
 
   it("stores a pending code and returns devCode when email is off", async () => {
-    h.query.mockResolvedValue({ rows: [], rowCount: 0 }) // SELECT (free) + DELETE + INSERT
-    const r = await startSignup({ first_name: "A", last_name: "B", email: "new@b.com", password: "longenough", birth_date: "1990-01-01", insurance_type: "gkv" })
+    h.query.mockResolvedValue({ rows: [], rowCount: 0 }) // users check + uniqueness + DELETE + INSERT
+    const r = await startSignup({ first_name: "A", last_name: "B", email: "new@b.com", password: "longenough", birth_date: "1990-01-01", insurance_type: "gkv", phone: "0151 23456789" })
     if (r.status !== "ok") throw new Error(r.message)
     expect(r.data.email).toBe("new@b.com")
     expect(r.data.devCode).toMatch(/^\d{6}$/)

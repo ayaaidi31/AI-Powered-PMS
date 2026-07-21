@@ -13,6 +13,8 @@ import { revalidatePath } from "next/cache"
 import { z } from "zod"
 import { query, withTransaction } from "@/lib/db"
 import { verifyPassword, hashPassword } from "@/lib/auth/password"
+import { patientFieldConflicts } from "@/lib/patient-uniqueness"
+import { isGermanMobile, isGermanPhone, isKvnr, isIk } from "@/lib/validation"
 import {
   signSession, roleHome, type Role,
   signTwoFactorTicket, verifyTwoFactorTicket, twoFactorRequiredForRole,
@@ -151,9 +153,22 @@ const signupSchema = z.object({
   last_name: z.string().trim().min(1, "Last name is required."),
   email: z.string().trim().email("Enter a valid email address."),
   password: z.string().min(8, "Password must be at least 8 characters."),
-  birth_date: z.string().refine((v) => !Number.isNaN(Date.parse(v)), "Enter a valid date of birth."),
+  birth_date: z.string()
+    .refine((v) => {
+      const d = new Date(v)
+      return !Number.isNaN(d.getTime()) && d <= new Date() && d.getFullYear() >= 1900
+    }, "Enter a valid date of birth."),
   insurance_type: z.enum(["gkv", "pkv", "selbstzahler"], { message: "Choose your insurance type." }),
-  phone: z.string().trim().max(40).optional(),
+  insurer_name: z.string().trim().max(120).optional(),
+  insurer_ik: z.string().trim().max(20).optional()
+    .refine((v) => !v || isIk(v), "The insurer ID (IK) must be 9 digits."),
+  versicherten_id: z.string().trim().max(20).optional()
+    .refine((v) => !v || isKvnr(v), "Insurance number must be one letter followed by 9 digits, e.g. A123456789."),
+  guardian_name: z.string().trim().max(120).optional(),
+  guardian_contact: z.string().trim().max(40).optional()
+    .refine((v) => !v || isGermanPhone(v), "Enter a valid German phone number, e.g. 0151 23456789."),
+  phone: z.string().trim().min(6, "Enter your mobile number.").max(40)
+    .refine(isGermanMobile, "Enter a valid German mobile number, e.g. 0151 23456789."),
 })
 export type SignupInput = z.infer<typeof signupSchema>
 
@@ -163,6 +178,11 @@ interface SignupPayload {
   last_name: string
   birth_date: string
   insurance_type: "gkv" | "pkv" | "selbstzahler"
+  insurer_name: string | null
+  insurer_ik: string | null
+  versicherten_id: string | null
+  guardian_name: string | null
+  guardian_contact: string | null
   phone: string | null
   passwordHash: string
 }
@@ -202,12 +222,27 @@ export async function startSignup(
     return fail("An account with this email already exists.", { email: "This email is already registered." })
   }
 
+  // Reject a signup whose email, mobile, or insurance number is already held by
+  // another patient record (e.g. one created earlier at reception).
+  const conflicts = await patientFieldConflicts({
+    email: d.email, phone: d.phone, versicherten_id: d.versicherten_id,
+  })
+  if (Object.keys(conflicts).length > 0) {
+    return fail("Please correct the highlighted fields.", conflicts)
+  }
+
   const passwordHash = await hashPassword(d.password)
   const code = await generateNumericCode(6)
   const codeHash = await hashPassword(code)
   const payload: SignupPayload = {
     first_name: d.first_name, last_name: d.last_name, birth_date: d.birth_date,
-    insurance_type: d.insurance_type, phone: d.phone ?? null, passwordHash,
+    insurance_type: d.insurance_type,
+    insurer_name: d.insurer_name?.trim() || null,
+    insurer_ik: d.insurer_ik?.trim() || null,
+    versicherten_id: d.versicherten_id?.trim() || null,
+    guardian_name: d.guardian_name?.trim() || null,
+    guardian_contact: d.guardian_contact?.trim() || null,
+    phone: d.phone ?? null, passwordHash,
   }
 
   // Replace any earlier pending code for this email, then store the new one (15 min).
@@ -272,10 +307,14 @@ export async function verifySignup(
     created = await withTransaction(async (client) => {
       const pr = await client.query<{ id: string }>(
         `INSERT INTO patients
-           (first_name, last_name, birth_date, email, phone, insurance_type, is_digital_active, last_updated_by)
-         VALUES ($1, $2, $3, $4, $5, $6, true, 'Self sign-up')
+           (first_name, last_name, birth_date, email, phone, insurance_type,
+            insurer_name, insurer_ik, versicherten_id, guardian_name, guardian_contact,
+            is_digital_active, last_updated_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true, 'Self sign-up')
          RETURNING id`,
-        [p.first_name, p.last_name, p.birth_date, email, p.phone, p.insurance_type],
+        [p.first_name, p.last_name, p.birth_date, email, p.phone, p.insurance_type,
+         p.insurer_name ?? null, p.insurer_ik ?? null, p.versicherten_id ?? null,
+         p.guardian_name ?? null, p.guardian_contact ?? null],
       )
       const patientId = pr.rows[0].id
       const u = await client.query<{ id: string }>(

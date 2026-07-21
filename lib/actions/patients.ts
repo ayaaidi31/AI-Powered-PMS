@@ -21,6 +21,7 @@
 import { revalidatePath } from "next/cache"
 import { sql, query } from "@/lib/db"
 import { patientSchema, orNull, type PatientInput } from "@/lib/validation"
+import { patientFieldConflicts } from "@/lib/patient-uniqueness"
 import { isPortalEligible } from "@/lib/rules"
 import { requireReceptionist, requireStaff, requireSessionScoped } from "@/lib/auth/guard"
 import type { PatientRow } from "@/lib/seed-data"
@@ -51,6 +52,14 @@ export async function registerPatient(
   }
   const data = parsed.data
 
+  // Identifying fields must be unique across active patients (email, mobile, KVNR).
+  const conflicts = await patientFieldConflicts({
+    email: data.email, phone: data.phone, versicherten_id: data.versicherten_id,
+  })
+  if (Object.keys(conflicts).length > 0) {
+    return fail("Please correct the highlighted fields.", conflicts)
+  }
+
   if (!allowDuplicate) {
     const existing = await sql<PatientRow>`
       SELECT * FROM patients
@@ -74,12 +83,15 @@ export async function registerPatient(
   const rows = await sql<PatientRow>`
     INSERT INTO patients (
       first_name, last_name, birth_date, email, phone, insurance_type,
-      versicherten_id, is_digital_active, guardian_contact,
+      versicherten_id, insurer_name, insurer_ik, is_digital_active,
+      guardian_name, guardian_contact,
       street, city, postal_code, country, last_updated_by
     ) VALUES (
       ${data.first_name}, ${data.last_name}, ${data.birth_date}, ${email}, ${phone},
-      ${data.insurance_type}, ${orNull(data.versicherten_id)}, ${isDigitalActive},
-      ${orNull(data.guardian_contact)}, ${orNull(data.street)}, ${orNull(data.city)},
+      ${data.insurance_type}, ${orNull(data.versicherten_id)}, ${orNull(data.insurer_name)},
+      ${orNull(data.insurer_ik)}, ${isDigitalActive},
+      ${orNull(data.guardian_name)}, ${orNull(data.guardian_contact)},
+      ${orNull(data.street)}, ${orNull(data.city)},
       ${orNull(data.postal_code)}, ${orNull(data.country)}, ${"User: Reception"}
     )
     RETURNING *`
@@ -108,12 +120,23 @@ export async function updatePatient(
 
   const parsed = patientSchema.partial().safeParse(input)
   if (!parsed.success) {
-    return fail("Invalid update payload.")
+    const fieldErrors: Record<string, string> = {}
+    for (const issue of parsed.error.issues) fieldErrors[String(issue.path[0])] = issue.message
+    return fail("Please correct the highlighted fields.", fieldErrors)
   }
 
   // Build the SET clause dynamically from the provided fields only.
   const entries = Object.entries(parsed.data).filter(([, v]) => v !== undefined)
   if (entries.length === 0) return fail("No fields to update.")
+
+  // Reject a change that would duplicate another patient's email, mobile, or KVNR.
+  const conflicts = await patientFieldConflicts(
+    { email: parsed.data.email, phone: parsed.data.phone, versicherten_id: parsed.data.versicherten_id },
+    id,
+  )
+  if (Object.keys(conflicts).length > 0) {
+    return fail("Please correct the highlighted fields.", conflicts)
+  }
 
   const sets: string[] = []
   const values: unknown[] = []

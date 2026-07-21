@@ -42,6 +42,10 @@ export function NotificationBell({ loader }: { loader: () => Promise<Notificatio
   const t = useT()
   const [items, setItems] = useState<NotificationItem[]>([])
   const [seen, setSeen] = useState<Set<string>>(new Set())
+  // The unread count needs both the items and the "seen" set. Until the seen set
+  // has resolved the count is unknown; gating on this avoids a badge flashing on
+  // for already-seen notifications while the two requests settle.
+  const [seenLoaded, setSeenLoaded] = useState(false)
 
   const load = useCallback(() => {
     loader().then(setItems).catch(() => setItems([]))
@@ -51,7 +55,10 @@ export function NotificationBell({ loader }: { loader: () => Promise<Notificatio
   // new notifications appear on their own without a page reload.
   useEffect(() => {
     load()
-    getSeenNotificationIds().then((ids) => setSeen(new Set(ids))).catch(() => {})
+    getSeenNotificationIds()
+      .then((ids) => setSeen(new Set(ids)))
+      .catch(() => {})
+      .finally(() => setSeenLoaded(true))
     const timer = setInterval(load, REFRESH_MS)
     return () => clearInterval(timer)
   }, [load])
@@ -63,7 +70,7 @@ export function NotificationBell({ loader }: { loader: () => Promise<Notificatio
     markNotificationsSeen(ids).catch(() => {})
   }, [])
 
-  const unread = items.filter((n) => !seen.has(n.id)).length
+  const unread = seenLoaded ? items.filter((n) => !seen.has(n.id)).length : 0
 
   return (
     <DropdownMenu

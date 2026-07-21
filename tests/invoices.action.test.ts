@@ -21,7 +21,8 @@ const YEAR = new Date().getFullYear() // generateInvoice numbers invoices by the
 
 /** The appointment+patient row returned by the first SELECT in generateInvoice. */
 const apptRow = (over: Record<string, unknown> = {}) => ({
-  patient_id: "p1", insurance_type: "pkv", status: "completed", ...over,
+  patient_id: "p1", insurance_type: "pkv", status: "completed",
+  insurer_name: null, insurer_ik: null, versicherten_id: null, ...over,
 })
 
 describe("generateInvoice (Feature 7 — invoice generation, UC-REC-01)", () => {
@@ -91,5 +92,23 @@ describe("generateInvoice (Feature 7 — invoice generation, UC-REC-01)", () => 
     const insertArgs = h.query.mock.calls[5][1] as unknown[]
     expect(insertArgs[0]).toBe(`${YEAR}-0008`) // next after 0007
     expect(insertArgs[4]).toBeNull()           // no monetary total for GKV
+  })
+
+  it("freezes the payer identity (insurer + KVNR) onto the invoice at finalisation", async () => {
+    // The patient's insurer and KVNR at the time of billing must be captured on
+    // the invoice so a later switch of Krankenkasse cannot alter the settled
+    // document.
+    h.query.mockResolvedValueOnce({ rows: [apptRow({ insurance_type: "gkv", insurer_name: "AOK Nordost", insurer_ik: "101097008", versicherten_id: "A123456789" })], rowCount: 1 })
+    h.query.mockResolvedValueOnce({ rows: [], rowCount: 0 })                                          // no existing
+    h.query.mockResolvedValueOnce({ rows: [{ catalog: "EBM", multiplier: null, base_cents: null, default_multiplier: null }], rowCount: 1 }) // codes
+    h.query.mockResolvedValueOnce({ rowCount: 0 })                                                    // advisory lock
+    h.query.mockResolvedValueOnce({ rows: [], rowCount: 0 })                                          // last number (none)
+    h.query.mockResolvedValueOnce({ rows: [{ id: "inv3", status: "ready_for_kv", total_cents: null }], rowCount: 1 }) // INSERT
+    const r = await generateInvoice("a1")
+    if (r.status !== "ok") throw new Error(r.message)
+    const insertArgs = h.query.mock.calls[5][1] as unknown[]
+    expect(insertArgs[7]).toBe("AOK Nordost")  // insurer_name snapshot
+    expect(insertArgs[8]).toBe("101097008")    // insurer_ik snapshot
+    expect(insertArgs[9]).toBe("A123456789")   // versicherten_id (KVNR) snapshot
   })
 })

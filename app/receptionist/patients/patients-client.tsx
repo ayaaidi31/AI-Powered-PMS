@@ -15,13 +15,12 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
-  Search, Filter, UserPlus, MoreHorizontal, Phone, Mail, Calendar, Shield, Pencil, Trash2,
+  Search, Filter, UserPlus, MoreHorizontal, Phone, Mail, Calendar, Shield, Pencil, Trash2, Building2, CreditCard,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -30,24 +29,16 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog"
-import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 import type { PatientRow } from "@/lib/seed-data"
 import { patientName, initials, insuranceLabel, insuranceVariant } from "@/lib/display"
-import { registerPatient, updatePatient, deactivatePatient, type PatientInput } from "@/lib/actions/patients"
+import { deactivatePatient } from "@/lib/actions/patients"
+import { PatientFormDialog } from "@/components/patient-form-dialog"
 import { useT, useLocale } from "@/lib/i18n/locale-context"
 import { INTL_LOCALE } from "@/lib/i18n/config"
-
-const EMPTY_FORM: PatientInput = {
-  first_name: "", last_name: "", birth_date: "", insurance_type: "gkv",
-  email: "", phone: "", versicherten_id: "", guardian_contact: "",
-  street: "", city: "", postal_code: "", country: "Germany",
-}
 
 export function PatientsClient({ initialPatients }: { initialPatients: PatientRow[] }) {
   const router = useRouter()
@@ -58,11 +49,9 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
   const [searchQuery, setSearchQuery] = useState("")
   const [insuranceFilter, setInsuranceFilter] = useState<string>("all")
 
-  // Dialog + form state. `editingId` distinguishes create from update.
+  // Create/edit dialog. `editingPatient` is null for a new registration.
   const [formOpen, setFormOpen] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<PatientInput>(EMPTY_FORM)
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [editingPatient, setEditingPatient] = useState<PatientRow | null>(null)
 
   // Deactivation confirmation.
   const [deleteTarget, setDeleteTarget] = useState<PatientRow | null>(null)
@@ -74,53 +63,14 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
     return matchesSearch && matchesInsurance
   })
 
-  const set = (field: keyof PatientInput, value: string) =>
-    setForm((prev) => ({ ...prev, [field]: value }))
-
   function openCreate() {
-    setEditingId(null)
-    setForm(EMPTY_FORM)
-    setFieldErrors({})
+    setEditingPatient(null)
     setFormOpen(true)
   }
 
   function openEdit(p: PatientRow) {
-    setEditingId(p.id)
-    setForm({
-      first_name: p.first_name, last_name: p.last_name, birth_date: String(p.birth_date).slice(0, 10),
-      insurance_type: p.insurance_type, email: p.email ?? "", phone: p.phone ?? "",
-      versicherten_id: p.versicherten_id ?? "", guardian_contact: p.guardian_contact ?? "",
-      street: p.street ?? "", city: p.city ?? "", postal_code: p.postal_code ?? "",
-      country: p.country ?? "Germany",
-    })
-    setFieldErrors({})
+    setEditingPatient(p)
     setFormOpen(true)
-  }
-
-  /** Persist the form. `allowDuplicate` re-submits past the duplicate guard. */
-  function submit(allowDuplicate = false) {
-    setFieldErrors({})
-    startTransition(async () => {
-      const result = editingId
-        ? await updatePatient(editingId, form)
-        : await registerPatient(form, allowDuplicate)
-
-      if (result.status === "ok") {
-        toast.success(editingId ? t("receptionMgmt.patientUpdatedToast") : t("receptionMgmt.patientRegisteredToast"))
-        setFormOpen(false)
-        router.refresh()
-        return
-      }
-      if (result.status === "conflict") {
-        // Duplicate patient (REQ-REC-11) — let the receptionist decide.
-        toast.warning(result.message, {
-          action: { label: t("receptionMgmt.createAnyway"), onClick: () => submit(true) },
-        })
-        return
-      }
-      setFieldErrors(result.fieldErrors ?? {})
-      toast.error(result.message)
-    })
   }
 
   function confirmDeactivate() {
@@ -235,6 +185,18 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
                         <Calendar className="w-3 h-3" />
                         {t("receptionMgmt.dob")}: {new Date(patient.birth_date).toLocaleDateString(INTL_LOCALE[locale])}
                       </span>
+                      {patient.insurer_name && (
+                        <span className="flex items-center gap-1">
+                          <Building2 className="w-3 h-3" />
+                          {patient.insurer_name}
+                        </span>
+                      )}
+                      {patient.versicherten_id && (
+                        <span className="flex items-center gap-1 font-mono text-xs">
+                          <CreditCard className="w-3 h-3" />
+                          {patient.versicherten_id}
+                        </span>
+                      )}
                     </div>
                   </div>
                   </Link>
@@ -277,79 +239,8 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
         </CardContent>
       </Card>
 
-      {/* Create / Edit dialog */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingId ? t("receptionMgmt.editPatient") : t("receptionMgmt.registerNewPatient")}</DialogTitle>
-            <DialogDescription>
-              {editingId
-                ? t("receptionMgmt.editPatientDesc")
-                : t("receptionMgmt.registerPatientDesc")}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label={t("receptionMgmt.labelFirstName")} error={fieldErrors.first_name}>
-                <Input value={form.first_name} onChange={(e) => set("first_name", e.target.value)} />
-              </Field>
-              <Field label={t("receptionMgmt.labelLastName")} error={fieldErrors.last_name}>
-                <Input value={form.last_name} onChange={(e) => set("last_name", e.target.value)} />
-              </Field>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label={t("receptionMgmt.labelBirthDate")} error={fieldErrors.birth_date}>
-                <Input type="date" value={form.birth_date} onChange={(e) => set("birth_date", e.target.value)} />
-              </Field>
-              <Field label={t("receptionMgmt.labelInsuranceType")}>
-                <Select value={form.insurance_type} onValueChange={(v) => set("insurance_type", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="gkv">{t("receptionMgmt.insuranceGkv")}</SelectItem>
-                    <SelectItem value="pkv">{t("receptionMgmt.insurancePkv")}</SelectItem>
-                    <SelectItem value="selbstzahler">{t("receptionMgmt.insuranceSelfPay")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label={t("receptionMgmt.labelEmail")} error={fieldErrors.email}>
-                <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
-              </Field>
-              <Field label={t("receptionMgmt.labelPhone")}>
-                <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} />
-              </Field>
-            </div>
-            {form.insurance_type === "gkv" && (
-              <Field label={t("receptionMgmt.labelKvnr")}>
-                <Input value={form.versicherten_id} onChange={(e) => set("versicherten_id", e.target.value)} />
-              </Field>
-            )}
-            <Field label={t("receptionMgmt.labelStreet")}>
-              <Input value={form.street} onChange={(e) => set("street", e.target.value)} />
-            </Field>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <Field label={t("receptionMgmt.labelPostalCode")}>
-                <Input value={form.postal_code} onChange={(e) => set("postal_code", e.target.value)} />
-              </Field>
-              <Field label={t("receptionMgmt.labelCity")}>
-                <Input value={form.city} onChange={(e) => set("city", e.target.value)} />
-              </Field>
-              <Field label={t("receptionMgmt.labelCountry")}>
-                <Input value={form.country} onChange={(e) => set("country", e.target.value)} />
-              </Field>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFormOpen(false)} disabled={isPending}>{t("common.cancel")}</Button>
-            <Button onClick={() => submit()} disabled={isPending}>
-              {isPending ? t("receptionMgmt.saving") : editingId ? t("receptionMgmt.saveChanges") : t("receptionMgmt.registerPatient")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Create / edit dialog (shared with the patient detail page) */}
+      <PatientFormDialog open={formOpen} onOpenChange={setFormOpen} patient={editingPatient} />
 
       {/* Deactivation confirmation (soft delete) */}
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
@@ -373,17 +264,6 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  )
-}
-
-/** Small labelled field wrapper with inline validation message. */
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      {children}
-      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   )
 }

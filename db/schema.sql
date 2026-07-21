@@ -82,8 +82,11 @@ CREATE TABLE IF NOT EXISTS patients (
   phone             text,
   insurance_type    text NOT NULL CHECK (insurance_type IN ('gkv','pkv','selbstzahler')),
   versicherten_id   text UNIQUE,                 -- 10-char KVNR; NULL for self-pay
+  insurer_name      text,                        -- Krankenkasse / private insurer; NULL for self-pay
+  insurer_ik        text,                        -- Institutionskennzeichen of the insurer (9-digit); optional
   is_digital_active boolean NOT NULL DEFAULT false,
-  guardian_contact  text,                        -- required if under 18
+  guardian_name     text,                        -- legal guardian's name (minors)
+  guardian_contact  text,                        -- legal guardian's phone (required if under 18)
   street            text,
   city              text,
   postal_code       text,
@@ -92,6 +95,12 @@ CREATE TABLE IF NOT EXISTS patients (
   created_at        timestamptz NOT NULL DEFAULT now(),
   deleted_at        timestamptz                  -- soft delete (legal retention)
 );
+-- Insurer identity for databases created before these columns existed. The KVNR
+-- (versicherten_id) stays with the person for life; the insurer name/IK change
+-- when the patient switches Krankenkasse.
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurer_name  text;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurer_ik    text;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS guardian_name text;
 
 -- ─────────────────────── PATIENT CLINICAL CHILD TABLES ─────────────────────
 -- FKs RESTRICT on delete (no cascade) to honour clinical-record retention.
@@ -214,6 +223,13 @@ CREATE TABLE IF NOT EXISTS invoices (
   due_date       date,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
+-- Payer identity snapshotted at finalisation. A finalised invoice is billed to
+-- the insurer valid on the service date; if the patient later switches
+-- Krankenkasse the settled document must keep the original insurer and KVNR
+-- rather than reading the patient's current values.
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS insurer_name    text;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS insurer_ik      text;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS versicherten_id text;
 
 -- AI-proposed patient-profile updates (Feature 15 / AI-Module-15). After a
 -- consultation is confirmed, the AI scans the report for profile data that

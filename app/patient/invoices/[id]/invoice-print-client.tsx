@@ -19,6 +19,8 @@ export function InvoicePrintClient(props: {
   patientName: string
   patientDob: string | null
   insuranceType: "gkv" | "pkv" | "selbstzahler"
+  insurerName: string | null
+  insuranceNumber: string | null
   invoiceNumber: string | null
   invoiceDate: string
   serviceDate: string
@@ -48,6 +50,8 @@ export function InvoicePrintClient(props: {
           insuranceType={props.insuranceType}
           patientName={props.patientName}
           patientDob={props.patientDob}
+          insurerName={props.insurerName}
+          insuranceNumber={props.insuranceNumber}
           invoiceNumber={props.invoiceNumber}
           invoiceDate={props.invoiceDate}
           serviceDate={props.serviceDate}

@@ -31,6 +31,9 @@ export async function updateDoctor(
     return fail(parsed.error.issues[0]?.message ?? "Invalid input.")
   }
   const d = parsed.data
+  // Email identifies the login and must not collide with another doctor.
+  const dup = await query(`SELECT 1 FROM doctors WHERE lower(email) = lower($1) AND id <> $2 LIMIT 1`, [d.email, id])
+  if (dup.rowCount && dup.rowCount > 0) return fail("This email is already used by another doctor.")
   const res = await query<DoctorRow>(
     `UPDATE doctors
         SET first_name = $2, last_name = $3, email = $4, phone = $5,

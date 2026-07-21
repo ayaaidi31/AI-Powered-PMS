@@ -27,6 +27,8 @@ export default async function PatientInvoiceDetailPage({ params }: { params: Pro
       patientName={patientName(patient)}
       patientDob={patient.birth_date}
       insuranceType={invoice.insurance_type}
+      insurerName={invoice.insurer_name}
+      insuranceNumber={invoice.versicherten_id}
       invoiceNumber={invoice.invoice_number}
       invoiceDate={invoice.created_at}
       serviceDate={invoice.starts_at}

@@ -155,7 +155,10 @@ export interface PatientRow {
   phone: string | null
   insurance_type: "gkv" | "pkv" | "selbstzahler"
   versicherten_id: string | null
+  insurer_name: string | null
+  insurer_ik: string | null
   is_digital_active: boolean
+  guardian_name: string | null
   guardian_contact: string | null
   street: string | null
   city: string | null
@@ -166,11 +169,11 @@ export interface PatientRow {
   deleted_at: string | null
 }
 export const patients: PatientRow[] = [
-  { id: "pat-1", first_name: "Max", last_name: "Mustermann", birth_date: "1985-06-15", email: "max.mustermann@email.com", phone: "+49 152 9876543", insurance_type: "gkv", versicherten_id: "A123456789", is_digital_active: true, guardian_contact: null, street: "Hauptstraße 123", city: "Berlin", postal_code: "10115", country: "Germany", last_updated_by: "User: Braun", created_at: "2022-01-10T09:00:00Z", deleted_at: null },
-  { id: "pat-2", first_name: "Anna", last_name: "Schmidt", birth_date: "1990-03-22", email: "anna.schmidt@email.com", phone: "+49 152 7654321", insurance_type: "pkv", versicherten_id: null, is_digital_active: true, guardian_contact: null, street: "Friedrichstraße 45", city: "Berlin", postal_code: "10117", country: "Germany", last_updated_by: "User: Braun", created_at: "2022-05-20T09:00:00Z", deleted_at: null },
-  { id: "pat-3", first_name: "Thomas", last_name: "Müller", birth_date: "1978-11-08", email: "thomas.mueller@email.com", phone: "+49 152 6543210", insurance_type: "gkv", versicherten_id: "A987654321", is_digital_active: true, guardian_contact: null, street: "Alexanderplatz 10", city: "Berlin", postal_code: "10178", country: "Germany", last_updated_by: "User: Braun", created_at: "2021-08-15T09:00:00Z", deleted_at: null },
-  { id: "pat-4", first_name: "Lisa", last_name: "Weber", birth_date: "1995-07-30", email: "lisa.weber@email.com", phone: "+49 152 5432109", insurance_type: "selbstzahler", versicherten_id: null, is_digital_active: true, guardian_contact: null, street: "Potsdamer Platz 5", city: "Berlin", postal_code: "10785", country: "Germany", last_updated_by: "User: Braun", created_at: "2023-11-01T09:00:00Z", deleted_at: null },
-  { id: "pat-5", first_name: "Peter", last_name: "Fischer", birth_date: "1960-02-14", email: "peter.fischer@email.com", phone: "+49 152 4321098", insurance_type: "gkv", versicherten_id: "A111222333", is_digital_active: true, guardian_contact: null, street: "Unter den Linden 77", city: "Berlin", postal_code: "10117", country: "Germany", last_updated_by: "User: Braun", created_at: "2019-03-10T09:00:00Z", deleted_at: null },
+  { id: "pat-1", first_name: "Max", last_name: "Mustermann", birth_date: "1985-06-15", email: "max.mustermann@email.com", phone: "+49 152 9876543", insurance_type: "gkv", versicherten_id: "A123456789", insurer_name: "AOK Nordost", insurer_ik: null, is_digital_active: true, guardian_name: null, guardian_contact: null, street: "Hauptstraße 123", city: "Berlin", postal_code: "10115", country: "Germany", last_updated_by: "User: Braun", created_at: "2022-01-10T09:00:00Z", deleted_at: null },
+  { id: "pat-2", first_name: "Anna", last_name: "Schmidt", birth_date: "1990-03-22", email: "anna.schmidt@email.com", phone: "+49 152 7654321", insurance_type: "pkv", versicherten_id: null, insurer_name: "Allianz Private Krankenversicherung", insurer_ik: null, is_digital_active: true, guardian_name: null, guardian_contact: null, street: "Friedrichstraße 45", city: "Berlin", postal_code: "10117", country: "Germany", last_updated_by: "User: Braun", created_at: "2022-05-20T09:00:00Z", deleted_at: null },
+  { id: "pat-3", first_name: "Thomas", last_name: "Müller", birth_date: "1978-11-08", email: "thomas.mueller@email.com", phone: "+49 152 6543210", insurance_type: "gkv", versicherten_id: "A987654321", insurer_name: "Techniker Krankenkasse", insurer_ik: null, is_digital_active: true, guardian_name: null, guardian_contact: null, street: "Alexanderplatz 10", city: "Berlin", postal_code: "10178", country: "Germany", last_updated_by: "User: Braun", created_at: "2021-08-15T09:00:00Z", deleted_at: null },
+  { id: "pat-4", first_name: "Lisa", last_name: "Weber", birth_date: "1995-07-30", email: "lisa.weber@email.com", phone: "+49 152 5432109", insurance_type: "selbstzahler", versicherten_id: null, insurer_name: null, insurer_ik: null, is_digital_active: true, guardian_name: null, guardian_contact: null, street: "Potsdamer Platz 5", city: "Berlin", postal_code: "10785", country: "Germany", last_updated_by: "User: Braun", created_at: "2023-11-01T09:00:00Z", deleted_at: null },
+  { id: "pat-5", first_name: "Peter", last_name: "Fischer", birth_date: "1960-02-14", email: "peter.fischer@email.com", phone: "+49 152 4321098", insurance_type: "gkv", versicherten_id: "A111222333", insurer_name: "Barmer", insurer_ik: null, is_digital_active: true, guardian_name: null, guardian_contact: null, street: "Unter den Linden 77", city: "Berlin", postal_code: "10117", country: "Germany", last_updated_by: "User: Braun", created_at: "2019-03-10T09:00:00Z", deleted_at: null },
 ]
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -402,8 +405,12 @@ export interface InvoiceRow {
   storno_of: string | null
   due_date: string | null
   created_at: string
+  // Payer identity frozen at finalisation (independent of later profile changes).
+  insurer_name: string | null
+  insurer_ik: string | null
+  versicherten_id: string | null
 }
 export const invoices: InvoiceRow[] = [
-  { id: "inv-1", invoice_number: "2024-0001", appointment_id: "apt-3", patient_id: "pat-3", insurance_type: "gkv", total_cents: null, status: "ready_for_kv", storno_of: null, due_date: null, created_at: "2024-01-15T12:00:00Z" },
-  { id: "inv-2", invoice_number: "2024-0002", appointment_id: "apt-3", patient_id: "pat-2", insurance_type: "pkv", total_cents: 7399, status: "sent", storno_of: null, due_date: "2024-02-10", created_at: "2024-01-10T12:00:00Z" },
+  { id: "inv-1", invoice_number: "2024-0001", appointment_id: "apt-3", patient_id: "pat-3", insurance_type: "gkv", total_cents: null, status: "ready_for_kv", storno_of: null, due_date: null, created_at: "2024-01-15T12:00:00Z", insurer_name: "Techniker Krankenkasse", insurer_ik: null, versicherten_id: "A987654321" },
+  { id: "inv-2", invoice_number: "2024-0002", appointment_id: "apt-3", patient_id: "pat-2", insurance_type: "pkv", total_cents: 7399, status: "sent", storno_of: null, due_date: "2024-02-10", created_at: "2024-01-10T12:00:00Z", insurer_name: "Allianz Private Krankenversicherung", insurer_ik: null, versicherten_id: null },
 ]

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const h = vi.hoisted(() => ({ sql: vi.fn(), query: vi.fn() }))
+vi.mock("server-only", () => ({}))
 vi.mock("@/lib/db", () => ({
   sql: (...a: unknown[]) => h.sql(...a),
   query: (...a: unknown[]) => h.query(...a),
@@ -23,6 +24,9 @@ beforeEach(() => { h.sql.mockReset(); h.query.mockReset() })
 
 const valid = { first_name: "Max", last_name: "Mustermann", birth_date: "1985-04-14", insurance_type: "gkv" as const, email: "max@x.de" }
 
+// The uniqueness pre-check (email/phone/KVNR) runs via query(); a clean result.
+const noConflict = { rows: [{ email_taken: false, phone_taken: false, kvnr_taken: false }], rowCount: 1 }
+
 describe("registerPatient (CRUD create + REQ-REC-11 duplicate)", () => {
   it("rejects invalid input before any DB call", async () => {
     const r = await registerPatient({ ...valid, first_name: "" })
@@ -31,6 +35,7 @@ describe("registerPatient (CRUD create + REQ-REC-11 duplicate)", () => {
   })
 
   it("returns a conflict when a duplicate name + DOB exists", async () => {
+    h.query.mockResolvedValueOnce(noConflict)                                       // uniqueness pre-check
     h.sql.mockResolvedValueOnce([{ id: "p1", first_name: "Max", last_name: "Mustermann" }])
     const r = await registerPatient(valid)
     expect(r.status).toBe("conflict")
@@ -38,7 +43,16 @@ describe("registerPatient (CRUD create + REQ-REC-11 duplicate)", () => {
     expect(h.sql).toHaveBeenCalledTimes(1) // INSERT not reached
   })
 
+  it("rejects an email already registered to another patient", async () => {
+    h.query.mockResolvedValueOnce({ rows: [{ email_taken: true, phone_taken: false, kvnr_taken: false }], rowCount: 1 })
+    const r = await registerPatient(valid)
+    expect(r.status).toBe("error")
+    if (r.status === "error") expect(r.fieldErrors?.email).toBeTruthy()
+    expect(h.sql).not.toHaveBeenCalled() // stops before the duplicate check and INSERT
+  })
+
   it("inserts and returns the new patient when unique", async () => {
+    h.query.mockResolvedValueOnce(noConflict)                    // uniqueness pre-check
     h.sql.mockResolvedValueOnce([]) // no duplicate
     h.sql.mockResolvedValueOnce([{ id: "p2", is_digital_active: true }]) // INSERT RETURNING
     const r = await registerPatient(valid)
@@ -48,6 +62,7 @@ describe("registerPatient (CRUD create + REQ-REC-11 duplicate)", () => {
   })
 
   it("skips the duplicate check when allowDuplicate is set", async () => {
+    h.query.mockResolvedValueOnce(noConflict)                    // uniqueness pre-check still runs
     h.sql.mockResolvedValueOnce([{ id: "p3" }]) // INSERT only
     const r = await registerPatient(valid, true)
     expect(r.status).toBe("ok")
@@ -61,13 +76,15 @@ describe("updatePatient (CRUD update)", () => {
     expect(h.query).not.toHaveBeenCalled()
   })
   it("updates and returns the row", async () => {
-    h.query.mockResolvedValueOnce({ rows: [{ id: "p1", phone: "030" }], rowCount: 1 })
-    const r = await updatePatient("p1", { phone: "030" })
+    h.query.mockResolvedValueOnce(noConflict)                                       // uniqueness pre-check
+    h.query.mockResolvedValueOnce({ rows: [{ id: "p1", phone: "030" }], rowCount: 1 }) // UPDATE
+    const r = await updatePatient("p1", { phone: "0151 23456789" })
     expect(r.status).toBe("ok")
   })
   it("reports not found when no row matched", async () => {
-    h.query.mockResolvedValueOnce({ rows: [], rowCount: 0 })
-    expect((await updatePatient("missing", { phone: "030" })).status).toBe("error")
+    h.query.mockResolvedValueOnce(noConflict)                     // uniqueness pre-check
+    h.query.mockResolvedValueOnce({ rows: [], rowCount: 0 })      // UPDATE
+    expect((await updatePatient("missing", { phone: "0151 23456789" })).status).toBe("error")
   })
 })
 

@@ -35,6 +35,28 @@ describe("patientSchema (REQ-REC-09/10)", () => {
     expect(patientSchema.safeParse({ ...valid, email: "not-an-email" }).success).toBe(false)
     expect(patientSchema.safeParse({ ...valid, email: "a@b.de" }).success).toBe(true)
   })
+  it("rejects a future or implausible date of birth", () => {
+    expect(patientSchema.safeParse({ ...valid, birth_date: "2999-01-01" }).success).toBe(false)
+    expect(patientSchema.safeParse({ ...valid, birth_date: "1850-01-01" }).success).toBe(false)
+  })
+  it("validates the KVNR format (one letter + 9 digits)", () => {
+    expect(patientSchema.safeParse({ ...valid, versicherten_id: "A123456789" }).success).toBe(true)
+    expect(patientSchema.safeParse({ ...valid, versicherten_id: "123456789" }).success).toBe(false)
+    expect(patientSchema.safeParse({ ...valid, versicherten_id: "A12345" }).success).toBe(false)
+    expect(patientSchema.safeParse({ ...valid, versicherten_id: "" }).success).toBe(true)
+  })
+  it("validates the insurer IK (9 digits) and PLZ (5 digits)", () => {
+    expect(patientSchema.safeParse({ ...valid, insurer_ik: "101097008" }).success).toBe(true)
+    expect(patientSchema.safeParse({ ...valid, insurer_ik: "12345" }).success).toBe(false)
+    expect(patientSchema.safeParse({ ...valid, postal_code: "10115" }).success).toBe(true)
+    expect(patientSchema.safeParse({ ...valid, postal_code: "1011" }).success).toBe(false)
+  })
+  it("validates German phone numbers, accepting +49 and 0 forms", () => {
+    expect(patientSchema.safeParse({ ...valid, phone: "0151 23456789" }).success).toBe(true)
+    expect(patientSchema.safeParse({ ...valid, phone: "+49 30 12345678" }).success).toBe(true)
+    expect(patientSchema.safeParse({ ...valid, phone: "abc" }).success).toBe(false)
+    expect(patientSchema.safeParse({ ...valid, phone: "030" }).success).toBe(false)
+  })
 })
 
 describe("doctorSchema", () => {

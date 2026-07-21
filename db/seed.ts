@@ -108,7 +108,7 @@ async function main() {
     )
     await insert(
       "patients",
-      ["id", "first_name", "last_name", "birth_date", "email", "phone", "insurance_type", "versicherten_id", "is_digital_active", "guardian_contact", "street", "city", "postal_code", "country", "last_updated_by", "created_at", "deleted_at"],
+      ["id", "first_name", "last_name", "birth_date", "email", "phone", "insurance_type", "versicherten_id", "insurer_name", "insurer_ik", "is_digital_active", "guardian_name", "guardian_contact", "street", "city", "postal_code", "country", "last_updated_by", "created_at", "deleted_at"],
       seed.patients.map((p) => ({ ...p, id: uuidFor(patId, p.id) })),
     )
 
@@ -170,7 +170,7 @@ async function main() {
     )
     await insert(
       "invoices",
-      ["id", "invoice_number", "appointment_id", "patient_id", "insurance_type", "total_cents", "status", "storno_of", "due_date", "created_at"],
+      ["id", "invoice_number", "appointment_id", "patient_id", "insurance_type", "total_cents", "status", "storno_of", "due_date", "created_at", "insurer_name", "insurer_ik", "versicherten_id"],
       seed.invoices.map((i) => ({
         ...i,
         id: uuidFor(invId, i.id),
