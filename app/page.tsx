@@ -80,7 +80,8 @@ export default function LoginPage() {
 
   return (
     <div className="relative min-h-screen flex">
-      <div className="absolute top-4 right-4 z-10">
+      {/* Desktop: floats over the top-right. On mobile it sits in the form flow (below). */}
+      <div className="absolute top-4 right-4 z-10 hidden lg:block">
         <LanguageToggle />
       </div>
       {/* Left side - Branding */}
@@ -114,6 +115,9 @@ export default function LoginPage() {
       {/* Right side - Login Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-background">
         <div className="w-full max-w-md space-y-8">
+          <div className="flex justify-end lg:hidden">
+            <LanguageToggle />
+          </div>
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <HeartPulse className="w-6 h-6 text-primary-foreground" />

@@ -110,9 +110,9 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
           ) : (
             <div className="space-y-3">
               {pending.map((r) => (
-                <div key={r.appointment_id} className="flex items-center gap-4 p-4 rounded-lg border border-border">
+                <div key={r.appointment_id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-lg border border-border">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-foreground">{r.patient_name}</span>
                       <Badge variant={insuranceVariant(r.insurance_type)}>{insuranceLabel(r.insurance_type)}</Badge>
                     </div>
@@ -122,12 +122,12 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
                     </p>
                   </div>
                   {r.code_count === 0 ? (
-                    <div className="flex items-center gap-2 text-sm text-destructive">
-                      <AlertCircle className="w-4 h-4" />
+                    <div className="flex items-center gap-2 text-sm text-destructive shrink-0">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
                       {t("receptionMgmt.noCodesRequest")}
                     </div>
                   ) : (
-                    <Button onClick={() => setProcessing(r)} disabled={isPending} className="gap-2">
+                    <Button onClick={() => setProcessing(r)} disabled={isPending} className="gap-2 shrink-0">
                       {r.insurance_type === "gkv" ? <Landmark className="w-4 h-4" /> : <Euro className="w-4 h-4" />}
                       {t("receptionMgmt.process")}
                     </Button>
@@ -149,7 +149,7 @@ export function BillingClient({ rows, invoices }: { rows: BillingRow[]; invoices
           {invoices.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">{t("receptionMgmt.noInvoices")}</p>
           ) : (
-            <Table>
+            <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("receptionMgmt.colNumber")}</TableHead>

@@ -66,6 +66,8 @@ interface BillingDoc {
   id: string
   invoiceNumber: string
   insuranceType: "gkv" | "pkv" | "selbstzahler"
+  insurerName: string | null
+  insuranceNumber: string | null
   totalCents: number | null
   status: InvoiceRow["status"]
   dueDate: string | null
@@ -446,6 +448,8 @@ export function PatientDetailClient({
                 insuranceType={viewingInvoice.insuranceType}
                 patientName={patientName(patient)}
                 patientDob={patient.birth_date}
+                insurerName={viewingInvoice.insurerName}
+                insuranceNumber={viewingInvoice.insuranceNumber}
                 invoiceNumber={viewingInvoice.invoiceNumber}
                 invoiceDate={viewingInvoice.invoiceDate}
                 serviceDate={viewingInvoice.serviceDate}

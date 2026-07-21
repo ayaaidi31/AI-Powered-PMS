@@ -38,6 +38,8 @@ export async function loadPatientDetail(
       id: inv.id,
       invoiceNumber: inv.invoice_number,
       insuranceType: inv.insurance_type,
+      insurerName: inv.insurer_name,
+      insuranceNumber: inv.versicherten_id,
       totalCents: inv.total_cents,
       status: inv.status,
       dueDate: inv.due_date,

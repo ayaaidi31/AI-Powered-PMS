@@ -129,7 +129,7 @@ export function CallsClient({ bookings }: { bookings: VoiceBooking[] }) {
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> {t("reception.confirmedBadge")}
                       </Badge>
                     ) : (
-                      <div className="flex items-center gap-2 self-start lg:self-center">
+                      <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
                         {b.reviewStatus === "flagged" && (
                           <Badge variant="destructive" className="gap-1.5"><Flag className="w-3.5 h-3.5" /> {t("reception.flaggedBadge")}</Badge>
                         )}

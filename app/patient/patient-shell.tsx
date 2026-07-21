@@ -8,6 +8,10 @@ import { Sheet, SheetContent, SheetDescription, SheetTrigger, SheetTitle } from 
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useState } from "react"
 import { FaqChat } from "@/components/faq-chat"
 import { NotificationBell } from "@/components/notification-bell"
@@ -43,6 +47,7 @@ export function PatientShell({
   const router = useRouter()
   const t = useT()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
 
   const handleLogout = async () => {
     await logout() // clears the session cookie server-side
@@ -116,7 +121,7 @@ export function PatientShell({
                     </DropdownMenuItem>
                   ))}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive cursor-pointer">
+                  <DropdownMenuItem onClick={() => setLogoutConfirmOpen(true)} className="text-destructive focus:text-destructive cursor-pointer">
                     <LogOut className="w-4 h-4" />
                     {t("common.signOut")}
                   </DropdownMenuItem>
@@ -157,6 +162,11 @@ export function PatientShell({
                     </div>
                   </div>
 
+                  {/* Language preference — kept near the account identity, away from log out. */}
+                  <div className="px-4 py-3 border-b border-border shrink-0">
+                    <LanguageToggle className="w-full justify-center" />
+                  </div>
+
                   {/* Nav */}
                   <nav className="flex-1 overflow-y-auto p-3 space-y-1">
                     {[...mainNav, ...accountNav].map((item) => {
@@ -179,10 +189,13 @@ export function PatientShell({
                     })}
                   </nav>
 
-                  {/* Language + log out */}
-                  <div className="p-4 border-t border-border shrink-0 space-y-3">
-                    <LanguageToggle className="w-full justify-center" />
-                    <Button variant="outline" className="w-full gap-2" onClick={handleLogout}>
+                  {/* Log out — isolated at the bottom with its own confirmation. */}
+                  <div className="p-4 border-t border-border shrink-0">
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2 text-destructive hover:text-destructive"
+                      onClick={() => { setIsMobileMenuOpen(false); setLogoutConfirmOpen(true) }}
+                    >
                       <LogOut className="w-4 h-4" />
                       {t("common.signOut")}
                     </Button>
@@ -201,6 +214,20 @@ export function PatientShell({
 
       {/* Clinic FAQ assistant (Mistral-backed) */}
       <FaqChat />
+
+      {/* Log-out confirmation — guards against an accidental tap. */}
+      <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("common.logoutConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("common.logoutConfirmDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout}>{t("common.signOut")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

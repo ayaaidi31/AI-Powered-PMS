@@ -6,6 +6,8 @@
 export const de = {
   common: {
     signOut: "Abmelden",
+    logoutConfirmTitle: "Abmelden?",
+    logoutConfirmDesc: "Sie werden von Ihrem Konto abgemeldet und zur Anmeldeseite zurückgeleitet.",
     settings: "Einstellungen",
     save: "Speichern",
     cancel: "Abbrechen",

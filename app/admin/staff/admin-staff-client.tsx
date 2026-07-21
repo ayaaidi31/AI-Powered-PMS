@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 import { createStaffAccount, logout } from "@/lib/actions/auth"
 import { useT } from "@/lib/i18n/locale-context"
@@ -28,6 +32,7 @@ export function AdminStaffClient() {
   const [loading, setLoading] = useState(false)
   const [created, setCreated] = useState<Created | null>(null)
   const [copied, setCopied] = useState(false)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
 
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -64,12 +69,12 @@ export function AdminStaffClient() {
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b border-border bg-muted">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
-            <ShieldCheck className="w-5 h-5 text-primary" />
+            <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
             <span className="font-semibold text-foreground">{t("admin.pageTitle")}</span>
           </div>
-          <Button variant="ghost" size="sm" className="gap-2" onClick={signOut}>
+          <Button variant="ghost" size="sm" className="gap-2 text-destructive hover:text-destructive shrink-0" onClick={() => setLogoutConfirmOpen(true)}>
             <LogOut className="w-4 h-4" /> {t("common.signOut")}
           </Button>
         </div>
@@ -93,8 +98,8 @@ export function AdminStaffClient() {
                 <p className="text-sm text-foreground">{t("admin.passwordSentTo")} <span className="font-medium">{created.email}</span></p>
               ) : (
                 <>
-                  <div className="flex items-center gap-3">
-                    <code className="flex-1 font-mono text-lg bg-background border border-border rounded-md px-4 py-3 tracking-wider text-center">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <code className="flex-1 font-mono text-lg bg-background border border-border rounded-md px-4 py-3 tracking-wider text-center break-all">
                       {created.tempPassword}
                     </code>
                     <Button
@@ -134,14 +139,14 @@ export function AdminStaffClient() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field id="first_name" label={t("admin.firstName")} value={form.first_name} onChange={set("first_name")} error={fieldErrors.first_name} required />
                 <Field id="last_name" label={t("admin.lastName")} value={form.last_name} onChange={set("last_name")} error={fieldErrors.last_name} required />
               </div>
 
               <Field id="email" label={t("admin.email")} type="email" value={form.email} onChange={set("email")} error={fieldErrors.email} required />
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field id="phone" label={t("admin.phoneOptional")} value={form.phone} onChange={set("phone")} error={fieldErrors.phone} />
                 <Field id="department" label={t("admin.departmentOptional")} value={form.department} onChange={set("department")} error={fieldErrors.department} />
               </div>
@@ -157,6 +162,20 @@ export function AdminStaffClient() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Log-out confirmation — guards against an accidental tap. */}
+      <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("common.logoutConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("common.logoutConfirmDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={signOut}>{t("common.signOut")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

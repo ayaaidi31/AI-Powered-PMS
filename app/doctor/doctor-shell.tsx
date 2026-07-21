@@ -26,6 +26,10 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { RecordingProvider } from "@/components/recording/recording-provider"
 import { LanguageToggle } from "@/components/language-toggle"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useT, useLocale } from "@/lib/i18n/locale-context"
 import { INTL_LOCALE } from "@/lib/i18n/config"
 
@@ -55,6 +59,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
   const locale = useLocale()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dutyPending, setDutyPending] = useState(false)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
 
   async function toggleDuty() {
     setDutyPending(true)
@@ -187,7 +192,7 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
                     {t("common.settings")}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive" onClick={handleSignOut}>
+                  <DropdownMenuItem className="text-destructive" onClick={() => setLogoutConfirmOpen(true)}>
                     <LogOut className="w-4 h-4 mr-2" />
                     {t("common.signOut")}
                   </DropdownMenuItem>
@@ -202,6 +207,20 @@ export function DoctorShell({ profile, children }: { profile: DoctorProfile; chi
         </main>
       </div>
     </div>
+
+      {/* Log-out confirmation — guards against an accidental tap. */}
+      <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("common.logoutConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("common.logoutConfirmDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSignOut}>{t("common.signOut")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </RecordingProvider>
   )
 }

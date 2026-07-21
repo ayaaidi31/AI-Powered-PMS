@@ -19,6 +19,10 @@ import { logout } from "@/lib/actions/auth"
 import { NotificationBell } from "@/components/notification-bell"
 import { getReceptionistNotifications } from "@/lib/actions/receptionists"
 import { LanguageToggle } from "@/components/language-toggle"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useT, useLocale } from "@/lib/i18n/locale-context"
 import { INTL_LOCALE } from "@/lib/i18n/config"
 
@@ -45,6 +49,7 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
   const t = useT()
   const locale = useLocale()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
 
   const handleLogout = async () => {
     await logout()
@@ -153,7 +158,7 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive cursor-pointer">
+                <DropdownMenuItem onClick={() => setLogoutConfirmOpen(true)} className="text-destructive focus:text-destructive cursor-pointer">
                   <LogOut className="w-4 h-4" />
                   {t("common.signOut")}
                 </DropdownMenuItem>
@@ -189,6 +194,20 @@ export function ReceptionistShell({ profile, children }: { profile: Receptionist
           <div key={pathname} className="animate-fade-in">{children}</div>
         </main>
       </div>
+
+      {/* Log-out confirmation — guards against an accidental tap. */}
+      <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("common.logoutConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("common.logoutConfirmDesc")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout}>{t("common.signOut")}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

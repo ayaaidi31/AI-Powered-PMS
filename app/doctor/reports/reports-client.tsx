@@ -147,7 +147,7 @@ export function DoctorReportsClient({
               <Input placeholder={t("reports.searchPlaceholder")} className="pl-10" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[200px]"><SelectValue placeholder={t("reports.statusPlaceholder")} /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder={t("reports.statusPlaceholder")} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t("reports.allStatuses")}</SelectItem>
                 <SelectItem value="draft">{t("reports.statusDraft")}</SelectItem>

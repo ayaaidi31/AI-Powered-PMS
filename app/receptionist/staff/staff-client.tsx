@@ -324,7 +324,7 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
               {/* Inline date-range form for marking unavailable (no modal). */}
               {markingId === d.id ? (
                 <div className="rounded-lg border border-border p-3 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label className="text-xs text-muted-foreground">{t("receptionMgmt.labelFrom")}</Label>
                       <Input type="date" value={markFrom} onChange={(e) => setMarkFrom(e.target.value)} />
@@ -335,7 +335,7 @@ export function StaffClient({ roster }: { roster: RosterDoctor[] }) {
                     </div>
                   </div>
                   <p className="text-[11px] text-muted-foreground">{t("receptionMgmt.untilHint")}</p>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button size="sm" className="gap-1.5" onClick={() => markUnavailable(d)} disabled={busyId === d.id}>
                       <UserX className="w-4 h-4" /> {t("receptionMgmt.confirmAbsence")}
                     </Button>

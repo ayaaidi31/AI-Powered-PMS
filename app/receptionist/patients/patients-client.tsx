@@ -115,7 +115,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: PatientRo
               />
             </div>
             <Select value={insuranceFilter} onValueChange={setInsuranceFilter}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <Filter className="w-4 h-4 mr-2" />
                 <SelectValue placeholder={t("receptionMgmt.insuranceTypePlaceholder")} />
               </SelectTrigger>

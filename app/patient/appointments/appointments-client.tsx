@@ -106,8 +106,8 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
 
     return (
       <div className="p-4 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-4 flex-1 min-w-0">
             <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
               <User className="w-6 h-6 text-primary" />
             </div>
@@ -171,21 +171,21 @@ export function PatientAppointmentsClient({ appointments }: { appointments: Pati
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-2xl font-bold text-foreground">{t("patient.title")}</h1>
             <p className="text-muted-foreground">{t("patient.subtitle")}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/patient/book-voice">
-              <Button variant="outline" className="gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <Link href="/patient/book-voice" className="flex-1 sm:flex-none">
+              <Button variant="outline" className="gap-2 w-full">
                 <Sparkles className="w-4 h-4" />
                 <span className="hidden sm:inline">{t("patient.bookByVoice")}</span>
                 <span className="sm:hidden">{t("patient.voice")}</span>
               </Button>
             </Link>
-            <Link href="/patient/appointments/new">
-              <Button className="gap-2">
+            <Link href="/patient/appointments/new" className="flex-1 sm:flex-none">
+              <Button className="gap-2 w-full">
                 <Plus className="w-4 h-4" />
                 {t("patient.bookNew")}
               </Button>

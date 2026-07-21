@@ -66,8 +66,8 @@ export function RecordsClient({ reports }: { reports: ReportListItem[] }) {
               <div className="space-y-4">
                 {filtered.map((report) => (
                   <div key={report.id} className="p-4 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-4 flex-1">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex items-start gap-4 flex-1 min-w-0">
                         <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                           <FileText className="w-6 h-6 text-primary" />
                         </div>
@@ -76,7 +76,7 @@ export function RecordsClient({ reports }: { reports: ReportListItem[] }) {
                             {report.diagnosis?.trim() || t("patientRecords.reportFallbackTitle")}
                           </h3>
                           <p className="text-sm text-muted-foreground">{report.doctorName}</p>
-                          <div className="flex items-center gap-2 mt-2">
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
                             <Badge variant="outline" className="text-xs gap-1">
                               <Calendar className="w-3 h-3" />
                               {new Date(report.date).toLocaleDateString(INTL_LOCALE[locale], { month: "short", day: "numeric", year: "numeric" })}
@@ -88,8 +88,8 @@ export function RecordsClient({ reports }: { reports: ReportListItem[] }) {
                           </div>
                         </div>
                       </div>
-                      <Link href={`/patient/records/${report.id}`}>
-                        <Button variant="outline" size="sm">{t("patientRecords.viewReport")}</Button>
+                      <Link href={`/patient/records/${report.id}`} className="shrink-0">
+                        <Button variant="outline" size="sm" className="w-full sm:w-auto">{t("patientRecords.viewReport")}</Button>
                       </Link>
                     </div>
                   </div>

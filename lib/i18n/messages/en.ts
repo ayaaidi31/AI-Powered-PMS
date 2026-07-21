@@ -8,6 +8,8 @@
 export const en = {
   common: {
     signOut: "Sign Out",
+    logoutConfirmTitle: "Sign out?",
+    logoutConfirmDesc: "You will be signed out of your account and returned to the login page.",
     settings: "Settings",
     save: "Save",
     cancel: "Cancel",
