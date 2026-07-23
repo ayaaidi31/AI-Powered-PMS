@@ -62,7 +62,7 @@ export function normalizeBackupCode(input: string): string {
 }
 
 /**
- * Check a typed backup code against the stored hashes. Returns the REMAINING
+ * Check a typed backup code against the stored hashes. Returns the remaining
  * hashes (with the used one removed) when it matches, or null when it doesn't.
  */
 export async function consumeBackupCode(

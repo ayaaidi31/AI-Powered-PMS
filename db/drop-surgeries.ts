@@ -5,8 +5,8 @@
  * UI and had no create/update/delete path, so it was removed from the
  * application. This script drops the now-orphaned table from the database.
  *
- * SAFETY:
- *  1. Backs up every row + column definition to db/_backup-surgeries.json BEFORE
+ * Safety:
+ *  1. Backs up every row + column definition to db/_backup-surgeries.json before
  *     dropping. If the backup write fails, it aborts without dropping.
  *  2. `surgeries` is a leaf table (nothing references it), so the drop needs no
  *     CASCADE. Uses IF EXISTS.

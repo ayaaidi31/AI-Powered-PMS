@@ -119,7 +119,7 @@ export async function updateReport(
   values.push(g.value.profileId)
   const doctorParam = values.length
 
-  // The WHERE clause enforces immutability (approved rows never match) AND
+  // The WHERE clause enforces immutability (approved rows never match) and
   // authorship (a doctor can only edit their own reports).
   const result = await query<MedicalReportRow>(
     `UPDATE medical_reports SET ${sets.join(", ")}
@@ -217,8 +217,8 @@ export async function setReportBillingCodes(
 /**
  * Remove a report (two-tier, German retention law).
  *  - A draft / pending-approval report is not yet part of the legal record, so
- *    it is HARD-deleted (with its attached billing codes) — for genuine mistakes.
- *  - An approved report is legally retained: it is RETRACTED (soft-deleted with a
+ *    it is hard-deleted (with its attached billing codes) — for genuine mistakes.
+ *  - An approved report is legally retained: it is retracted (soft-deleted with a
  *    reason and hidden from lists), never erased.
  * Only the authoring doctor may do this (role-appropriate).
  */

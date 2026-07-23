@@ -3,9 +3,9 @@
  * seed-data.ts replaced: condition, encounter, patient (singular),
  * awmf_guideline_chunks.
  *
- * SAFETY:
+ * Safety:
  *  1. Backs up every row + column definition of those tables to
- *     db/_backup-fhir-legacy.json BEFORE dropping anything. If the backup
+ *     db/_backup-fhir-legacy.json before dropping anything. If the backup
  *     write fails, it aborts without dropping.
  *  2. Drops in FK-dependency order, no CASCADE, IF EXISTS.
  *  3. Never references the langchain_pg_* RAG tables.

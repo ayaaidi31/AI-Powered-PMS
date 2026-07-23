@@ -7,10 +7,10 @@
  *
  * Env:
  *   RESEND_API_KEY        — required to actually send.
- *   CHECK_IN_EMAIL_FROM   — sender, e.g. "AI-PMS Clinic <noreply@your-domain>".
+ *   CHECK_IN_EMAIL_FROM   — sender, e.g. "AI-PMS Clinic <noreply@example.com>".
  *                           Defaults to Resend's shared sandbox sender, which
- *                           only delivers to your own Resend account email until
- *                           you verify a domain.
+ *                           only delivers to the account owner's own Resend email
+ *                           until a domain is verified.
  *   APP_URL               — base URL used to build links in the email.
  */
 import { headers } from "next/headers"
@@ -27,8 +27,8 @@ export function isEmailConfigured(): boolean {
 
 /**
  * Absolute URL of the app (for QR links and emails). Resolution order:
- *   1. APP_URL env (explicit override — set this in production if you want a
- *      fixed canonical domain).
+ *   1. APP_URL env (explicit override — set in production for a fixed canonical
+ *      domain).
  *   2. The actual request host (from headers) — works automatically on Vercel
  *      and on the LAN, so the check-in QR always points at the domain the user
  *      is really on.

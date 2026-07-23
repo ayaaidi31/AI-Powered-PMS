@@ -63,7 +63,7 @@ export async function requirePatient(): Promise<Guard<{ session: SessionPayload;
 }
 
 /**
- * For actions usable by BOTH staff and the owning patient. `isStaff` = the caller
+ * For actions usable by both staff and the owning patient. `isStaff` = the caller
  * may act on any record; `patientId` = the caller's own patient id (null for
  * staff). The action then checks ownership for the patient case.
  */

@@ -1,7 +1,7 @@
 /**
- * Patient notification builder (pure). Derives the "here's what needs your
- * attention" list from the patient's current data — no stored notifications
- * table, no read/unread state. Info events are time-windowed to the last
+ * Patient notification builder (pure). Derives the patient's attention list from
+ * their current data — no stored notifications table, no read/unread state.
+ * Info events are time-windowed to the last
  * {@link WINDOW_DAYS} days so they don't pile up forever.
  *
  * Kept pure (data in → items out) so the derivation logic is unit-tested
@@ -33,7 +33,10 @@ export interface PatientNotifInput {
     id: string
     status: string
     insurance_type: string
+    created_at: string
   }[]
+  // Clinical record changes the clinic applied directly (allergies, conditions).
+  recordUpdates: { id: string; at: string }[]
   pendingProposals: number
 }
 
@@ -64,6 +67,7 @@ export function buildPatientNotifications(input: PatientNotifInput, t: TFunction
         title: t("notify.apptCancelledTitle"),
         description: t("notify.apptCancelledDesc"),
         href: "/patient/appointments",
+        timestamp: a.staff_modified_at ?? undefined,
       })
     } else if (a.status === "scheduled") {
       items.push({
@@ -72,6 +76,7 @@ export function buildPatientNotifications(input: PatientNotifInput, t: TFunction
         title: t("notify.apptUpdatedTitle"),
         description: t("notify.apptUpdatedDesc"),
         href: "/patient/appointments",
+        timestamp: a.staff_modified_at ?? undefined,
       })
     }
   }
@@ -88,6 +93,7 @@ export function buildPatientNotifications(input: PatientNotifInput, t: TFunction
         title: t("notify.checkinTodayTitle"),
         description: t("notify.checkinTodayDesc"),
         href: "/checkin",
+        timestamp: a.starts_at,
       })
     } else if (startMs - nowMs <= SOON_MS) {
       items.push({
@@ -96,6 +102,7 @@ export function buildPatientNotifications(input: PatientNotifInput, t: TFunction
         title: t("notify.apptTomorrowTitle"),
         description: t("notify.apptTomorrowDesc"),
         href: "/patient/appointments",
+        timestamp: a.starts_at,
       })
     }
   }
@@ -110,6 +117,7 @@ export function buildPatientNotifications(input: PatientNotifInput, t: TFunction
         title: t("notify.newReportTitle"),
         description: t("notify.newReportDesc"),
         href: `/patient/records/${r.id}`,
+        timestamp: r.approved_at ?? r.created_at,
       })
     }
   }
@@ -125,8 +133,27 @@ export function buildPatientNotifications(input: PatientNotifInput, t: TFunction
         title: t("notify.invoiceDueTitle"),
         description: t("notify.invoiceDueDesc"),
         href: "/patient/invoices",
+        timestamp: inv.created_at,
       })
     }
+  }
+
+  // 4b. The clinic applied a change to the patient's medical record (allergy /
+  //     condition). Informational — no action needed, no clinical detail in the
+  //     text. Grouped into one entry keyed by the most recent change.
+  const recentRecord = input.recordUpdates
+    .filter((r) => withinWindow(r.at))
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+  if (recentRecord.length > 0) {
+    const latest = recentRecord[0]
+    items.push({
+      id: `record-update-${latest.id}`,
+      kind: "profile",
+      title: t("notify.recordUpdatedTitle"),
+      description: t("notify.recordUpdatedDesc"),
+      href: "/patient/profile",
+      timestamp: latest.at,
+    })
   }
 
   // 5. A profile update from a consultation is awaiting the patient's confirmation.

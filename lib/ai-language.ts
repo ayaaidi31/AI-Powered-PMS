@@ -2,7 +2,7 @@
  * Single source of truth for the language the AI features answer in.
  *
  * The clinic is German, so the codes, catalogs and stored data stay German;
- * only the model's free-text OUTPUT is controlled here. Keeping it in one place
+ * only the model's free-text output is controlled here. Keeping it in one place
  * means a future language toggle (or full German/other localization) is a single
  * change rather than a sweep across every prompt.
  */

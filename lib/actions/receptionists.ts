@@ -45,6 +45,7 @@ export interface ReceptionistNotification {
   title: string
   description: string
   href: string
+  timestamp?: string
 }
 
 /** Live front-desk alerts: off-duty doctors needing recovery, billing, waiting. */
@@ -88,6 +89,7 @@ export async function getReceptionistNotifications(): Promise<ReceptionistNotifi
           ? t("notify.billingDescMany", { name: w.patient_name, count: w.code_count })
           : t("notify.billingDescOne", { name: w.patient_name, count: w.code_count }),
         href: "/receptionist/billing",
+        timestamp: w.starts_at,
       })
     }
   }
@@ -102,6 +104,7 @@ export async function getReceptionistNotifications(): Promise<ReceptionistNotifi
         // Doctor name and time are data, shown as-is.
         description: `${a.doctor_name} · ${fmtTime(a.starts_at)}`,
         href: "/receptionist/waiting",
+        timestamp: a.check_in_at ?? a.starts_at,
       })
     }
   }

@@ -66,7 +66,7 @@ const TWO_FACTOR_TICKET_TTL = "5m"
 
 /**
  * Short-lived ticket issued after a correct password when the account has 2FA
- * enabled. It authorises ONLY the second-factor step — it is not a session and
+ * enabled. It authorises only the second-factor step — it is not a session and
  * grants no access on its own.
  */
 export async function signTwoFactorTicket(userId: string): Promise<string> {

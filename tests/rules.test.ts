@@ -64,7 +64,7 @@ describe("checkInDecision (Feature 3 self check-in / Feature 6 manual)", () => {
     expect(d.action).toBe("blocked")
     if (d.action === "blocked") expect(d.reason).toMatch(/day of your appointment/)
   })
-  it("manual (reception) check-in is NOT restricted to the same day", () => {
+  it("manual (reception) check-in is not restricted to the same day", () => {
     expect(checkInDecision({ status: "scheduled", isAppointmentToday: false, enforceSameDay: false }).action).toBe("ok")
   })
 })

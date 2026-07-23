@@ -16,6 +16,7 @@ const base: PatientNotifInput = {
   appointments: [],
   reports: [],
   invoices: [],
+  recordUpdates: [],
   pendingProposals: 0,
 }
 
@@ -45,7 +46,7 @@ describe("buildPatientNotifications", () => {
     expect(items.some((n) => n.kind === "alert" && /updated/i.test(n.title))).toBe(true)
   })
 
-  it("does NOT flag a change the patient made themselves (no staff stamp)", () => {
+  it("does not flag a change the patient made themselves (no staff stamp)", () => {
     const items = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: days(3), status: "scheduled", staff_modified_at: null }],
@@ -107,14 +108,27 @@ describe("buildPatientNotifications", () => {
   })
 
   it("shows a payment-due notice for private/self-pay invoices only", () => {
-    const pkv = kinds({ ...base, invoices: [{ id: "i1", status: "pending_payment", insurance_type: "pkv" }] })
+    const pkv = kinds({ ...base, invoices: [{ id: "i1", status: "pending_payment", insurance_type: "pkv", created_at: days(-1) }] })
     expect(pkv).toContain("billing")
     // GKV is billed to the insurer — never nag the patient.
-    const gkv = kinds({ ...base, invoices: [{ id: "i2", status: "ready_for_kv", insurance_type: "gkv" }] })
+    const gkv = kinds({ ...base, invoices: [{ id: "i2", status: "ready_for_kv", insurance_type: "gkv", created_at: days(-1) }] })
     expect(gkv).not.toContain("billing")
     // A paid invoice is not actionable.
-    const paid = kinds({ ...base, invoices: [{ id: "i3", status: "paid", insurance_type: "pkv" }] })
+    const paid = kinds({ ...base, invoices: [{ id: "i3", status: "paid", insurance_type: "pkv", created_at: days(-1) }] })
     expect(paid).not.toContain("billing")
+  })
+
+  it("surfaces a recent clinic-applied record change, grouped and windowed", () => {
+    const items = bpn({
+      ...base,
+      recordUpdates: [{ id: "rc1", at: days(-2) }, { id: "rc2", at: days(-1) }],
+    })
+    const record = items.filter((n) => n.kind === "profile")
+    expect(record).toHaveLength(1)
+    // Keyed by the most recent change so a newer one re-surfaces.
+    expect(record[0].id).toBe("record-update-rc2")
+    // Nothing beyond the window.
+    expect(kinds({ ...base, recordUpdates: [{ id: "old", at: days(-30) }] })).not.toContain("profile")
   })
 
   it("nudges when profile updates await confirmation", () => {
@@ -126,7 +140,7 @@ describe("buildPatientNotifications", () => {
     const items = bpn({
       ...base,
       appointments: [{ id: "a1", starts_at: hours(2), status: "scheduled", staff_modified_at: hours(-1) }],
-      invoices: [{ id: "i1", status: "pending_payment", insurance_type: "pkv" }],
+      invoices: [{ id: "i1", status: "pending_payment", insurance_type: "pkv", created_at: days(-1) }],
     })
     expect(items[0].kind).toBe("alert")
   })

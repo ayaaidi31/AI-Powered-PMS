@@ -1,24 +1,24 @@
 /**
- * seed-data.ts — DB-shaped seed data (normalized relational, NOT FHIR)
+ * seed-data.ts — DB-shaped seed data (normalized relational, not FHIR)
  * ---------------------------------------------------------------------
  * This file is the "correct table" version of the demo data. Each export is
- * ONE table: a flat array of rows whose fields map 1:1 to the Postgres columns.
+ * one table: a flat array of rows whose fields map 1:1 to the Postgres columns.
  * Column types are noted in the comment above each table as a reference for the
  * CREATE TABLE statements.
  *
  * Design choices (kept deliberately lean for a thesis prototype):
- *  - No FHIR. Plain normalized tables. The `patients` table stays SHORT;
+ *  - No FHIR. Plain normalized tables. The `patients` table stays short;
  *    everything else (allergies, conditions, meds, vitals) lives in
  *    small child tables linked by patient_id.
- *  - VITALS are per-visit measurements (a time series), so they get their own
+ *  - Vitals are per-visit measurements (a time series), so they get their own
  *    table keyed by patient_id + appointment_id + recorded_at. "Current vitals"
  *    = the most recent row for that patient. Nothing is hard-coded on the patient.
  *  - IDs are shown as readable strings here; in Postgres make them
  *    `uuid DEFAULT gen_random_uuid()` and let the DB generate them.
  *  - Dates are ISO strings (DB-friendly). Use `date` or `timestamptz` columns.
- *  - Money is stored in CENTS (integer) to avoid float rounding — German
+ *  - Money is stored in cents (integer) to avoid float rounding — German
  *    invoicing requirement.
- *  - NOTE on German law: do NOT use ON DELETE CASCADE for patient clinical
+ *  - Note on German law: do not use ON DELETE CASCADE for patient clinical
  *    rows — §630f BGB requires ~10-year retention. Prefer a `deleted_at` soft
  *    delete. (Left out of these sample rows for brevity.)
  *
@@ -252,7 +252,7 @@ export interface PatientDocumentRow {
 }
 
 /**
- * vitals  ⭐ per-visit measurements (a time series, NOT static patient fields)
+ * vitals — per-visit measurements (a time series, not static patient fields)
  *  id            uuid PK
  *  patient_id    uuid FK -> patients(id)
  *  appointment_id uuid FK -> appointments(id)   -- the visit it was taken at
@@ -315,7 +315,7 @@ export interface AppointmentRow {
   ai_review_status?: string | null
   /** Self check-in code (Feature 3): short code issued at booking, entered at the clinic. */
   check_in_code?: string | null
-  /** Set when STAFF change the appointment, so the patient can be notified. */
+  /** Set when staff change the appointment, so the patient can be notified. */
   staff_modified_at?: string | null
 }
 export const appointments: AppointmentRow[] = [

@@ -8,8 +8,8 @@ const nextConfig = {
   },
   // Allow opening the dev server from another device on the same network (e.g. a
   // phone at http://10.93.84.157:3000). Without this, Server Actions fail the
-  // origin/CSRF check with "Invalid Server Actions request". Update the IP if
-  // your machine's LAN address changes (see `ipconfig`).
+  // origin/CSRF check with "Invalid Server Actions request". The IP must be
+  // updated when the host machine's LAN address changes (see `ipconfig`).
   allowedDevOrigins: ["10.93.84.157", "10.93.84.*"],
   experimental: {
     serverActions: {

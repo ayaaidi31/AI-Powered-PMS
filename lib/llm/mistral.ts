@@ -1,5 +1,5 @@
 /**
- * lib/llm/mistral.ts — isolated Mistral API client (TEMPORARY).
+ * lib/llm/mistral.ts — isolated Mistral API client (temporary).
  *
  * This is the single seam where the language model lives. It is intentionally
  * the only place that talks to an external LLM, so the RAG system being built

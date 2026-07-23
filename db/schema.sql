@@ -1,9 +1,9 @@
 -- ============================================================================
 -- schema.sql — PostgreSQL schema for the practice-management-app
 -- ----------------------------------------------------------------------------
--- Mirrors lib/seed-data.ts (normalized relational, NOT FHIR).
+-- Mirrors lib/seed-data.ts (normalized relational, not FHIR).
 --
--- SAFETY: This script only CREATEs the application tables below. It NEVER
+-- Safety: This script only CREATEs the application tables below. It never
 -- touches the LangChain RAG tables `langchain_pg_embedding` and
 -- `langchain_pg_collection`. All statements use IF NOT EXISTS and there are
 -- no DROP/ALTER/TRUNCATE here, so running it is non-destructive.
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS receptionists (
   department text
 );
 
--- patients: SHORT (identity + insurance only). Clinical data in child tables.
+-- patients: short (identity + insurance only). Clinical data in child tables.
 CREATE TABLE IF NOT EXISTS patients (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   first_name        text NOT NULL,
@@ -161,7 +161,7 @@ ALTER TABLE appointments ADD COLUMN IF NOT EXISTS ai_review_status text;
 -- the visit is past.
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS check_in_code text;
 
--- Set when STAFF change an appointment (reschedule / reassign / cancel), so the
+-- Set when staff change an appointment (reschedule / reassign / cancel), so the
 -- patient can be notified that the clinic modified their visit. NULL for
 -- patient-initiated changes (they already know).
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS staff_modified_at timestamptz;
@@ -241,15 +241,26 @@ CREATE TABLE IF NOT EXISTS profile_change_proposals (
   patient_id     uuid NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
   appointment_id uuid REFERENCES appointments(id) ON DELETE SET NULL,
   field          text NOT NULL,   -- phone|email|street|city|postal_code|country|allergy|condition
+  operation      text NOT NULL DEFAULT 'set'   -- set (master data) | add | remove (list items)
+                 CHECK (operation IN ('set','add','remove')),
   label          text NOT NULL,   -- human-readable summary of the change
   current_value  text,
   proposed_value text NOT NULL,
   reason         text,
+  -- pending_patient: awaiting the patient's decision (administrative data).
+  -- accepted/rejected: the patient's response. applied: a clinical change the
+  -- doctor applied directly (informational for the patient).
   status         text NOT NULL DEFAULT 'pending_patient'
-                 CHECK (status IN ('pending_patient','accepted','rejected')),
+                 CHECK (status IN ('pending_patient','accepted','rejected','applied')),
   created_at     timestamptz NOT NULL DEFAULT now(),
   resolved_at    timestamptz
 );
+
+-- Backfill for databases created before the operation/applied additions.
+ALTER TABLE profile_change_proposals ADD COLUMN IF NOT EXISTS operation text NOT NULL DEFAULT 'set';
+ALTER TABLE profile_change_proposals DROP CONSTRAINT IF EXISTS profile_change_proposals_status_check;
+ALTER TABLE profile_change_proposals ADD CONSTRAINT profile_change_proposals_status_check
+  CHECK (status IN ('pending_patient','accepted','rejected','applied'));
 
 -- patient_documents: files attached to a patient record (imaging such as X-ray
 -- or MRI, lab results, referrals, prescriptions …). A document may be uploaded

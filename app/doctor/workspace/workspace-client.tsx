@@ -178,7 +178,6 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
   const [proposalDialogOpen, setProposalDialogOpen] = useState(false)
   const [proposalPatientId, setProposalPatientId] = useState<string | null>(null)
   const [proposalApptId, setProposalApptId] = useState<string | null>(null)
-  const [scanningProfile, setScanningProfile] = useState(false)
   const [reportPreview, setReportPreview] = useState(false)
   const [detailCode, setDetailCode] = useState<SelectedCode | null>(null)
 
@@ -224,7 +223,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     })
   }
 
-  // Load the displayed appointment's consultation. Loads ONLY when the shown
+  // Load the displayed appointment's consultation. Loads only when the shown
   // appointment changes (patient switch / first mount) — a server refresh
   // (router.refresh) must not clobber the doctor's in-progress edits, e.g. a
   // freshly regenerated report.
@@ -439,9 +438,10 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
     // Feature 10: scan the confirmed consultation for profile data that should
     // be updated, and let the doctor confirm what to send to the patient.
+    const scanText = [notes, diagnosis.trim() ? `Diagnosis: ${diagnosis.trim()}` : ""].filter(Boolean).join("\n")
     const scan = await suggestProfileUpdates({
       reportText: formattedReport || undefined,
-      notes: notes || undefined,
+      notes: scanText || undefined,
       current: {
         phone: current.phone, email: current.email,
         street: current.street, city: current.city, postal_code: current.postalCode, country: current.country,
@@ -449,55 +449,51 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       },
     })
     setIsSaving(false)
+    toast.success(t("workspace.consultationCompleted"))
     if (scan.status === "ok" && scan.data.suggestions.length > 0) {
+      // Show the review dialog first. Advancing the queue (which drops this
+      // completed consultation) is deferred until the dialog closes, otherwise
+      // the refresh would tear the dialog down the moment it opens.
       setProfileSuggestions(scan.data.suggestions)
       setSelectedSuggestions(new Set(scan.data.suggestions.map((_, i) => i)))
       setProposalPatientId(current.patientId)
       setProposalApptId(finishedId)
       setProposalDialogOpen(true)
+    } else {
+      // Give explicit feedback so "no dialog" is never ambiguous: an error on a
+      // genuine failure, otherwise a note that the scan ran and found nothing.
+      if (scan.status !== "ok") toast.error(scan.message)
+      else toast.info(t("workspace.noProfileUpdates"))
+      setCurrentIndex(0)
+      router.refresh()
     }
-    toast.success(t("workspace.consultationCompleted"))
+  }
+
+  /** Close the review dialog and advance the workspace to the next consultation. */
+  function closeProposalDialog() {
+    setProposalDialogOpen(false)
     setCurrentIndex(0)
     router.refresh()
   }
 
-  /** Manually scan the current notes/report for profile updates (on demand). */
-  async function handleScanProfile() {
-    if (!current) return
-    setScanningProfile(true)
-    const scan = await suggestProfileUpdates({
-      reportText: formattedReport || undefined,
-      notes: notes || undefined,
-      current: {
-        phone: current.phone, email: current.email,
-        street: current.street, city: current.city, postal_code: current.postalCode, country: current.country,
-        allergies: current.allergies, conditions: current.conditions,
-      },
-    })
-    setScanningProfile(false)
-    if (scan.status !== "ok") { toast.error(scan.message); return }
-    if (scan.data.suggestions.length === 0) {
-      toast.info(t("workspace.noProfileUpdates"))
-      return
-    }
-    setProfileSuggestions(scan.data.suggestions)
-    setSelectedSuggestions(new Set(scan.data.suggestions.map((_, i) => i)))
-    setProposalPatientId(current.patientId)
-    setProposalApptId(current.appointmentId)
-    setProposalDialogOpen(true)
-  }
-
   async function confirmProfileProposals() {
-    if (!proposalPatientId) return
+    if (!proposalPatientId) { closeProposalDialog(); return }
     const chosen = profileSuggestions.filter((_, i) => selectedSuggestions.has(i))
-    if (chosen.length === 0) { setProposalDialogOpen(false); return }
+    if (chosen.length === 0) { closeProposalDialog(); return }
     const r = await createProfileProposals(proposalPatientId, proposalApptId, chosen)
     if (r.status === "ok") {
-      toast.success(t("workspace.changesSent", { count: r.data.count }))
+      const { applied, sentToPatient } = r.data
+      if (applied > 0 && sentToPatient > 0) {
+        toast.success(t("workspace.changesAppliedAndSent", { applied, sent: sentToPatient }))
+      } else if (applied > 0) {
+        toast.success(t("workspace.clinicalApplied", { count: applied }))
+      } else if (sentToPatient > 0) {
+        toast.success(t("workspace.changesSent", { count: sentToPatient }))
+      }
     } else {
       toast.error(r.message)
     }
-    setProposalDialogOpen(false)
+    closeProposalDialog()
   }
 
   /** Generate a structured report from the notes (Feature 9, AI). */
@@ -931,7 +927,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
 
             {/* Right - Consultation */}
             <div className="flex-1 min-w-0 flex flex-col min-h-0">
-              {/* Voice transcript ready for THIS consultation → insert into notes. */}
+              {/* Voice transcript for the current consultation; inserted into notes. */}
               {recording.result?.appointmentId === current.appointmentId && (
                 <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30 p-3">
                   <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -1343,16 +1339,10 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                     <Save className="w-4 h-4" />
                     {t("workspace.saveDraft")}
                   </Button>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Button variant="outline" className="w-full sm:w-auto gap-2" onClick={handleScanProfile} disabled={isSaving || scanningProfile}>
-                      <Sparkles className="w-4 h-4" />
-                      {scanningProfile ? t("workspace.scanning") : t("workspace.profileUpdates")}
-                    </Button>
-                    <Button className="w-full sm:w-auto gap-2" onClick={handleComplete} disabled={isSaving}>
-                      <CheckCircle2 className="w-4 h-4" />
-                      {isSaving ? t("workspace.saving") : t("workspace.completeConsultation")}
-                    </Button>
-                  </div>
+                  <Button className="w-full sm:w-auto gap-2" onClick={handleComplete} disabled={isSaving}>
+                    <CheckCircle2 className="w-4 h-4" />
+                    {isSaving ? t("workspace.saving") : t("workspace.completeConsultation")}
+                  </Button>
                 </div>
               </Card>
             </div>
@@ -1421,7 +1411,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       </div>
 
       {/* Feature 10 — doctor confirms which AI-detected profile changes to send. */}
-      <Dialog open={proposalDialogOpen} onOpenChange={setProposalDialogOpen}>
+      <Dialog open={proposalDialogOpen} onOpenChange={(o) => { if (!o) closeProposalDialog() }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1434,6 +1424,8 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
           <div className="space-y-2 max-h-[50vh] overflow-y-auto">
             {profileSuggestions.map((s, i) => {
               const on = selectedSuggestions.has(i)
+              const isClinical = s.field === "allergy" || s.field === "condition"
+              const isRemoval = s.operation === "remove"
               return (
                 <button
                   key={i}
@@ -1451,11 +1443,21 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
                   <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground"}`}>
                     {on && <Check className="w-3 h-3" />}
                   </span>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-[10px] font-medium uppercase tracking-wide rounded px-1.5 py-0.5 ${isClinical ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                        {isClinical ? t("workspace.appliesNow") : t("workspace.patientConfirms")}
+                      </span>
+                      {isRemoval && (
+                        <span className="text-[10px] font-medium uppercase tracking-wide rounded px-1.5 py-0.5 bg-destructive/10 text-destructive">
+                          {t("workspace.removeBadge")}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm font-medium">
-                      {s.label}: <span className="text-primary">{s.proposedValue}</span>
+                      {s.label}: <span className={isRemoval ? "line-through text-muted-foreground" : "text-primary"}>{s.proposedValue}</span>
                     </p>
-                    {s.currentValue && <p className="text-xs text-muted-foreground">{t("workspace.currentLabel", { value: s.currentValue })}</p>}
+                    {s.currentValue && !isRemoval && <p className="text-xs text-muted-foreground">{t("workspace.currentLabel", { value: s.currentValue })}</p>}
                     {s.reason && <p className="text-xs text-muted-foreground italic">{s.reason}</p>}
                   </div>
                 </button>
@@ -1463,9 +1465,9 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
             })}
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setProposalDialogOpen(false)}>{t("workspace.skip")}</Button>
+            <Button variant="outline" onClick={closeProposalDialog}>{t("workspace.skip")}</Button>
             <Button onClick={confirmProfileProposals} disabled={selectedSuggestions.size === 0}>
-              {t("workspace.sendToPatient")}{selectedSuggestions.size > 0 ? ` (${selectedSuggestions.size})` : ""}
+              {t("workspace.confirmChanges")}{selectedSuggestions.size > 0 ? ` (${selectedSuggestions.size})` : ""}
             </Button>
           </div>
         </DialogContent>

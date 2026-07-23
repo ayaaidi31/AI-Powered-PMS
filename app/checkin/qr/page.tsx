@@ -1,12 +1,13 @@
 /**
  * Printable clinic check-in QR poster (Feature 3).
  *
- * Renders a QR code that points at the public `/checkin` page. Print this
- * (Ctrl/Cmd+P) and place it at reception — patients scan it on arrival, then
- * confirm (if signed in) or enter the code from their booking email.
+ * Renders a QR code that points at the public `/checkin` page. Intended to be
+ * printed (Ctrl/Cmd+P) and displayed at reception; patients scan it on arrival,
+ * then confirm (if signed in) or enter the code from their booking email.
  *
- * The encoded URL comes from APP_URL, so set that to your deployed domain before
- * printing for real use (defaults to http://localhost:3000 for local testing).
+ * The encoded URL comes from APP_URL, which must point at the deployed domain
+ * before printing for real use (defaults to http://localhost:3000 for local
+ * testing).
  */
 import QRCode from "qrcode"
 import { appUrl } from "@/lib/email"

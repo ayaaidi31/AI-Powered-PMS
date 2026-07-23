@@ -82,6 +82,7 @@ export interface DoctorNotification {
   title: string
   description: string
   href: string
+  timestamp?: string
 }
 
 /** Live alerts for the signed-in doctor: waiting patients + reports to approve. */
@@ -109,6 +110,7 @@ export async function getDoctorNotifications(): Promise<DoctorNotification[]> {
         title: t("notify.patientWaiting", { name: a.patient_name }),
         description: t("notify.checkedInAppt", { time: fmtTime(a.starts_at) }),
         href: "/doctor/workspace",
+        timestamp: a.check_in_at ?? a.starts_at,
       })
     }
   }
@@ -123,6 +125,7 @@ export async function getDoctorNotifications(): Promise<DoctorNotification[]> {
         // Patient name and diagnosis are data, shown as-is (not translated).
         description: `${r.patient_name}${r.diagnosis ? ` · ${r.diagnosis}` : ""}`,
         href: "/doctor/reports",
+        timestamp: r.created_at,
       })
     }
   }

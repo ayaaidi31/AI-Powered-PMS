@@ -1,15 +1,15 @@
 "use server"
 
 /**
- * AI actions (TEMPORARY Mistral layer — Features 2 & 12).
+ * AI actions (temporary Mistral layer — Features 2 & 12).
  *
  * Two model-backed steps, both kept behind lib/llm/mistral.ts so the RAG system
  * can replace them later:
  *   - generateConsultationReport: rough notes → structured clinical report.
  *   - suggestBillingCodes: report → billing codes, using a retrieve-then-select
- *     (RAG-lite) approach. It FIRST retrieves candidate codes from the real
+ *     (RAG-lite) approach. It first retrieves candidate codes from the real
  *     catalog (the GP base GOPs + EBM codes matching the services extracted from
- *     the report, or the full GOÄ table), then asks the model to SELECT only from
+ *     the report, or the full GOÄ table), then asks the model to select only from
  *     that candidate list at temperature 0. So the model never invents codes and
  *     only picks relevant ones; selections are still re-checked against the
  *     candidate set, and the Doctor approves (REQ-BIL-04). This temporary layer
@@ -126,12 +126,12 @@ export async function suggestBillingCodes(
   const catalog: "EBM" | "GOAE" = insuranceType === "gkv" ? "EBM" : "GOAE"
 
   try {
-    // 1) Build a pool of CANDIDATE codes from the real catalog (retrieval).
+    // 1) Build a pool of candidate codes from the real catalog (retrieval).
     const candidates =
       catalog === "EBM" ? await buildEbmCandidates(reportText) : await loadGoaeCandidates()
     if (candidates.length === 0) return ok([])
 
-    // 2) Let the model SELECT only from those candidates. Temperature 0 makes
+    // 2) Let the model select only from those candidates. Temperature 0 makes
     //    the choice deterministic, and it cannot invent codes.
     const list = candidates.map((c) => `${c.code} — ${c.description}`).join("\n")
     const raw = await mistralChat(
@@ -168,7 +168,7 @@ export async function suggestBillingCodes(
 }
 
 /**
- * Extract the medications NEWLY PRESCRIBED OR CHANGED in this consultation
+ * Extract the medications newly prescribed or changed in this consultation
  * (name, dosage, frequency). The patient's existing medication is passed in so
  * the model can exclude it — only meds that are new, or whose dose changed, are
  * returned (not the ongoing Dauermedikation merely mentioned as history).
@@ -467,15 +467,18 @@ export async function summarizePatientHistory(input: {
 
 /**
  * Profile-update suggestions (Feature 10 / AI-Module-15). After a consultation,
- * scan the report/notes for patient-profile data that is NEW or CHANGED versus
+ * scan the report/notes for patient-profile data that is new or changed versus
  * what's on file (a newly discovered allergy, a moved address, a new phone …),
  * so the doctor can confirm them. Strictly grounded: only data explicitly stated
  * in the text, only whitelisted fields, never invented.
  */
 const PROFILE_FIELDS = ["phone", "email", "street", "city", "postal_code", "country", "allergy", "condition"] as const
 export type ProfileField = (typeof PROFILE_FIELDS)[number]
+export type ProfileOperation = "set" | "add" | "remove"
 export interface ProfileUpdateSuggestion {
   field: ProfileField
+  /** set = change master data; add/remove = list entry (allergy, condition). */
+  operation: ProfileOperation
   label: string
   currentValue: string | null
   proposedValue: string
@@ -507,12 +510,16 @@ export async function suggestProfileUpdates(input: {
         {
           role: "system",
           content:
-            "You check whether a consultation text implies that MASTER DATA in the patient record should be updated. " +
-            "Return ONLY changes that are EXPLICITLY stated in the text AND differ from the current value or are new. " +
-            "Allowed fields: phone, email, street, city, postal_code, country, allergy (new allergy), condition (new chronic diagnosis). " +
-            "For allergy/condition, ONLY entries not already in the list. Invent nothing; when in doubt, leave it out. " +
-            "Do not treat plain consultation findings (acute symptoms) as a condition. " +
-            'Respond ONLY as JSON: {"updates":[{"field":"...","proposedValue":"...","reason":"short, from where in the text"}]}. ' +
+            "You check whether a consultation text implies that MASTER DATA in the patient record should be changed. " +
+            "Return ONLY changes EXPLICITLY stated in the text. Each change carries an 'operation': " +
+            "'set' to change administrative data (phone, email, street, city, postal_code, country) to a new value that differs from the current one; " +
+            "'add' when the text states a NEW allergy or chronic condition that is not already on file; " +
+            "'remove' when the text explicitly states that an existing allergy or condition no longer applies (e.g. tolerance confirmed, diagnosis ruled out or resolved) AND it is currently on file. " +
+            "Use EXACTLY these singular field keys: phone, email, street, city, postal_code, country, allergy, condition. " +
+            "Never use 'allergies', 'conditions', or a combined 'address' — for an address change, output separate street, city and postal_code entries. " +
+            "For a 'remove', proposedValue must be the exact entry as it appears in the current list. " +
+            "Do not treat acute symptoms as a condition. Invent nothing; when in doubt, leave it out. " +
+            'Respond ONLY as JSON: {"updates":[{"field":"...","operation":"set|add|remove","proposedValue":"...","reason":"short, from where in the text"}]}. ' +
             "Empty list when nothing is unambiguous. " +
             languageDirective(),
         },
@@ -520,7 +527,9 @@ export async function suggestProfileUpdates(input: {
       ],
       { json: true, temperature: 0 },
     )
-    const parsed = JSON.parse(raw) as { updates?: { field?: string; proposedValue?: string; reason?: string }[] }
+    const parsed = JSON.parse(raw) as {
+      updates?: { field?: string; operation?: string; proposedValue?: string; reason?: string }[]
+    }
 
     const currentMap: Record<string, string | null | undefined> = {
       phone: c.phone, email: c.email, street: c.street, city: c.city, postal_code: c.postal_code, country: c.country,
@@ -529,26 +538,58 @@ export async function suggestProfileUpdates(input: {
     const conditionsL = (c.conditions ?? []).map((x) => x.toLowerCase().trim())
     const labels: Record<ProfileField, string> = {
       phone: "Phone", email: "Email", street: "Street", city: "City",
-      postal_code: "Postal code", country: "Country", allergy: "New allergy", condition: "New condition",
+      postal_code: "Postal code", country: "Country", allergy: "Allergy", condition: "Condition",
+    }
+
+    // The model occasionally returns a plural or synonym field name; map the
+    // common variants onto the canonical keys before the whitelist check.
+    const FIELD_ALIASES: Record<string, ProfileField> = {
+      allergies: "allergy", allergy: "allergy",
+      conditions: "condition", condition: "condition", diagnosis: "condition",
+      telephone: "phone", phone_number: "phone", mobile: "phone", phone: "phone",
+      "e-mail": "email", email: "email",
+      street: "street", address_line: "street",
+      city: "city", town: "city",
+      postal_code: "postal_code", postalcode: "postal_code", zip: "postal_code", plz: "postal_code", postcode: "postal_code",
+      country: "country",
     }
 
     const out: ProfileUpdateSuggestion[] = []
     const seen = new Set<string>()
     for (const u of parsed.updates ?? []) {
-      const field = (u.field ?? "").trim() as ProfileField
+      const rawField = (u.field ?? "").trim().toLowerCase()
+      const field = (FIELD_ALIASES[rawField] ?? rawField) as ProfileField
       const value = (u.proposedValue ?? "").trim()
       if (!PROFILE_FIELDS.includes(field) || !value) continue
-      // Skip values that already match what's on file.
-      if (field === "allergy" && allergiesL.includes(value.toLowerCase())) continue
-      if (field === "condition" && conditionsL.includes(value.toLowerCase())) continue
-      if (field in currentMap && (currentMap[field] ?? "").toLowerCase() === value.toLowerCase()) continue
-      const key = `${field}|${value.toLowerCase()}`
+      const isClinical = field === "allergy" || field === "condition"
+      // Administrative fields only ever change ('set'); clinical list entries are
+      // added or removed. Coerce the model's operation into what the field allows.
+      const rawOp = (u.operation ?? "").trim().toLowerCase()
+      const operation: ProfileOperation = !isClinical
+        ? "set"
+        : rawOp === "remove" ? "remove" : "add"
+      const list = field === "allergy" ? allergiesL : conditionsL
+
+      if (operation === "set") {
+        // Skip a value that already matches what's on file.
+        if ((currentMap[field] ?? "").toLowerCase() === value.toLowerCase()) continue
+      } else if (operation === "add") {
+        // Skip a list entry that already exists.
+        if (list.includes(value.toLowerCase())) continue
+      } else {
+        // remove: only propose removing an entry that is actually on file.
+        if (!list.includes(value.toLowerCase())) continue
+      }
+
+      const key = `${field}|${operation}|${value.toLowerCase()}`
       if (seen.has(key)) continue
       seen.add(key)
       out.push({
         field,
+        operation,
         label: labels[field],
-        currentValue: field in currentMap ? (currentMap[field] ?? null) : null,
+        // For a removal the current value is the entry being removed.
+        currentValue: operation === "remove" ? value : field in currentMap ? (currentMap[field] ?? null) : null,
         proposedValue: value,
         reason: (u.reason ?? "").trim(),
       })
@@ -562,8 +603,8 @@ export async function suggestProfileUpdates(input: {
 /**
  * Clinical decision support (Feature 13, REQ-AI-03): a guideline-grounded RAG
  * assistant for the doctor. Retrieves relevant chunks from the BGE pgvector
- * collection (read-only) and asks Mistral to answer using ONLY those excerpts,
- * with [n] citations. It is decision SUPPORT, not a decision: it never issues a
+ * collection (read-only) and asks Mistral to answer using only those excerpts,
+ * with [n] citations. It is decision support, not a decision: it never issues a
  * definitive diagnosis/therapy and defers to the doctor's judgement. Kept behind
  * lib/rag/retrieve.ts so the real RAG retrieval/embedder drops in unchanged.
  */
@@ -672,7 +713,7 @@ export async function askDecisionSupport(input: {
  * can heed or dismiss. Two layers, conservative by design:
  *   1. A deterministic allergy name-match — always caught, never hallucinated.
  *   2. A Mistral pass for class-level allergies, contraindications, interactions
- *      and duplicate therapy, instructed to flag ONLY clear, well-established
+ *      and duplicate therapy, instructed to flag only clear, well-established
  *      issues supported by the data (empty list when unsure).
  */
 export async function checkPrescriptionSafety(input: {
@@ -746,7 +787,7 @@ export async function checkPrescriptionSafety(input: {
 
 /**
  * Doctor on-demand Q&A over the patient's own records (Feature 17). A
- * conversational RAG, STRICTLY sandboxed to the active patient (REQ-DQ-02): it
+ * conversational RAG, strictly sandboxed to the active patient (REQ-DQ-02): it
  * answers only from that patient's past consultation reports, cites the source
  * report for every assertion (REQ-DQ-04), keeps session context (REQ-DQ-01), and
  * says so when the answer isn't in the records (REQ-DQ-05). Low temperature to
@@ -827,7 +868,7 @@ export async function askPatientRecordsQA(input: {
 
 /**
  * Clinic FAQ assistant (Feature 16, REQ-FAQ-01): answers patient questions about
- * the practice grounded STRICTLY in CLINIC_FAQ. Never gives medical advice and
+ * the practice grounded strictly in CLINIC_FAQ. Never gives medical advice and
  * defers to reception for anything outside the facts. Conversational — recent
  * turns are passed back as context.
  */

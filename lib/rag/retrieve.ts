@@ -2,18 +2,18 @@ import "server-only"
 
 /**
  * RAG retrieval over the existing pgvector store (Feature 13 — clinical decision
- * support). READ-ONLY: this module only SELECTs from the langchain_pg_* tables
+ * support). Read-only: this module only SELECTs from the langchain_pg_* tables
  * created by the embedding pipeline; it never writes or alters them.
  *
- * The chunks were embedded with **BGE** (1024-dim). To run a true vector search
- * the query must be embedded with the SAME model, so the embedder is pluggable:
+ * The chunks were embedded with BGE (1024-dim). To run a true vector search
+ * the query must be embedded with the same model, so the embedder is pluggable:
  *
  *   - If BGE_EMBED_URL is set, the query is POSTed there to get a BGE vector and do
  *     cosine similarity search (`embedding <=> $vec`). This is where the real RAG
  *     embedding service plugs in later.
  *   - Otherwise it falls back to German full-text search over the chunk text, so
  *     the end-to-end decision-support flow is testable before the embedder is
- *     wired. Mistral's own embeddings are NOT usable here (different vector space).
+ *     wired. Mistral's own embeddings are not usable here (different vector space).
  *
  * Collection is configurable via RAG_COLLECTION (default: awmf_baseline_bge).
  */

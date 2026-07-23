@@ -2,8 +2,8 @@
 
 /**
  * Patient-facing AI voice booking assistant (Feature 11). The patient is already
- * signed in, so the agent never asks who they are — it just helps them book,
- * reschedule, or cancel by talking.
+ * signed in, so the agent never asks who they are and only handles booking,
+ * rescheduling, or cancellation by voice.
  *
  * Loop: greet → listen (Web Speech STT) → think (LLM) → speak (TTS) → on a
  * confirmed request, commit to the database → speak the outcome. A text box is

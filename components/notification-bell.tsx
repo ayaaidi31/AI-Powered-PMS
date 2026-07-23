@@ -13,7 +13,8 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { getSeenNotificationIds, markNotificationsSeen } from "@/lib/actions/notifications-seen"
-import { useT } from "@/lib/i18n/locale-context"
+import { useT, useLocale } from "@/lib/i18n/locale-context"
+import { INTL_LOCALE } from "@/lib/i18n/config"
 
 // How often the bell quietly re-checks for new notifications (ms).
 const REFRESH_MS = 60_000
@@ -25,6 +26,8 @@ export interface NotificationItem {
   title: string
   description: string
   href: string
+  /** ISO timestamp of the underlying event (check-in, report, invoice…). */
+  timestamp?: string
 }
 
 const KIND_ICON: Record<string, { Icon: LucideIcon; tone: string }> = {
@@ -40,6 +43,7 @@ const KIND_ICON: Record<string, { Icon: LucideIcon; tone: string }> = {
 export function NotificationBell({ loader }: { loader: () => Promise<NotificationItem[]> }) {
   const router = useRouter()
   const t = useT()
+  const locale = useLocale()
   const [items, setItems] = useState<NotificationItem[]>([])
   const [seen, setSeen] = useState<Set<string>>(new Set())
   // The unread count needs both the items and the "seen" set. Until the seen set
@@ -72,6 +76,25 @@ export function NotificationBell({ loader }: { loader: () => Promise<Notificatio
 
   const unread = seenLoaded ? items.filter((n) => !seen.has(n.id)).length : 0
 
+  // Newest-first for display; items without a timestamp sink to the bottom.
+  const ordered = [...items].sort((a, b) => {
+    const ta = a.timestamp ? new Date(a.timestamp).getTime() : -Infinity
+    const tb = b.timestamp ? new Date(b.timestamp).getTime() : -Infinity
+    return tb - ta
+  })
+
+  // Localized relative time ("vor 2 Std." / "2 h ago"); "just now" under a minute.
+  const relTime = (iso: string): string => {
+    const rtf = new Intl.RelativeTimeFormat(INTL_LOCALE[locale], { numeric: "auto" })
+    const diffMs = new Date(iso).getTime() - Date.now()
+    const min = Math.round(diffMs / 60_000)
+    if (Math.abs(min) < 1) return t("notify.justNow")
+    if (Math.abs(min) < 60) return rtf.format(min, "minute")
+    const hr = Math.round(diffMs / 3_600_000)
+    if (Math.abs(hr) < 24) return rtf.format(hr, "hour")
+    return rtf.format(Math.round(diffMs / 86_400_000), "day")
+  }
+
   return (
     <DropdownMenu
       onOpenChange={(open) => {
@@ -101,7 +124,7 @@ export function NotificationBell({ loader }: { loader: () => Promise<Notificatio
           </div>
         ) : (
           <div className="max-h-80 overflow-y-auto py-1">
-            {items.map((n) => {
+            {ordered.map((n) => {
               const { Icon, tone } = KIND_ICON[n.kind] ?? { Icon: Bell, tone: "bg-muted text-muted-foreground" }
               return (
                 <button
@@ -115,6 +138,9 @@ export function NotificationBell({ loader }: { loader: () => Promise<Notificatio
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm font-medium text-foreground truncate">{n.title}</span>
                     <span className="block text-xs text-muted-foreground truncate">{n.description}</span>
+                    {n.timestamp && (
+                      <span className="block text-[11px] text-muted-foreground/70 mt-0.5">{relTime(n.timestamp)}</span>
+                    )}
                   </span>
                 </button>
               )

@@ -47,7 +47,7 @@ export interface VoiceAction {
   /** Type of doctor implied by the patient's concern, when they gave no name. */
   specialty?: string
   datetime?: string // new/booking time, local YYYY-MM-DDTHH:mm
-  /** For reschedule/cancel: the start of the EXISTING appointment to act on. */
+  /** For reschedule/cancel: the start of the existing appointment to act on. */
   target_datetime?: string
   reason?: string
 }

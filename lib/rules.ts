@@ -20,7 +20,7 @@ export const isReportEditable = (status: ReportStatus): boolean => status !== "a
 export const reportRemovalMode = (status: ReportStatus): "hard" | "retract" =>
   status === "approved" ? "retract" : "hard"
 
-/** Whether a MISTAKEN appointment may be hard-deleted (otherwise it's cancelled). */
+/** Whether a mistaken appointment may be hard-deleted (otherwise it's cancelled). */
 export function appointmentDeletable(input: {
   status: string
   hasReport: boolean
@@ -198,8 +198,8 @@ export function cancellationCheck(
 
 /**
  * Reschedule eligibility. A reschedule is a cancel + re-book of the same visit,
- * so the self-service path enforces the SAME 24-hour window as cancellation
- * (REQ-MOD-05) — judged against how soon the CURRENT appointment is. This stops
+ * so the self-service path enforces the same 24-hour window as cancellation
+ * (REQ-MOD-05) — judged against how soon the current appointment is. This stops
  * a within-24h appointment being moved out and then cancelled to dodge the
  * cut-off. Staff-initiated changes pass `enforce24hWindow = false` to override.
  */

@@ -19,11 +19,12 @@ export interface ProfileProposalRow {
   patient_id: string
   appointment_id: string | null
   field: string
+  operation: "set" | "add" | "remove"
   label: string
   current_value: string | null
   proposed_value: string
   reason: string | null
-  status: "pending_patient" | "accepted" | "rejected"
+  status: "pending_patient" | "accepted" | "rejected" | "applied"
   created_at: string
   resolved_at: string | null
 }
@@ -32,32 +33,69 @@ export interface ProfileProposalRow {
 // an un-checked field name into SQL). `allergy`/`condition` are handled separately.
 const PATIENT_COLUMNS = new Set(["phone", "email", "street", "city", "postal_code", "country"])
 
-/** Doctor confirms AI suggestions → store them as pending for the patient. */
+/**
+ * Doctor confirms the AI-detected changes at the end of a consultation. The two
+ * kinds of data are routed differently:
+ *  - Administrative data (contact, address) is owned by the patient, so it is
+ *    stored as a pending proposal the patient must accept.
+ *  - Clinical data (allergies, conditions) is the doctor's medical record, so it
+ *    is applied immediately (add or remove) and recorded as 'applied' for the
+ *    patient's information. Removed entries stay auditable in this table.
+ */
 export async function createProfileProposals(
   patientId: string,
   appointmentId: string | null,
   items: ProfileUpdateSuggestion[],
-): Promise<ActionResult<{ count: number }>> {
+): Promise<ActionResult<{ applied: number; sentToPatient: number }>> {
   const g = await requireDoctor()
   if (!g.ok) return g.error
   if (!patientId) return fail("Missing patient.")
   const valid = items.filter(
     (i) => i.proposedValue?.trim() && (PATIENT_COLUMNS.has(i.field) || i.field === "allergy" || i.field === "condition"),
   )
-  if (valid.length === 0) return ok({ count: 0 })
+  if (valid.length === 0) return ok({ applied: 0, sentToPatient: 0 })
+
+  let applied = 0
+  let sentToPatient = 0
   await withTransaction(async (client) => {
     for (const i of valid) {
+      const value = i.proposedValue.trim()
+      const isClinical = i.field === "allergy" || i.field === "condition"
+
+      if (!isClinical) {
+        // Administrative change — patient decides.
+        await client.query(
+          `INSERT INTO profile_change_proposals
+             (patient_id, appointment_id, field, operation, label, current_value, proposed_value, reason, status)
+           VALUES ($1, $2, $3, 'set', $4, $5, $6, $7, 'pending_patient')`,
+          [patientId, appointmentId, i.field, i.label, i.currentValue ?? null, value, i.reason || null],
+        )
+        sentToPatient++
+        continue
+      }
+
+      // Clinical change — the doctor is the authority; apply it now.
+      const operation = i.operation === "remove" ? "remove" : "add"
+      const table = i.field === "allergy" ? "patient_allergies" : "patient_conditions"
+      const column = i.field === "allergy" ? "substance" : "label"
+      if (operation === "add") {
+        await client.query(`INSERT INTO ${table} (patient_id, ${column}) VALUES ($1, $2)`, [patientId, value])
+      } else {
+        // Hard-delete from the active list; the audit stays in the row below.
+        await client.query(`DELETE FROM ${table} WHERE patient_id = $1 AND lower(${column}) = lower($2)`, [patientId, value])
+      }
       await client.query(
         `INSERT INTO profile_change_proposals
-           (patient_id, appointment_id, field, label, current_value, proposed_value, reason)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [patientId, appointmentId, i.field, i.label, i.currentValue ?? null, i.proposedValue.trim(), i.reason || null],
+           (patient_id, appointment_id, field, operation, label, current_value, proposed_value, reason, status, resolved_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'applied', now())`,
+        [patientId, appointmentId, i.field, operation, i.label, i.currentValue ?? null, value, i.reason || null],
       )
+      applied++
     }
   })
   revalidatePath("/patient/profile")
   revalidatePath("/patient/dashboard")
-  return ok({ count: valid.length })
+  return ok({ applied, sentToPatient })
 }
 
 /** Pending proposals shown to the patient on their profile. */
@@ -70,6 +108,25 @@ export async function getPendingProfileProposals(patientId: string): Promise<Pro
     `SELECT * FROM profile_change_proposals
       WHERE patient_id = $1 AND status = 'pending_patient'
       ORDER BY created_at DESC`,
+    [patientId],
+  )
+  return res.rows
+}
+
+/**
+ * Clinical record changes the doctor applied directly (status 'applied'), for
+ * the patient's information. Windowed to the recent past so the notification
+ * doesn't surface indefinitely.
+ */
+export async function getAppliedRecordChanges(patientId: string): Promise<ProfileProposalRow[]> {
+  const g = await requireSessionScoped()
+  if (!g.ok) return []
+  if (!g.value.isStaff && patientId !== g.value.patientId) return []
+  const res = await query<ProfileProposalRow>(
+    `SELECT * FROM profile_change_proposals
+      WHERE patient_id = $1 AND status = 'applied'
+        AND resolved_at >= now() - interval '14 days'
+      ORDER BY resolved_at DESC`,
     [patientId],
   )
   return res.rows
