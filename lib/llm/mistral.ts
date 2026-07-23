@@ -50,7 +50,7 @@ export async function mistralChat(messages: ChatMessage[], opts: ChatOptions = {
     ...(opts.json ? { response_format: { type: "json_object" } } : {}),
   })
 
-  const maxAttempts = 3
+  const maxAttempts = 5
   let lastError: unknown
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -61,12 +61,23 @@ export async function mistralChat(messages: ChatMessage[], opts: ChatOptions = {
       })
 
       // Retry the request-level transient statuses; surface the rest immediately.
+      // Rate limits (429) and hosted-model capacity exhaustion are common on the
+      // shared tier, so back off longer for those, honouring Retry-After when set.
       if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts) {
-        await sleep(400 * attempt)
+        const retryAfter = Number(res.headers.get("retry-after"))
+        const backoff = Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : (res.status === 429 ? 1500 : 500) * attempt
+        await sleep(backoff)
         continue
       }
       if (!res.ok) {
         const detail = await res.text().catch(() => "")
+        // The capacity error is provider-side and transient; give a message the
+        // caller can show without exposing the raw JSON payload.
+        if (res.status === 429) {
+          throw new Error("The AI service is temporarily at capacity. Please try again in a moment.")
+        }
         throw new Error(`Mistral API error ${res.status}: ${detail.slice(0, 300)}`)
       }
 
@@ -76,7 +87,7 @@ export async function mistralChat(messages: ChatMessage[], opts: ChatOptions = {
       // Network-level failure — retry, or rethrow on the final attempt.
       lastError = err
       if (attempt >= maxAttempts) break
-      await sleep(400 * attempt)
+      await sleep(500 * attempt)
     }
   }
   throw lastError instanceof Error ? lastError : new Error("Mistral API request failed")

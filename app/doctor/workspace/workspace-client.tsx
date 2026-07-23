@@ -410,6 +410,10 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       toast.error(t("workspace.diagnosisRequired"))
       return
     }
+    if (billingCodes.length === 0) {
+      toast.error(t("workspace.billingCodeRequired"))
+      return
+    }
     setIsSaving(true)
     const rid = await ensureReport("pending_approval")
     if (!rid) { setIsSaving(false); return }
@@ -449,6 +453,13 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       },
     })
     setIsSaving(false)
+    // Temporary diagnostic: shows exactly what the profile scan returned.
+    if (process.env.NODE_ENV !== "production") {
+      const dbg = scan.status === "ok"
+        ? `scan ok — ${scan.data.suggestions.length} update(s): ${scan.data.suggestions.map((s) => `${s.field}/${s.operation}`).join(", ") || "none"}`
+        : `scan error — ${scan.message}`
+      toast(dbg, { duration: 10000 })
+    }
     toast.success(t("workspace.consultationCompleted"))
     if (scan.status === "ok" && scan.data.suggestions.length > 0) {
       // Show the review dialog first. Advancing the queue (which drops this
@@ -698,6 +709,74 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
     return age
   }
 
+  // The profile-review dialog is rendered independently of `current`: completing
+  // a consultation revalidates the workspace, so the finished appointment drops
+  // out of the queue and `current` may become undefined. Rendering the dialog in
+  // both the empty state and the main view keeps it open while the doctor reviews.
+  const profileDialog = (
+    <Dialog open={proposalDialogOpen} onOpenChange={(o) => { if (!o) closeProposalDialog() }}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary" /> {t("workspace.suggestedProfileUpdates")}
+          </DialogTitle>
+          <DialogDescription>
+            {t("workspace.profileUpdatesDesc")}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+          {profileSuggestions.map((s, i) => {
+            const on = selectedSuggestions.has(i)
+            const isClinical = s.field === "allergy" || s.field === "condition"
+            const isRemoval = s.operation === "remove"
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() =>
+                  setSelectedSuggestions((prev) => {
+                    const n = new Set(prev)
+                    if (n.has(i)) n.delete(i)
+                    else n.add(i)
+                    return n
+                  })
+                }
+                className={`w-full text-left flex items-start gap-3 rounded-lg border p-3 transition-colors ${on ? "border-primary bg-primary/5" : "border-border hover:bg-accent/40"}`}
+              >
+                <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground"}`}>
+                  {on && <Check className="w-3 h-3" />}
+                </span>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[10px] font-medium uppercase tracking-wide rounded px-1.5 py-0.5 ${isClinical ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                      {isClinical ? t("workspace.appliesNow") : t("workspace.patientConfirms")}
+                    </span>
+                    {isRemoval && (
+                      <span className="text-[10px] font-medium uppercase tracking-wide rounded px-1.5 py-0.5 bg-destructive/10 text-destructive">
+                        {t("workspace.removeBadge")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm font-medium">
+                    {s.label}: <span className={isRemoval ? "line-through text-muted-foreground" : "text-primary"}>{s.proposedValue}</span>
+                  </p>
+                  {s.currentValue && !isRemoval && <p className="text-xs text-muted-foreground">{t("workspace.currentLabel", { value: s.currentValue })}</p>}
+                  {s.reason && <p className="text-xs text-muted-foreground italic">{s.reason}</p>}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={closeProposalDialog}>{t("workspace.skip")}</Button>
+          <Button onClick={confirmProfileProposals} disabled={selectedSuggestions.size === 0}>
+            {t("workspace.confirmChanges")}{selectedSuggestions.size > 0 ? ` (${selectedSuggestions.size})` : ""}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+
   if (!current) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
@@ -713,6 +792,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
             <Button className="gap-2">{t("workspace.viewDashboard")} <ArrowRight className="w-4 h-4" /></Button>
           </Link>
         </div>
+        {profileDialog}
       </div>
     )
   }
@@ -1411,67 +1491,7 @@ export function WorkspaceClient({ doctorId, queue }: { doctorId: string; queue: 
       </div>
 
       {/* Feature 10 — doctor confirms which AI-detected profile changes to send. */}
-      <Dialog open={proposalDialogOpen} onOpenChange={(o) => { if (!o) closeProposalDialog() }}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" /> {t("workspace.suggestedProfileUpdates")}
-            </DialogTitle>
-            <DialogDescription>
-              {t("workspace.profileUpdatesDesc")}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-            {profileSuggestions.map((s, i) => {
-              const on = selectedSuggestions.has(i)
-              const isClinical = s.field === "allergy" || s.field === "condition"
-              const isRemoval = s.operation === "remove"
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() =>
-                    setSelectedSuggestions((prev) => {
-                      const n = new Set(prev)
-                      if (n.has(i)) n.delete(i)
-                      else n.add(i)
-                      return n
-                    })
-                  }
-                  className={`w-full text-left flex items-start gap-3 rounded-lg border p-3 transition-colors ${on ? "border-primary bg-primary/5" : "border-border hover:bg-accent/40"}`}
-                >
-                  <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 ${on ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground"}`}>
-                    {on && <Check className="w-3 h-3" />}
-                  </span>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-[10px] font-medium uppercase tracking-wide rounded px-1.5 py-0.5 ${isClinical ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-                        {isClinical ? t("workspace.appliesNow") : t("workspace.patientConfirms")}
-                      </span>
-                      {isRemoval && (
-                        <span className="text-[10px] font-medium uppercase tracking-wide rounded px-1.5 py-0.5 bg-destructive/10 text-destructive">
-                          {t("workspace.removeBadge")}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm font-medium">
-                      {s.label}: <span className={isRemoval ? "line-through text-muted-foreground" : "text-primary"}>{s.proposedValue}</span>
-                    </p>
-                    {s.currentValue && !isRemoval && <p className="text-xs text-muted-foreground">{t("workspace.currentLabel", { value: s.currentValue })}</p>}
-                    {s.reason && <p className="text-xs text-muted-foreground italic">{s.reason}</p>}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={closeProposalDialog}>{t("workspace.skip")}</Button>
-            <Button onClick={confirmProfileProposals} disabled={selectedSuggestions.size === 0}>
-              {t("workspace.confirmChanges")}{selectedSuggestions.size > 0 ? ` (${selectedSuggestions.size})` : ""}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {profileDialog}
     </div>
   )
 }

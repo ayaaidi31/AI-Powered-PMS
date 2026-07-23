@@ -38,7 +38,9 @@ import type { DoctorRow, PatientRow } from "@/lib/seed-data"
 import { patientName, doctorName, statusColor, bookingSource } from "@/lib/display"
 import type { AppointmentWithNames } from "@/lib/queries"
 import { bookAppointment, checkInAppointment, cancelAppointment, rescheduleAppointment, revertCheckIn, reassignAppointment, deleteAppointment } from "@/lib/actions/appointments"
+import { clinicDateTimeToUtcIso } from "@/lib/timezone"
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog"
+import { PatientCombobox } from "@/components/patient-combobox"
 import { useT, useLocale } from "@/lib/i18n/locale-context"
 import { INTL_LOCALE } from "@/lib/i18n/config"
 import type { TKey } from "@/lib/i18n/translate"
@@ -127,8 +129,9 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
       toast.error(t("receptionMgmt.bookValidation"))
       return
     }
-    // Combine the date and time into an absolute instant for the server.
-    const startsAt = new Date(`${form.date}T${form.time}:00`).toISOString()
+    // Combine the date and time into an absolute instant for the server, anchored
+    // to the clinic's timezone (not the booking device's).
+    const startsAt = clinicDateTimeToUtcIso(form.date, form.time)
     startTransition(async () => {
       const result = await bookAppointment({
         patient_id: form.patientId, doctor_id: form.doctorId,
@@ -216,7 +219,7 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
   function confirmReschedule() {
     if (!rescheduleTarget) return
     if (!rescheduleForm.date || !rescheduleForm.time) { toast.error(t("receptionMgmt.pickDateTime")); return }
-    const startsAt = new Date(`${rescheduleForm.date}T${rescheduleForm.time}:00`).toISOString()
+    const startsAt = clinicDateTimeToUtcIso(rescheduleForm.date, rescheduleForm.time)
     startTransition(async () => {
       const result = await rescheduleAppointment(rescheduleTarget.id, startsAt, { reasonForChange: "Rescheduled by reception" })
       if (result.status === "ok") {
@@ -308,14 +311,11 @@ export function ScheduleClient({ appointments, doctors, patients }: Props) {
             <div className="space-y-4 pt-4">
               <div className="space-y-2">
                 <Label>{t("receptionMgmt.labelPatient")}</Label>
-                <Select value={form.patientId} onValueChange={(v) => setForm({ ...form, patientId: v })}>
-                  <SelectTrigger><SelectValue placeholder={t("receptionMgmt.selectPatient")} /></SelectTrigger>
-                  <SelectContent>
-                    {patients.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{patientName(p)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <PatientCombobox
+                  patients={patients}
+                  value={form.patientId}
+                  onChange={(id) => setForm({ ...form, patientId: id })}
+                />
               </div>
               <div className="space-y-2">
                 <Label>{t("receptionMgmt.labelDoctor")}</Label>

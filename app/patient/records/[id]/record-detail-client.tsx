@@ -54,7 +54,7 @@ export function RecordDetailClient({ report }: { report: ReportDetail | null }) 
     if (!report) return
     const text = report.formatted_report || report.raw_notes || report.diagnosis || ""
     startSimplify(async () => {
-      const result = await simplifyReport(text)
+      const result = await simplifyReport(text, locale)
       if (result.status === "ok") {
         setSimplified(result.data.summary)
       } else {

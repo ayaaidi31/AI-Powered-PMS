@@ -26,6 +26,7 @@ import { toast } from "sonner"
 import type { DoctorRow } from "@/lib/seed-data"
 import { doctorName } from "@/lib/display"
 import { bookAppointment, rescheduleAppointment, getDoctorDayAvailability, type DaySlot } from "@/lib/actions/appointments"
+import { clinicWallTimeToUtcIso } from "@/lib/timezone"
 import { useT, useLocale } from "@/lib/i18n/locale-context"
 import { INTL_LOCALE } from "@/lib/i18n/config"
 import type { TKey } from "@/lib/i18n/translate"
@@ -131,11 +132,13 @@ export function NewAppointmentClient({
       toast.error(t("patient.fillRequired"))
       return
     }
-    // Build the absolute start instant from the chosen date and time.
+    // Build the absolute start instant from the chosen date and time, anchored to
+    // the clinic's timezone so the slot is the same wall-clock time regardless of
+    // the booking device's own zone.
     const [hh, mm] = selectedTime.split(":").map(Number)
-    const startsAt = new Date(
+    const startsAt = clinicWallTimeToUtcIso(
       selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), hh, mm,
-    ).toISOString()
+    )
 
     setIsSubmitting(true)
     const result = reschedule

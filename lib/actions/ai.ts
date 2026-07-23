@@ -292,11 +292,15 @@ export async function simplifyReport(reportText: string, lang?: UiAiLang): Promi
         {
           role: "system",
           content:
+            (lang ? `Write your entire response in ${lang === "de" ? "German" : "English"}, including every heading. ` : "") +
             "Explain the following medical report in simple, easy-to-understand language for a patient with no medical " +
             "background. Avoid technical terms, or explain them briefly in brackets. " +
-            "Keep the tone calm and matter-of-fact. Structure it briefly: what was found, what it means, and what happens next. " +
+            "Keep the tone calm and matter-of-fact. Structure it briefly under short headings — what was found, what " +
+            "it means, and what happens next — with the headings written in the response language. " +
+            "Do not format the response as a letter: no salutation, no closing, no sign-off or signature, and never " +
+            "output placeholder text in square brackets (such as [Ihr Arzt] or [Your doctor]). " +
             "Do not invent anything: explain only what is in the report; give no new diagnoses or treatment " +
-            "recommendations. Address the person directly (\"you\"). " +
+            "recommendations. Address the person directly. " +
             directiveFor(lang),
         },
         { role: "user", content: reportText.slice(0, 6000) },
@@ -594,6 +598,11 @@ export async function suggestProfileUpdates(input: {
         reason: (u.reason ?? "").trim(),
       })
     }
+    // Temporary diagnostic: model output vs. what survived parsing/filtering.
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[suggestProfileUpdates] model raw:", raw)
+      console.log("[suggestProfileUpdates] kept:", JSON.stringify(out))
+    }
     return ok({ suggestions: out })
   } catch (e) {
     return fail(e instanceof Error ? e.message : "Profile-update scan failed.")
@@ -661,17 +670,21 @@ export async function askDecisionSupport(input: {
         {
           role: "system",
           content:
-            "You are a clinical decision-support system for general practitioners. " +
-            "Answer the question EXCLUSIVELY on the basis of the provided guideline excerpts (CONTEXT). " +
-            "Cite the excerpts you use in the text with [1], [2] etc. (matching the numbering in the CONTEXT). " +
-            "If the CONTEXT contains no excerpts, do NOT use any source markers [n]. " +
-            "Take the PATIENT CONTEXT into account (age, allergies, pre-existing conditions, long-term medication, " +
-            "vitals, previous visits and course) and give case-specific, concrete recommendations. Factor relevant " +
-            "prior findings and the course so far into your assessment. Actively point out possible safety issues " +
-            "(allergies, contraindications, interactions) when the context suggests them. " +
-            "If the CONTEXT does not answer the question, or only partially, say so explicitly and do not guess; " +
-            "invent nothing. Make NO final diagnostic or therapeutic decision — you only support; " +
-            "the decision is the doctor's. Answer professionally, in a structured and concise way. " +
+            "You are a clinical decision-support assistant for general practitioners. Support the doctor with " +
+            "case-specific, practical guidance; you never make the final decision. Draw on your sources in this order:\n" +
+            "1. GUIDELINE EXCERPTS (CONTEXT): treat these as the primary, authoritative source. When you use one, " +
+            "cite it in the text with [1], [2] etc. matching the CONTEXT numbering. Do not use [n] markers when there " +
+            "are no excerpts.\n" +
+            "2. PATIENT CONTEXT: always reason about this specific patient. If the question concerns a medication or " +
+            "treatment, actively check it against the patient's allergies, pre-existing conditions, long-term " +
+            "medication, interactions and contraindications, and warn clearly about any risk. This patient-specific " +
+            "safety check applies even when the guideline excerpts do not mention it.\n" +
+            "3. If the guideline excerpts do not answer the question, you MAY answer from well-established medical " +
+            "knowledge and the AWMF guidelines. In that case you MUST clearly mark that part, for example begin it " +
+            "with 'Not in the retrieved guidelines — based on general medical/AWMF knowledge:'. Stay at the level of " +
+            "established consensus, be conservative, and do not invent specific doses, figures or study results.\n" +
+            "Make no final diagnostic or therapeutic decision — the decision is the doctor's. Be transparent about " +
+            "which source each part of the answer comes from. Answer professionally, structured and concise. " +
             directiveFor(input.lang),
         },
         ...recent,
